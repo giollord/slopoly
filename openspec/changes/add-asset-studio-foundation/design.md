@@ -6,6 +6,7 @@
 - **Target machine:** Windows 11, Docker Desktop on WSL 2, an RTX 4070 with 12 GB VRAM, 64 GB RAM. Only one large model fits on the GPU at a time.
 - **The repo will be public.** Host paths and tokens may appear only as placeholders such as `<models-dir>` and `<data-dir>`.
 - **Code rule:** minimal code, reuse over bespoke infrastructure, and only popular, maintained packages.
+- **Host rule:** the app uses as little of the host as possible: Docker Desktop with GPU support, the .NET SDK and the Aspire CLI. All Python (ComfyUI, geometry, agent) runs in containers, and so do Python tests. The developer's host Python and `comfy` CLI may be used while developing, never as an app dependency.
 - **Prior art from the author's video-bot project:**
   - FLUX.2 klein 4B, with separate reference images each chained through `ReferenceLatent` on both the positive and negative conditioning, kept a drawn style consistent on this GPU.
   - A `LoadImage` input needs a real file even when it is switched off, so empty reference slots get a placeholder image plus a boolean switch.
@@ -34,12 +35,15 @@ Browser --> webfrontend (Blazor Server + MudBlazor)
                  |  HTTP + SignalR client
                  v
             apiservice --- SQLite (EF Core) + <data-dir>/files
-             |  REST: packs, files, jobs (claim/lease/events)
-             |  MCP (HTTP): agent tool surface
-             |  SignalR hub: change + job events
-             ^                ^                   ^
-   outbound  |                |                   |
-   +---------+---+    +-------+-------+    +------+-----------+
+             |  REST: packs, files      publishes jobs + cancels
+             |  MCP (HTTP): agent tools consumes job events
+             |  SignalR hub: live UI           |
+             ^                          +------v------+
+             | HTTP (files, MCP)        |  rabbitmq   |
+             |                          +------^------+
+             |      AMQP (jobs, events, cancel)|
+   outbound  +----------------+----------------+---------+
+   +-------------+    +---------------+    +------------------+
    | comfyui     |    | geometry      |    | agent            |
    | ComfyUI     |    | bpy +         |    | Claude Agent SDK |
    | + worker    |    | slopoly_model |    | (Claude Code)    |
@@ -49,26 +53,38 @@ Browser --> webfrontend (Blazor Server + MudBlazor)
 
 **Alternative:** the API calling ComfyUI directly. It is simpler today, but it breaks the planned "API in the cloud, GPU at home" setup, and it needs a second integration style for geometry and the agent.
 
-### 2. Job queue in SQLite with HTTP leases, not a message broker
-- **Jobs table** holds kind, target, inputs JSON, state, lease expiry, attempt count and error.
-- **Claiming:** workers call `POST /jobs/claim {kinds}`. A single conditional `UPDATE` claims the row, which is safe under SQLite's single-writer model.
-- **While running:** the worker renews its lease via `POST /jobs/{id}/heartbeat`, which also returns `cancelRequested`. Progress and stream events are posted to `/jobs/{id}/events`.
-- **Completion:** `POST /jobs/{id}/complete`. Outputs are uploaded as files first.
-- **Background service:** a hosted service requeues jobs whose lease has expired.
-- **Live updates:** every state change and event is broadcast on the SignalR hub.
+### 2. Job dispatch through RabbitMQ; job state in SQLite
+RabbitMQ runs as a container added with Aspire's hosting integration. The API uses Aspire's RabbitMQ client integration, which wraps the official `RabbitMQ.Client`. The broker carries messages, and SQLite stays the record of job state and history for the UI and the agent.
 
-**Alternative:** RabbitMQ through Aspire, as video-bot did. It is more robust, but it adds a broker container, plus leases and cancellation would still have to be built. A local single-user app with a handful of jobs per minute doesn't need it.
+| Topology | Purpose |
+|---|---|
+| `jobs` direct exchange → durable queue per kind (`jobs.comfy`, `jobs.build`, `jobs.agent-turn`) | Dispatch. The API saves the `Job` row (queued) and then publishes `{jobId, kind, inputs}`. Messages are persistent |
+| `job-events` topic exchange → API's queue | Workers publish `started`, `progress`, `stream` (agent output), `succeeded {outputs}` and `failed {error}`. The API's background consumer updates the row, stores `JobEvent`s and broadcasts them on SignalR |
+| `job-control` fanout exchange → one exclusive auto-delete queue per worker | Cancel. The API publishes `{jobId}` and every worker hears it |
 
-### 3. One shared Python worker client
-`workers/slopoly_worker` is a small package used by all three containers. It handles:
-- the claim, heartbeat, events and complete loop;
+- **Delivery:** workers consume with manual acknowledgements and `prefetch=1`. A worker acknowledges only after posting its final event. If it dies or disconnects, RabbitMQ redelivers the message, and the API counts the attempt when it sees `started` again.
+- **Redelivery limit:** jobs that keep failing are capped by a configurable maximum number of attempts, checked by the worker against the redelivery header and the job's attempt count. When the cap is reached, the job fails.
+- **Cancel:**
+  - *Queued job:* the API marks the row cancelled. When the message is delivered, the worker checks the job's state over HTTP, finds it cancelled, and acknowledges and skips it.
+  - *Running job:* the worker cancels its running task. If the job ran to completion anyway, the API discards the late `succeeded`.
+- **Retry:** the API republishes the job with the same id and a new attempt.
+- **Long jobs:** the broker's `consumer_timeout` is raised (for example to 24 h) through a mounted `rabbitmq.conf`, so long agent turns or builds are not cut off. The spec's "Long job not cut off" scenario covers this.
+- **Files** never go through the broker. Workers download inputs and upload outputs over HTTP before publishing `succeeded`.
+- **Libraries:** MassTransit is avoided because version 9 moved to a commercial licence, and plain `RabbitMQ.Client` is enough for three queues and two exchanges.
+
+**Alternative:** a hand-built queue in SQLite with HTTP claim, lease and heartbeat endpoints. It needs no extra container, but it re-implements redelivery and dispatch that a maintained broker already provides.
+
+### 3. One shared Python worker package
+`workers/slopoly_worker` is a small package installed in all three worker containers. It uses `aio-pika` (AMQP), `httpx` (files and job-state checks) and `pydantic` (messages), and handles:
+- consuming from the configured kinds with `prefetch=1`, then running the handler for each message;
+- publishing events;
+- cancellation through the control queue, turned into an `asyncio` cancel of the running handler;
 - file download and upload;
-- cancellation, exposed as an `asyncio` cancel;
-- a shared worker key header.
+- the attempt cap.
 
-It uses `httpx` and `pydantic`. Each container adds only a handler per job kind.
+Each container adds only a handler per job kind.
 
-**GPU serialization:** the ComfyUI container is the only GPU consumer in this change, and its worker runs one job at a time. ComfyUI starts with `--reserve-vram` (default 3 GB, configurable), because Windows holds GPU memory that the container cannot see.
+**GPU serialization:** the ComfyUI container is the only GPU consumer in this change, and its single consumer has `prefetch=1`, so only one GPU job runs at a time. ComfyUI starts with `--reserve-vram` (default 3 GB, configurable), because Windows holds GPU memory the container cannot see.
 
 ### 4. Configuration through Aspire parameters
 | Parameter | Kind | Default |
@@ -76,7 +92,8 @@ It uses `httpx` and `pydantic`. Each container adds only a handler per job kind.
 | `comfyui-models-dir` | plain | none, so the dashboard prompts and can save it to user secrets |
 | `data-dir` | plain | `<repo>/.data` (git-ignored) |
 | `claude-oauth-token` | secret | none, so the dashboard prompts |
-| `worker-key` | secret | generated |
+| `worker-key` | secret | generated (HTTP file and MCP access) |
+| RabbitMQ credentials | secret | generated by the Aspire RabbitMQ integration |
 
 - The models folder is bind-mounted **writable** at ComfyUI's models path, so a model downloaded by the agent or the developer lands in the shared host folder.
 - The AppHost reads the folder values from configuration and passes them to `WithBindMount`.
@@ -146,12 +163,12 @@ Errors are returned with the program's line number from the traceback.
 - **Alternative:** Blender rendering. Rendering needs OpenGL/EGL or Cycles CPU in the container and would be slower, while a silhouette is only filled polygons.
 
 ### 9. Agent: Claude Agent SDK as a worker
-- **Turns as jobs:** the agent container is a `slopoly_worker` that claims `agent-turn` jobs. Each user chat message creates one.
+- **Turns as jobs:** the agent container is a `slopoly_worker` that consumes `jobs.agent-turn`. Each user chat message creates one.
 - **Running a turn:** the handler runs the Python Claude Agent SDK, which drives the Claude Code CLI.
   - Credentials come from `CLAUDE_CODE_OAUTH_TOKEN`, populated from the `claude-oauth-token` parameter.
   - The session is resumed from the pack's stored session id.
   - The SDK's streamed messages are forwarded as job events, so the chat panel renders them live.
-- **Benefits:** no inbound port, and cancellation, retry and lease recovery come from the queue. The same outbound-only property holds for a future cloud API.
+- **Benefits:** no inbound port, and cancellation, retry and redelivery come from the queue. The same outbound-only property holds for a future cloud API, where workers would connect over AMQPS.
 - **Sessions:** Claude Code session files live in a named Docker volume, so `--resume` survives container restarts.
 - **Authorisation:** README step: run `claude setup-token` (in the agent container through the Aspire dashboard terminal, or on the host) and paste the token into the parameter. A 401 from the SDK fails the turn with a distinct `auth` error, and the chat shows re-authorisation steps.
 - **Agent configuration:** the agent's working directory is `agent/` from the repo, mounted read-only. It holds the agent's `CLAUDE.md` (pipeline, rules and the `slopoly_model` API reference). The SDK is configured with only the Slopoly MCP server and no shell or file-write tools.
@@ -159,7 +176,7 @@ Errors are returned with the program's line number from the traceback.
 
 ### 10. MCP server in the API
 - Uses the official C# MCP SDK (`ModelContextProtocol.AspNetCore`) over streamable HTTP, protected by `worker-key`.
-- Tools are thin wrappers over the same application services the REST endpoints use: `get_pack`, `update_style`, `create_asset`, `start_job`, `get_job`, `cancel_job`, `retry_job`, `list_concepts`, `get_segmentation`, `save_manifest`, `submit_program`, `get_build_report`, `view_image`.
+- Tools are thin wrappers over the same application services the REST endpoints use: `get_pack`, `update_style`, `create_asset`, `start_job`, `get_job`, `cancel_job`, `retry_job`, `list_concepts`, `get_segmentation`, `get_part_colors`, `get_palette`, `upsert_palette_entries`, `upsert_palette_variant`, `save_manifest`, `submit_program`, `get_build_report`, `view_image`.
 - Results are JSON with ids and numbers. `view_image` is the only tool that returns image content.
 
 ### 11. Web UI
@@ -168,7 +185,23 @@ Errors are returned with the program's line number from the traceback.
 - The 3D viewer is Google's `<model-viewer>` web component, a vendored pinned file in `wwwroot` with a tiny Razor wrapper.
 
 ### 12. Data model (EF Core, SQLite, migrations)
-`Pack`, `StyleReference`, `Asset`, `ConceptImage` (with selection and source job), `Manifest`, `ProgramVersion`, `Build` (with report JSON and GLB file), `Job`, `JobEvent`, `ChatSession`, and `StoredFile` (path under `<data-dir>/files`, content type, hash).
+`Pack`, `StyleReference`, `Asset`, `ConceptImage` (with selection and source job), `PartColors` (measured per mask), `PaletteEntry` (role, kind, slot index, main colours), `PaletteVariant` and `PaletteVariantColor` (variant × role → colours), `Manifest`, `ProgramVersion`, `Build` (with report JSON, GLB file and the roles it uses), `Job`, `JobEvent`, `ChatSession`, and `StoredFile` (path under `<data-dir>/files`, content type, hash).
+
+### 13. Palette: data in SQLite, texture as a derived file
+- **The palette is rows, not a document.** Each entry has a role name, kind (solid or gradient), one or two colours and a slot index assigned once at creation. Variants store only colours per role. Missing variant colours fall back to the main colour, so a new role appears in every variant automatically.
+- **Fixed layout derived from slot indices.** One 256×256 texture: the top half is a grid of 8×8 px solid cells (up to 256 entries) and the bottom half holds 4 px high horizontal gradient strips (up to 32). A slot maps to the same rectangle forever, so UVs never change when colours change. Colours are sampled at cell centres with nearest filtering, and each gradient's UVs stay inside its strip with a half-pixel inset to avoid bleeding.
+- **One Python module owns the layout.** `slopoly_model.palette` both renders the texture (Pillow) and computes UVs, so the two cannot drift apart.
+- **Recolouring is a quick `palette-render` job on the geometry worker.** It renders the main and variant textures. For each current build of the pack it replaces the GLB's embedded image with the new main texture; geometry, UVs and the program are untouched. The API marks palette textures stale on any colour edit and debounces the job (about 1 s) so dragging a colour picker doesn't queue dozens of jobs.
+  - *Alternative:* render the PNG in the API with an image library. That duplicates the layout logic in C# and adds a .NET imaging dependency (ImageSharp has a split commercial licence).
+- **UV assignment at build time.**
+  - *Solid role:* all of a face's UVs go to the cell centre.
+  - *Gradient role:* each vertex's position along the tagged axis, normalised over that part's or face group's extent, maps to the strip from start to end.
+  - Material tags apply to a whole part or to a named face group created by the `slopoly_model` ops (for example `extrude(..., tag="top")`). Faces with no tag inherit their part's tag; a part with no tag fails the build.
+- **Colour measurement** is part of the `segment-parts` job: per mask, k-means over its pixels in Lab colour space (k ≤ 4), dropping clusters under 5 % coverage. It returns hex and coverage, and is stored as `PartColors`.
+- **Colour likeness** in the build report: per part and view, the CIEDE2000 difference between the tagged role's main colour (the gradient's mean for gradients) and the mask's dominant colour.
+- **Generation uses the main palette only.** Builds, scores and the agent's tools read main-palette colours. Variants are touched only by variant tools, the palette-render job and the viewer.
+- **Preview and export.** The viewer loads the GLB and, when a variant is chosen, swaps the material's base-colour texture through `<model-viewer>`'s scene-graph API, so no rebuild or job is needed. Exports embed the main texture and add `palette_<variant>.png` files next to the GLB.
+- **UI:** a palette editor on the Pack page with MudBlazor colour pickers, a role-naming hint (usage by default, colour names only for colours fixed across palettes), a variant selector, and "used by" lists that block deletion of entries in use.
 
 ## Risks / Trade-offs
 
@@ -179,6 +212,11 @@ Errors are returned with the program's line number from the traceback.
 - **Container I/O on a Windows bind mount is slower** → it only affects model load time. Models stay loaded between jobs.
 - **`bpy` wheels pin a specific Python version and are large** → the geometry image is built once, and the version is pinned.
 - **A writable models mount lets the container write to the shared folder** → this is intended, so downloads are shared. Documented in README.
+- **Redelivery can run a job twice** (a worker dies after uploading but before acknowledging) → handlers are idempotent per job id: outputs are keyed by job and attempt, and the API accepts only the first `succeeded` per job.
+- **The broker and SQLite can disagree** (publish fails after the row is saved) → the API publishes right after saving and marks the job failed with a "dispatch failed" error if publishing throws; the user or agent retries. No outbox, which is acceptable for a local single-user app.
+- **Mask colours include shading and outlines** (stylised images have dark edges and lighting) → dominant cluster per mask, small clusters dropped. The measured colours are only starting points; the agent and user name and adjust them.
+- **Palette capacity** (256 solids, 32 gradients per pack) → ample for a low-poly pack. The layout is versioned, so a larger texture can be added later without moving existing slots.
+- **Python tests run in containers, so they are slower than host runs** → the containers mount the source read-only so a test run needs no image rebuild.
 
 ## Migration Plan
 

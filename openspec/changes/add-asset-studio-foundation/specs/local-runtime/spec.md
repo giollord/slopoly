@@ -7,11 +7,19 @@ Lets one developer start the whole Slopoly stack locally with one command, while
 ## ADDED Requirements
 
 ### Requirement: One-command local start
-Running the AppHost SHALL start the API, the web UI, the ComfyUI service, the geometry worker and the design agent, and the web UI SHALL be reachable in a local browser.
+Running the AppHost SHALL start the API, the web UI, the message broker, the ComfyUI service, the geometry worker and the design agent, and the web UI SHALL be reachable in a local browser.
 
 #### Scenario: Stack starts
 - **WHEN** the developer runs `aspire start` with all required configuration present
 - **THEN** every service reaches a healthy or running state and the web UI opens on a local URL
+
+### Requirement: Minimal host dependencies
+Running the app SHALL require only Docker Desktop with GPU support, the .NET SDK and the Aspire CLI on the host. Python, ComfyUI, Blender, the message broker and the agent runtime SHALL run only inside containers.
+
+#### Scenario: Clean host
+- **GIVEN** a host with Docker Desktop, the NVIDIA Container Toolkit, the .NET SDK and the Aspire CLI, and no Python installation
+- **WHEN** the developer runs `aspire start`
+- **THEN** all services start and the cart scenario can be run
 
 ### Requirement: Configurable models folder
 The ComfyUI service SHALL read and write models in a host folder chosen by local configuration. Models downloaded in the container SHALL land in that host folder.

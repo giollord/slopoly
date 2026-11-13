@@ -31,6 +31,7 @@ The agent SHALL read and change app state only through the app's tool surface. A
 - starting, reading, cancelling and retrying jobs;
 - reading concept image selections and segmentation results;
 - storing manifests;
+- reading measured part colours and reading and editing the main palette and its variants;
 - submitting part programs;
 - reading build reports and scores.
 
@@ -53,7 +54,7 @@ The agent SHALL use only concept images the user has not rejected. It SHALL ask 
 - **THEN** the agent asks the user to pick or reject them before building the manifest
 
 ### Requirement: Cart end-to-end
-Starting from a pack with an approved style anchor, the agent SHALL take a "wooden cart" asset to a validated build. That build is mirrored, has a separate rotating axle-and-wheels node, and has silhouette scores recorded.
+Starting from a pack with an approved style anchor, the agent SHALL take a "wooden cart" asset to a validated build. That build is mirrored, has a separate rotating axle-and-wheels node, is coloured through role-named main-palette entries, and has silhouette and colour scores recorded.
 
 #### Scenario: Cart run
 - **WHEN** the user asks the agent to model the wooden cart and approves its turnaround

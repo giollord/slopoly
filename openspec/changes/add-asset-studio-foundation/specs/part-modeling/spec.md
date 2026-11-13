@@ -65,7 +65,7 @@ Every build SHALL be projected into the same orthographic views as the asset's p
 - **THEN** the score for wheel/front reports the overlap and a negative width error
 
 ### Requirement: Model export
-Every successful build SHALL export a binary glTF (GLB) file. The file contains named part nodes, the hierarchy, pivots, instances and connection points as named empty nodes, in metres with Y up.
+Every successful build SHALL export a binary glTF (GLB) file. The file contains named part nodes, the hierarchy, pivots, instances, connection points as named empty nodes, palette UVs and the main palette material, in metres with Y up.
 
 #### Scenario: Viewer loads export
 - **WHEN** the user opens a successful build in the UI
