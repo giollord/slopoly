@@ -1,0 +1,7 @@
+<Solution>
+  <Project Path="Slopoly.ApiService/Slopoly.ApiService.csproj" />
+  <Project Path="Slopoly.AppHost/Slopoly.AppHost.csproj" />
+  <Project Path="Slopoly.ServiceDefaults/Slopoly.ServiceDefaults.csproj" />
+  <Project Path="Slopoly.Tests/Slopoly.Tests.csproj" />
+  <Project Path="Slopoly.Web/Slopoly.Web.csproj" />
+</Solution>
