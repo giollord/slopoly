@@ -18,15 +18,23 @@ read `get_build_report`.
 - Every face needs a palette role, set with `color=` on the part or with `tag=`/`paint` on faces. Roles must exist in
   the pack palette (`get_palette`, `upsert_palette_entries`).
 - Keep it low-poly: use small segment counts (6–12 for round parts), and prefer `extrude`/`inset` to `boolean`.
+- Model with Blender's tools, not vertex by vertex: primitives, then modifiers (`shape.modify`), vertex groups,
+  cloning (ARRAY, MIRROR, `instance`) and booleans. Place points by hand only for 2D profiles and curve control
+  points. Search the technique notes (`search_knowledge`) for the approach first.
 
 ## Example
 
 ```python
 part("bed", bevel(box(0.8, 0.3, 0.7), 0.02), at=(0, 0.49, 0), color="wood")
 part("axle", prism(6, r=0.04, length=1.1, axis="x"), parent="bed", at=(0, 0.3, 0), joint=rotate("x"), color="metal")
-wheel = extrude(inset(prism(8, r=0.3, length=0.08, axis="x"), "+x", 0.2, tag="metal"), "metal", 0.03)
+rim = curve(path([(0.28, 0, 0), (0, 0.28, 0), (-0.28, 0, 0), (0, -0.28, 0)], closed=True), ngon(6, r=0.025),
+           resolution=3)
+spoke = box(0.03, 0.28, 0.03).move(y=0.14)
+spokes = spoke.modify("ARRAY", count=6, use_relative_offset=False, use_object_offset=True,
+                      offset_object=empty(rot=(0, 0, 60)))
+wheel = join(rim, spokes, prism(8, r=0.05, length=0.08, axis="z", tag="metal")).rotate(y=90)
 part("wheel_L", wheel, parent="axle", at=(0.5, 0.3, 0), color="wood dark", overlaps=["axle"], mirror="x")
-handle = sweep([(0, 0, 0), (0, 0, -0.6), (0, 0.1, -0.85)], ngon(6, r=0.03))
+handle = curve([(0, 0, 0), (0, 0.02, -0.5), (0, 0.12, -0.85)], ngon(6, r=0.03), resolution=3)
 part("handle_L", handle, parent="bed", at=(0.3, 0.55, -0.35), color="wood dark", mirror="x")
 socket("hitch", at=(0, 0.55, -1.2), parent="bed")
 ```
@@ -38,8 +46,10 @@ socket("hitch", at=(0, 0.55, -1.2), parent="bed")
 | `box(width, height, depth, tag=None)` | A box with 6 quads: width along X, height along Y, depth along Z. |
 | `prism(n, r, length, axis="y", tag=None)` | A low-poly cylinder: n side quads and two n-gon caps. |
 | `cone(n, r, length, axis="y", r2=0.0, tag=None)` | A cone with radius `r` at the negative end and `r2` at the positive end. `r2=0` makes it pointed. |
-| `ngon(n, r, axis="y", tag=None)` | A flat n-gon facing `axis`. Use it as a `sweep` profile or as a base to `extrude`. |
-| `sweep(path, profile, closed=False, tag=None)` | Sweeps a profile (an `ngon`, or a list of (u, v) points) along a polyline of (x, y, z) points. Corners are mitred, open ends are capped, and `closed=True` makes a ring. |
+| `ngon(n, r, axis="y", tag=None)` | A flat n-gon facing `axis`. Use it as a `curve` profile, or as a base to `extrude` or thicken with SOLIDIFY. |
+| `curve(points, profile, resolution=4, smooth=True, closed=False, tag=None)` | A tube along a Blender curve through the (x, y, z) `points` (or a `path()`), with cross-section `profile` (an `ngon`, or a list of (u, v) points). `resolution` is the number of segments between two control points; `smooth=False` makes straight segments with sharp corners. Open ends get flat caps; `closed=True` makes a ring. For handles, arches, rims, ropes. |
+| `path(points, smooth=True, closed=False)` | Control points of a curve, for `curve` or a CURVE modifier's `object` (bending a shape along it). |
+| `outline(points, closed=False, tag=None)` | Connected edges through (x, y) or (x, y, z) points, with no faces. Turn it with SCREW to lathe a round object around Y (x is the radius, y the height): vases, barrels, bottles, columns. |
 
 ## Operations
 
@@ -65,9 +75,65 @@ A **face selector** is one of the following:
 - A tag name.
 - A function `(centre, normal) -> bool`.
 
+## Modifiers, vertex groups and raw operations
+
+`shape.modify(type, group=None, **settings)` adds a Blender modifier and returns a new shape. `type` and the settings
+are Blender's own (see the Blender manual's modifier pages; settings are the Python property names, such as
+`count`, `thickness`, `deform_method`). Axes are program axes (Y up). The stack is applied when the shape is used, so
+change a setting and rebuild instead of editing vertices. Modifiers keep the faces' palette tags.
+
+Allowed types are listed in `MODIFIERS`: ARRAY, BEVEL, BOOLEAN, CAST, CURVE, DECIMATE, DISPLACE, EDGE_SPLIT, MIRROR,
+SCREW, SHRINKWRAP, SIMPLE_DEFORM, SMOOTH, SOLIDIFY, SUBSURF, TRIANGULATE, WAVE, WELD, WIREFRAME. Settings that need an
+object take:
+
+- a shape (BOOLEAN `object`, SHRINKWRAP `target`);
+- `empty(at=(0, 0, 0), rot=None, scale=None)`: an empty, for ARRAY `offset_object` (a radial array: `count=n`,
+  `use_relative_offset=False`, `use_object_offset=True`, `offset_object=empty(rot=(0, 0, 360 / n))` around Z) or a
+  deform `origin`;
+- `path(...)`: for CURVE `object`;
+- `texture(kind="CLOUDS", **settings)`: a Blender procedural texture for DISPLACE or WAVE `texture`
+  (e.g. `noise_scale=0.3`).
+
+Use the viewport settings: `steps` for SCREW, `levels` for SUBSURF. Watch the triangle count: SUBSURF and SCREW
+multiply it.
+
+`group(shape, name, faces=None, where=None, weight=1.0)` adds a vertex group: the vertices of the selected faces (all
+when `faces` is None) for which `where(x, y, z)` is true, with `weight` a number, a function of (x, y, z), or
+`ramp(axis="y", start=0.0, end=1.0, lo=None, hi=None)`, weights that go from `start` to `end` along the axis
+(between `lo` and `hi`, by default the grouped vertices' extent). Use groups to:
+
+- limit a modifier: `shape.modify("SIMPLE_DEFORM", group="tip", deform_method="BEND", angle=0.6)`;
+- transform part of a shape, each vertex moving by its weight: `shape.move(..., group=)`,
+  `shape.rotate(..., group=, about=(x, y, z))`, `shape.scale(..., group=, about=(x, y, z))`. A ramp group rotated
+  about the base bends a box into a branch; scaled, it tapers.
+
+Raw Blender operations: `bmesh`, `Vector`, `Matrix` and `math` are available, and `shape.bm` is the shape's
+bmesh (modifiers applied), so `bmesh.ops.*` can change it in place. New faces copy the tags of the faces they come
+from; faces made from nothing (`bm.faces.new`) have no tag, which fails validation until painted. Prefer a modifier
+or a library operation when one does the job.
+
+## Shading
+
+The pack sets the shading of every build (`get_pack`: `shadingMode`, `hardEdgeAngle`); the user or `update_style`
+changes it.
+
+- **Flat:** every edge is hard; each face shows one shade.
+- **Smooth:** normals are shared across edges, so round parts shade round; edges whose faces meet at more than
+  `hardEdgeAngle` degrees (60 by default: 6–12-sided parts are smooth, box corners hard) stay hard. Palette
+  boundaries never show as hard edges.
+
+Overrides, for smooth packs:
+
+- `sharp(shape, faces=None, border=True)`: keeps the outline of the selected faces hard (`border=False`: all their
+  edges), for a crisp rim, a seam or a cut edge.
+- `smooth(shape, faces=None)`: shades all edges of the selected faces smooth even past the angle (a cushion, a
+  rounded box, a blob).
+- `part(..., shading="flat")` or `"smooth"` overrides the pack's mode for one part (a faceted crystal on a smooth
+  rock).
+
 ## Assembly
 
-`part(name, shape, parent=None, at=(0, 0, 0), rot=None, mirror=None, joint=None, color=None, overlaps=())`
+`part(name, shape, parent=None, at=(0, 0, 0), rot=None, mirror=None, joint=None, color=None, overlaps=(), shading=None)`
 
 Places a shape as a named part. A parent must be defined before its children. Parameters:
 
@@ -78,8 +144,9 @@ Places a shape as a named part. A parent must be defined before its children. Pa
 - `joint=rotate(axis)` or `slide(axis)`: the part moves around or along its origin, which is exported as a pivot node.
 - `color`: the palette role for faces that have no tag.
 - `overlaps`: the parts it may intersect, for example an axle through a wheel.
+- `shading`: `"flat"` or `"smooth"` to override the pack's shading for this part.
 
-`instance(name, shape, transforms, parent=None, color=None, overlaps=())`
+`instance(name, shape, transforms, parent=None, color=None, overlaps=(), shading=None)`
 
 Places one shape many times as `name_1`..`name_N`, sharing one mesh. Each transform is either `(x, y, z)` or
 `{"at": (x, y, z), "rot": (x, y, z)}`.
@@ -103,6 +170,7 @@ tag.
 `ShapeError` and `ModelError` are raised for bad arguments, for example:
 
 - a segment count under 3;
+- an unknown modifier type or setting (the message lists the valid ones);
 - a selector that matches nothing;
 - an unknown or undefined parent;
 - a duplicate name.

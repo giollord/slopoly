@@ -36,9 +36,10 @@ See proposal.md for the motivation. Current state:
 
 ### 1. Blender does the modelling; the library stops wrapping it
 
-The library already delegates most operations to `bmesh.ops`; only `sweep` (about 50 lines), `ngon`, `jitter` and
-the manifold3d boolean round trip are our own geometry. This change removes those and opens Blender's tools to
-programs, keeping the library to what is game-specific (parts, pivots, sockets, tags, budgets, scoring, export).
+The library already delegates most operations to `bmesh.ops`; only `sweep` (about 50 lines) and the manifold3d
+boolean round trip are our own geometry. This change removes both and opens Blender's tools to programs, keeping the
+library to what is game-specific (parts, pivots, sockets, tags, budgets, scoring, export). `ngon` (a profile) and
+`jitter` (a seeded vertex offset) stay as small conveniences.
 
 **Shape = mesh + modifier stack.** A `Shape` keeps its bmesh and gains an ordered list of pending modifiers:
 
@@ -58,7 +59,9 @@ trunk = trunk.modify("BOOLEAN", object=grooves, operation="DIFFERENCE", solver="
 - Unknown types or properties raise `ShapeError` with Blender's list of valid names.
 - An allow-list keeps out modifiers that make no sense for static low-poly assets (cloth, ocean, particle system,
   skin, ...). It starts with: ARRAY, MIRROR, SCREW, SOLIDIFY, BOOLEAN, SHRINKWRAP, SIMPLE_DEFORM, DISPLACE, CAST,
-  SMOOTH, LATTICE, CURVE, WELD, DECIMATE, BEVEL, TRIANGULATE, SUBSURF, WIREFRAME, EDGE_SPLIT, REMESH.
+  SMOOTH, CURVE, WAVE, WELD, DECIMATE, BEVEL, TRIANGULATE, SUBSURF, WIREFRAME, EDGE_SPLIT. REMESH is out because it
+  drops face attributes (tags); LATTICE is out because it needs a lattice object (groups plus SIMPLE_DEFORM and CAST
+  cover its uses).
 
 **Cloning** is the Array modifier: linear, or radial with an `offset_object` rotated by 360°/count (the knowledge
 note shows it). Mirror stays for symmetric halves inside a part; `instance`/`mirror=` still mirror whole parts.
@@ -92,7 +95,7 @@ manifold3d mapping.
 Blender 4.5 and later ship the Manifold library as a solver of the Boolean modifier. `boolean(a, b, op)` stays as a
 shortcut for `a.modify("BOOLEAN", object=b, operation=..., solver="MANIFOLD")`, then a limited dissolve as today. The
 `to_manifold`/`from_manifold` code goes. If the solver misbehaves on some input, the Exact solver is the fallback
-setting. manifold3d is removed from the container once nothing else imports it.
+setting. manifold3d stays in the container for the validator's volumes, overlaps and gaps.
 
 ### 2. Shading through Blender's own sharp-edge model
 
@@ -142,7 +145,7 @@ own, at origin, without other parts: a bed's inner corners darken, but a wheel d
 - **Render.** The runner places an orthographic camera along the view direction: `ortho_scale = view_width / scale`,
   with the shift taken from the offset. It renders at the view's pixel size, so render and view overlay pixel for
   pixel.
-- **Look.** Cycles (CPU, about 16 samples, denoiser off), a uniform white world light and the "Standard" view
+- **Look.** Cycles (CPU, about 16 samples, denoiser off), a soft white world light plus one sun from the upper front-left (so form and shading read) and the "Standard" view
   transform, so colours read as palette × shade. Transparent film is composited on white like the views. About a
   second per view for low-poly models; four views per build.
 - **Comparison image.** It has 3 panels: view, render, and silhouette difference (grey both, red model only, blue view
@@ -157,7 +160,7 @@ is half of what the user wants to judge.
 
 ### 6. Data and API
 
-- **Pack fields:** `ShadingMode` (Flat or Smooth, stored as a string), `HardEdgeAngle` (default 40) and
+- **Pack fields:** `ShadingMode` (Flat or Smooth, stored as a string), `HardEdgeAngle` (default 60, so 6–12-sided round parts shade round while box corners stay hard) and
   `ShadeStrength` (0..1, default 0.5). They come with a migration and `PackEdit` fields; existing packs get the
   defaults.
 - **Build inputs:**
@@ -183,17 +186,16 @@ is half of what the user wants to judge.
 - **Modelling rules** in `agent/CLAUDE.md`: search the notes for the technique first; build from primitives plus
   modifiers, groups, cloning, mirroring and booleans; place vertices by hand only in 2D profiles and curve control
   points; keep segment, resolution and array counts low and check the triangle count.
-- **Technique notes (rulesets with samples).** One note per technique, each saying when to use it, the steps, the
-  pitfalls, and a runnable sample:
-  - `wheeled-objects.md`: rim, hub and spokes by radial array, mirrored wheels, axle joints;
-  - `surface-texture.md`: wavy strips shrinkwrapped onto a surface with an offset, then a boolean cut (grooves) or
-    union (raised planks, stones);
-  - `organic-shapes.md`: a weighted vertex group bent, tapered, cast or displaced (box into branch, rock, root);
-  - `holes-and-openings.md`: boolean cut-outs (windows, holes) versus inset plus negative extrude (cavities);
-  - `curved-parts.md`: curves with a profile (handles, arches, ropes), and the Curve modifier for bending existing
-    shapes;
-  - `repeats.md`: Array (linear and radial), Mirror, and when to use `instance` instead.
-  Existing notes (`hollow-containers`, `wear-and-imperfections`, `triangle-budgets`) are updated to the new API.
+- **Notes in two folders.** `knowledge/techniques/` holds how to model something; `knowledge/objects/` holds how to
+  approach a concrete object type (proportions, which parts, which techniques, a full sample). Slugs carry the folder
+  (`techniques/repeats`), so `KnowledgeService` lists both folders recursively and accepts one folder prefix out of
+  those two; search ranks across both. The agent can write notes into either folder.
+- **Technique notes.** Each says when to use it, the steps, the pitfalls and a runnable sample: blocking out from
+  primitives, wheeled objects, surface texture from meshes, organic shapes, holes and openings, curved parts,
+  repeats, lathed shapes, thin shells and panels, bevels and chamfers, rocks and chunks, foliage, ropes and chains,
+  joints and moving parts, plus the existing hollow containers, wear and triangle budgets. The list is a start; the
+  agent and the user add more through `write_knowledge`.
+- **Object notes** start with the cart; more object types are added as they come up.
 
 ## Risks / Trade-offs
 
@@ -212,14 +214,10 @@ is half of what the user wants to judge.
   check fails the build with the count; the notes show Decimate (planar) and low counts.
 - **[The agent passing settings that exist but are wrong for low-poly]** → The notes give working values; errors
   echo Blender's own messages.
-- **[Existing programs break when `sweep` goes]** → Stored programs of earlier builds are kept as history only; the
-  next agent run writes new ones. Shipped notes and tests move to `curve`.
 - **[Exporter vertex-colour behaviour differs between Blender versions]** → The colour attribute is wired through the
   material (decision 3), which the 4.2+ exporters export. A test reads `COLOR_0` back from the GLB.
 
 ## Migration Plan
 
-1. EF migration: new pack columns with defaults. Existing packs keep flat shading, with the shade at 0.5.
-2. Existing builds are unchanged. The next build of each asset gets shade, renders and comparisons.
-
-**Rollback:** git revert plus `dotnet ef database update` to the previous migration.
+No backward compatibility: existing models and programs are not kept working. An EF migration adds the pack columns
+with defaults; old programs that use `sweep` simply fail if rebuilt, and the next agent run writes new ones.

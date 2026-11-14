@@ -18,5 +18,9 @@ part("bed", bevel(bed, 0.01, faces="wood"), at=(0, 0.49, 0), color="wood")
 - Use a separate, slightly darker role for the inside ("wood inside", or reuse a "shadow" role): it reads as depth
   in a flat-shaded palette.
 - Round containers: the same on `prism(n, ...)` with `"top"`; for a barrel, inset the top a second time for the rim.
+  Lathed containers (buckets, pots, bowls): an `outline` ending at the rim, turned with SCREW and thickened with
+  SOLIDIFY (see "lathed-shapes" and "thin-shells-and-panels").
+- Thin-walled containers (baskets, troughs with thin boards): SOLIDIFY on the open shape gives even walls with one
+  setting; inset + extrude stays cheaper for thick walls.
 - Keep the floor thickness above 0 — extruding through the bottom face breaks the mesh.
 - If the hero shows cargo (sacks, hay), add it as separate parts inside the cavity with `overlaps` to the bed.

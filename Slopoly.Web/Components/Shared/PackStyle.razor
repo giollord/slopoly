@@ -9,6 +9,22 @@
             <MudTextField @bind-Value="_edit.StyleText" Label="Style" Lines="4" Sizing="InputSizing.Auto" Variant="Variant.Outlined"
                           HelperText="Look, shapes, palette mood and level of detail. Used in every image prompt." />
             <MudNumericField @bind-Value="_edit.PolyBudget" Label="Triangle budget per asset" Min="100" Step="100" Variant="Variant.Outlined" Style="max-width: 16rem" />
+
+            <MudText Typo="Typo.subtitle1" Class="mt-2">Shading</MudText>
+            <MudText Typo="Typo.body2">Applies to every asset of the pack from its next build.</MudText>
+            <MudToggleGroup T="ShadingMode" @bind-Value="_edit.ShadingMode" Color="Color.Primary" Style="max-width: 16rem">
+                <MudToggleItem Value="ShadingMode.Flat" Text="Flat" />
+                <MudToggleItem Value="ShadingMode.Smooth" Text="Smooth" />
+            </MudToggleGroup>
+            @if (_edit.ShadingMode == ShadingMode.Smooth)
+            {
+                <MudNumericField @bind-Value="_edit.HardEdgeAngle" Label="Hard-edge angle (degrees)" Min="0" Max="180" Step="5" Variant="Variant.Outlined" Style="max-width: 16rem"
+                                 HelperText="Edges sharper than this stay hard. 60 keeps 6–12-sided parts round and box corners hard." />
+            }
+            <MudSlider T="double" @bind-Value="_edit.ShadeStrength" Min="0" Max="1" Step="0.05" Color="Color.Primary" Style="max-width: 24rem">
+                Vertex shade: @(_edit.ShadeStrength == 0 ? "off" : _edit.ShadeStrength.ToString("0.00"))
+            </MudSlider>
+            <MudText Typo="Typo.caption">Baked ambient occlusion and edge wear, stored as the standard glTF vertex colour.</MudText>
             <div><MudButton Variant="Variant.Filled" Color="Color.Primary" OnClick="SaveAsync">Save</MudButton></div>
         </MudStack>
     </MudItem>
@@ -56,11 +72,18 @@
         public string? Instructions { get; set; }
         public string? StyleText { get; set; }
         public int PolyBudget { get; set; }
+        public ShadingMode ShadingMode { get; set; }
+        public double HardEdgeAngle { get; set; }
+        public double ShadeStrength { get; set; }
     }
 
     protected override async Task LoadAsync()
     {
-        _edit = new() { Name = Pack.Name, Instructions = Pack.Instructions, StyleText = Pack.StyleText, PolyBudget = Pack.PolyBudget };
+        _edit = new()
+        {
+            Name = Pack.Name, Instructions = Pack.Instructions, StyleText = Pack.StyleText, PolyBudget = Pack.PolyBudget,
+            ShadingMode = Pack.ShadingMode, HardEdgeAngle = Pack.HardEdgeAngle, ShadeStrength = Pack.ShadeStrength,
+        };
         _references = await Api.GetAsync<List<StyleReference>>($"api/packs/{Pack.Id}/style-references");
     }
 
@@ -70,7 +93,8 @@
 
     private Task SaveAsync() => Try(async () =>
     {
-        await Api.PatchAsync<Pack>($"api/packs/{Pack.Id}", new PackEdit(_edit.Name, _edit.Instructions, _edit.StyleText, _edit.PolyBudget));
+        await Api.PatchAsync<Pack>($"api/packs/{Pack.Id}", new PackEdit(_edit.Name, _edit.Instructions, _edit.StyleText, _edit.PolyBudget,
+            _edit.ShadingMode, _edit.HardEdgeAngle, _edit.ShadeStrength));
         Snackbar.Add("Saved", Severity.Success);
     });
 

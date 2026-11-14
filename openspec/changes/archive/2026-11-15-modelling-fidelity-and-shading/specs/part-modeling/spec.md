@@ -36,12 +36,13 @@ weights, and to limit modifiers to a group.
 - **THEN** only those vertices move, and the rest of the crate is unchanged
 
 ### Requirement: Curves and raw Blender operations
-A part program SHALL be able to build a smooth path through control points with a stated resolution and turn it into
+A part program SHALL be able to build a smooth path through control points with a stated resolution (segments per
+span between control points) and turn it into
 a mesh with a profile, using Blender curves. It SHALL also be able to run Blender's mesh operations directly on a
 shape's mesh. Any face left without a tag after a program SHALL be reported as an error naming the part.
 
 #### Scenario: Bent handle
-- **WHEN** a program makes a 6-sided handle along a curve through three control points with a resolution of 8
+- **WHEN** a program makes a 6-sided handle along a curve through three control points with a resolution of 4
 - **THEN** the handle bends smoothly through the points, with exactly 8 segments along its length
 
 #### Scenario: Raw operation keeps tags

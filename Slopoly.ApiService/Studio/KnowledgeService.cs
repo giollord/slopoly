@@ -7,8 +7,9 @@ using YamlDotNet.Serialization.NamingConventions;
 namespace Slopoly.ApiService.Studio;
 
 /// <summary>
-/// Global technique notes: <c>knowledge/&lt;slug&gt;.md</c> files with title, tags and summary front matter. They are few
-/// and small, so search is a plain term score over the files, with no index.
+/// Global notes: <c>knowledge/&lt;folder&gt;/&lt;name&gt;.md</c> files with title, tags and summary front matter. The
+/// folders are <c>techniques</c> (how to model something) and <c>objects</c> (how to approach a kind of object); a slug
+/// carries its folder ("techniques/repeats"). Notes are few and small, so search is a plain term score, with no index.
 /// </summary>
 public sealed partial class KnowledgeService(SlopolyOptions options, Notifier notifier)
 {
@@ -24,7 +25,10 @@ public sealed partial class KnowledgeService(SlopolyOptions options, Notifier no
     private static readonly ISerializer Writer = new SerializerBuilder()
         .WithNamingConvention(CamelCaseNamingConvention.Instance).WithDefaultScalarStyle(YamlDotNet.Core.ScalarStyle.Any).Build();
 
-    [GeneratedRegex("^[a-z0-9]+(-[a-z0-9]+)*$")]
+    /// <summary>The note folders, in listing order.</summary>
+    public static readonly string[] Folders = ["techniques", "objects"];
+
+    [GeneratedRegex("^(techniques|objects)/[a-z0-9]+(-[a-z0-9]+)*$")]
     private static partial Regex SlugPattern();
 
     [GeneratedRegex(@"\A---\r?\n(.*?)\r?\n---\r?\n?(.*)\z", RegexOptions.Singleline)]
@@ -36,25 +40,28 @@ public sealed partial class KnowledgeService(SlopolyOptions options, Notifier no
     private string Folder => Path.GetFullPath(options.KnowledgeDir ?? Path.Combine(options.DataDir, "knowledge"));
 
     private string PathOf(string slug) =>
-        SlugPattern().IsMatch(slug ?? "") ? Path.Combine(Folder, slug + ".md")
-            : throw new StudioException($"\"{slug}\" is not a note name: use lowercase words joined by hyphens, e.g. \"hollow-containers\".");
+        SlugPattern().IsMatch(Normalise(slug)) ? Path.Combine(Folder, Normalise(slug) + ".md")
+            : throw new StudioException($"\"{slug}\" is not a note name: use a folder (techniques or objects) and lowercase words joined by hyphens, e.g. \"techniques/hollow-containers\".");
+
+    private static string Normalise(string? slug) => Uri.UnescapeDataString(slug ?? "").Replace('\\', '/');
 
     public async Task<List<KnowledgeNote>> ListAsync()
     {
         if (!Directory.Exists(Folder)) return [];
         var notes = new List<KnowledgeNote>();
-        foreach (var file in Directory.EnumerateFiles(Folder, "*.md").Order())
-        {
-            var slug = Path.GetFileNameWithoutExtension(file);
-            if (SlugPattern().IsMatch(slug)) notes.Add(Parse(slug, await File.ReadAllTextAsync(file)));
-        }
+        foreach (var folder in Folders.Where(f => Directory.Exists(Path.Combine(Folder, f))))
+            foreach (var file in Directory.EnumerateFiles(Path.Combine(Folder, folder), "*.md").Order())
+            {
+                var slug = $"{folder}/{Path.GetFileNameWithoutExtension(file)}";
+                if (SlugPattern().IsMatch(slug)) notes.Add(Parse(slug, await File.ReadAllTextAsync(file)));
+            }
         return notes;
     }
 
     public async Task<KnowledgeNote> ReadAsync(string slug)
     {
         var path = PathOf(slug);
-        return File.Exists(path) ? Parse(slug, await File.ReadAllTextAsync(path)) : throw StudioException.NotFound($"Note \"{slug}\"");
+        return File.Exists(path) ? Parse(Normalise(slug), await File.ReadAllTextAsync(path)) : throw StudioException.NotFound($"Note \"{slug}\"");
     }
 
     /// <summary>
@@ -86,10 +93,10 @@ public sealed partial class KnowledgeService(SlopolyOptions options, Notifier no
             Tags = note.Tags.Select(t => t.Trim().ToLowerInvariant()).Where(t => t.Length > 0).Distinct().ToList(),
             Summary = note.Summary.Trim(),
         };
-        Directory.CreateDirectory(Folder);
+        Directory.CreateDirectory(Path.GetDirectoryName(path)!);
         await File.WriteAllTextAsync(path, $"---\n{Writer.Serialize(front).TrimEnd()}\n---\n\n{note.Body.Trim().ReplaceLineEndings("\n")}\n");
         await notifier.Changed(nameof(KnowledgeNote), Guid.Empty);
-        return await ReadAsync(note.Slug);
+        return await ReadAsync(Normalise(note.Slug));
     }
 
     public async Task DeleteAsync(string slug)

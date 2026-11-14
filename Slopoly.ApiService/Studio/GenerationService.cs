@@ -154,7 +154,7 @@ public sealed class GenerationService(SlopolyDb db, StudioService studio, JobSer
     public async Task<Job> BuildAsync(Asset asset, ProgramVersion version) =>
         await jobs.SubmitAsync(JobKinds.Build, null, asset.PackId, asset.Id, await BuildInputsAsync(asset, version));
 
-    /// <summary>Build inputs: program source, budget, main palette and the views of the picked hero with their masks.</summary>
+    /// <summary>Build inputs: program source, budget, the pack's shading, main palette and the views of the picked hero with their masks.</summary>
     public async Task<JsonObject> BuildInputsAsync(Asset asset, ProgramVersion version)
     {
         var pack = await studio.GetPackAsync(asset.PackId);
@@ -169,6 +169,12 @@ public sealed class GenerationService(SlopolyDb db, StudioService studio, JobSer
             ["programVersionId"] = version.Id,
             ["source"] = version.Source,
             ["polyBudget"] = asset.PolyBudget ?? pack.PolyBudget,
+            ["shading"] = new JsonObject
+            {
+                ["mode"] = pack.ShadingMode.ToString().ToLowerInvariant(),
+                ["hardEdgeAngle"] = pack.HardEdgeAngle,
+                ["shadeStrength"] = pack.ShadeStrength,
+            },
             ["palette"] = JsonSerializer.SerializeToNode(await palette.MainEntriesAsync(pack.Id), Broker.Json),
             ["views"] = JsonSerializer.SerializeToNode(views.Select(v => new { v.Id, v.View, v.FileId, v.Width, v.Height }), Broker.Json),
             ["masks"] = JsonSerializer.SerializeToNode(masks, Broker.Json),

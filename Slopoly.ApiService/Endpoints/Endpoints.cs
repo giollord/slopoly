@@ -92,9 +92,9 @@ public static class ApiEndpoints
 
         // Knowledge notes (global)
         api.MapGet("/knowledge", (string? q, KnowledgeService k) => k.SearchAsync(q ?? "", 200)); // no query: every note
-        api.MapGet("/knowledge/{slug}", (string slug, KnowledgeService k) => k.ReadAsync(slug));
-        api.MapPut("/knowledge/{slug}", (string slug, KnowledgeNote note, KnowledgeService k) => k.WriteAsync(note with { Slug = slug }));
-        api.MapDelete("/knowledge/{slug}", (string slug, KnowledgeService k) => k.DeleteAsync(slug));
+        api.MapGet("/knowledge/{**slug}", (string slug, KnowledgeService k) => k.ReadAsync(slug));
+        api.MapPut("/knowledge/{**slug}", (string slug, KnowledgeNote note, KnowledgeService k) => k.WriteAsync(note with { Slug = slug }));
+        api.MapDelete("/knowledge/{**slug}", (string slug, KnowledgeService k) => k.DeleteAsync(slug));
 
         // Palette
         api.MapGet("/packs/{id:guid}/palette", (Guid id, PaletteService p) => p.GetAsync(id));

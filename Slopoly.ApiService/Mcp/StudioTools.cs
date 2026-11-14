@@ -37,7 +37,7 @@ public sealed class StudioTools(StudioService studio, GenerationService generati
     public sealed record BuildReport(Guid BuildId, Guid ProgramVersionId, int ProgramVersion, bool Validated, Guid? GlbFileId,
         JsonObject? Report);
 
-    [McpServerTool(Name = "get_pack", ReadOnly = true), Description("The pack (instructions, style text, default triangle budget), its assets (own budget, bounds of the latest build), scenes, style reference file ids and queued or running jobs.")]
+    [McpServerTool(Name = "get_pack", ReadOnly = true), Description("The pack (instructions, style text, default triangle budget, shading: shadingMode Flat/Smooth, hardEdgeAngle, shadeStrength), its assets (own budget, bounds of the latest build), scenes, style reference file ids and queued or running jobs.")]
     public async Task<PackOverview> GetPack(Guid packId)
     {
         var pack = await studio.GetPackAsync(packId);
@@ -54,9 +54,14 @@ public sealed class StudioTools(StudioService studio, GenerationService generati
             await db.Jobs.Where(j => j.PackId == packId && (j.State == JobState.Queued || j.State == JobState.Running)).ToListAsync());
     }
 
-    [McpServerTool(Name = "update_style"), Description("Updates the pack's style text and/or general instructions (null keeps a value).")]
-    public Task<Pack> UpdateStyle(Guid packId, string? styleText = null, string? instructions = null) =>
-        studio.UpdatePackAsync(packId, new PackEdit(null, instructions, styleText, null));
+    [McpServerTool(Name = "update_style"), Description("""
+        Updates the pack's style text, general instructions and shading (null keeps a value). shadingMode: "Flat"
+        (every edge hard) or "Smooth" (normals shared, edges sharper than hardEdgeAngle degrees stay hard).
+        shadeStrength: 0..1 baked vertex shade (ambient occlusion, edge wear); 0 turns it off. Applies from the next build.
+        """)]
+    public Task<Pack> UpdateStyle(Guid packId, string? styleText = null, string? instructions = null, ShadingMode? shadingMode = null,
+        double? hardEdgeAngle = null, double? shadeStrength = null) =>
+        studio.UpdatePackAsync(packId, new PackEdit(null, instructions, styleText, null, shadingMode, hardEdgeAngle, shadeStrength));
 
     [McpServerTool(Name = "create_asset"), Description("Creates an asset (one object of the pack) and returns it. polyBudget: its own triangle budget (omit to use the pack's).")]
     public Task<Asset> CreateAsset(Guid packId, string name, string description, int? polyBudget = null) =>
@@ -142,7 +147,7 @@ public sealed class StudioTools(StudioService studio, GenerationService generati
     public async Task<Job> SubmitProgram(Guid assetId, string source, string? note = null) =>
         (await generation.SubmitProgramAsync(assetId, source, note ?? "")).Job;
 
-    [McpServerTool(Name = "get_build_report", ReadOnly = true), Description("The latest build of the asset (or a given build): validated flag, validator results, silhouette scores per part and view, colour likeness and palette roles.")]
+    [McpServerTool(Name = "get_build_report", ReadOnly = true), Description("The latest build of the asset (or a given build): validated flag, validator results, silhouette scores per part and view, colour likeness, palette roles and export stats (vertices, shading). Each scored view has compareFileId (reference view | model render | silhouette difference: red = model only, blue = view only) and renderFileId: look at them with view_image when a view scores below the bar.")]
     public async Task<BuildReport> GetBuildReport(Guid assetId, Guid? buildId = null)
     {
         var build = await db.Builds.Where(b => b.AssetId == assetId && (buildId == null || b.Id == buildId))
@@ -162,14 +167,15 @@ public sealed class StudioTools(StudioService studio, GenerationService generati
     [McpServerTool(Name = "get_scene", ReadOnly = true), Description("A scene's placements and its build report: per placement world bounds and grounded, plus overlapping pairs.")]
     public async Task<Scene> GetScene(Guid sceneId) => await db.Scenes.FindAsync(sceneId) ?? throw StudioException.NotFound("Scene");
 
-    [McpServerTool(Name = "search_knowledge", ReadOnly = true), Description("Searches the global technique notes (modelling tricks, wear, containers, budgets...) by words; returns slug, title, summary and score.")]
+    [McpServerTool(Name = "search_knowledge", ReadOnly = true), Description("Searches the global notes by words: techniques/<name> (how to model something: wheels, repeats, holes, organic shapes, surface texture...) and objects/<name> (how to approach a kind of object). Returns slug, title, summary and score.")]
     public Task<List<KnowledgeHit>> SearchKnowledge(string query) => knowledge.SearchAsync(query);
 
-    [McpServerTool(Name = "read_knowledge", ReadOnly = true), Description("Reads one technique note (Markdown) by slug.")]
+    [McpServerTool(Name = "read_knowledge", ReadOnly = true), Description("Reads one note (Markdown) by slug, e.g. \"techniques/repeats\" or \"objects/cart\".")]
     public Task<KnowledgeNote> ReadKnowledge(string slug) => knowledge.ReadAsync(slug);
 
     [McpServerTool(Name = "write_knowledge"), Description("""
-        Creates or replaces a global technique note. slug: lowercase words with hyphens ("hollow-containers"). Write
+        Creates or replaces a global note. slug: a folder and lowercase words with hyphens: "techniques/<name>" for a
+        modelling technique, "objects/<name>" for how to approach a kind of object ("techniques/hollow-containers"). Write
         it for any pack (no pack names or ids), with a short summary, search tags and a Markdown body with a
         slopoly_model example. Read the note first when updating it.
         """)]

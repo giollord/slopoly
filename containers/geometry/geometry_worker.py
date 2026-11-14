@@ -1,8 +1,10 @@
 """Geometry worker: builds part programs into validated, scored GLB files.
 
-build: inputs {programVersionId, source, polyBudget, palette: [entries], views, masks: [{part, view, fileId}]} (masks
+build: inputs {programVersionId, source, polyBudget, shading: {mode, hardEdgeAngle, shadeStrength}, palette: [entries],
+  views, masks: [{part, view, fileId}]} (masks
   of the picked hero's view images; part "object" is a view's silhouette);
-  outputs {glbFileId, validated, report, paletteEntryIds}. The program runs in a subprocess (slopoly_model.runner)
+  outputs {glbFileId, validated, report, paletteEntryIds}; each scored view in report.silhouette.views gets
+  renderFileId and compareFileId (the model rendered like the view, and view | render | difference). The program runs in a subprocess (slopoly_model.runner)
   with a timeout, so a runaway or crashing program can't take the worker down.
 palette-render: inputs {main: [entries], variants: [{id, name, entries}], builds: [{buildId, glbFileId}]};
   outputs {textureFileId, variants: {variantId: fileId}, builds: {buildId: glbFileId}}. Builds get the new main
@@ -55,8 +57,13 @@ async def build(job: Job) -> dict[str, Any]:
         for i, mask in enumerate(inputs.get("masks") or []):
             path = await job.download(mask["fileId"], folder / "masks" / f"{i}.png")
             masks.append({"part": mask["part"], "view": mask["view"], "path": str(path), "colors": mask.get("colors") or []})
+        views = []
+        for view in inputs.get("views") or []:
+            path = await job.download(view["fileId"], folder / "views" / f"{view['view']}.png")
+            views.append({"view": view["view"], "path": str(path)})
         job_file = {"source": inputs.get("source") or "", "polyBudget": inputs.get("polyBudget"),
-                    "palette": inputs.get("palette") or [], "masks": masks}
+                    "shading": inputs.get("shading"), "palette": inputs.get("palette") or [], "masks": masks,
+                    "views": views}
         (folder / "job.json").write_text(json.dumps(job_file), encoding="utf-8")
         await job.progress(0.2)
 
@@ -68,6 +75,10 @@ async def build(job: Job) -> dict[str, Any]:
         await job.progress(0.9)
 
         glb = await job.upload(folder / "model.glb", "model.glb", "model/gltf-binary")
+        for score in report["silhouette"].get("views", []):  # renders and comparisons become files: ids, not images
+            for key in ("render", "compare"):
+                if name := score.pop(key, None):
+                    score[f"{key}FileId"] = await job.upload(folder / name, name, "image/png")
         roles = set(report["palette"]["roles"])
         entry_ids = [e["id"] for e in inputs.get("palette") or [] if e.get("role") in roles and e.get("id")]
         return {"glbFileId": glb, "validated": report["validated"], "report": report, "paletteEntryIds": entry_ids}

@@ -15,14 +15,14 @@ namespace Slopoly.Tests.Api;
 /// <summary>design-agent tool surface (tasks 8.1, 8.2).</summary>
 public sealed partial class McpToolsTests
 {
-    private static async Task<McpClient> ConnectAsync()
+    internal static async Task<McpClient> ConnectAsync()
     {
         var http = WorkerClient();
         var transport = new HttpClientTransport(new HttpClientTransportOptions { Endpoint = new Uri(http.BaseAddress!, "/mcp") }, http);
         return await McpClient.CreateAsync(transport);
     }
 
-    private static async Task<JsonElement> CallAsync(McpClient client, string tool, Dictionary<string, object?> args)
+    internal static async Task<JsonElement> CallAsync(McpClient client, string tool, Dictionary<string, object?> args)
     {
         var result = await client.CallToolAsync(tool, args);
         var text = result.Content.OfType<TextContentBlock>().Single().Text;
@@ -91,7 +91,7 @@ public sealed partial class McpToolsTests
                 new PartMask { ConceptImageId = concept.Id, Part = "wheel", View = "front", FileId = image, Bounds = new(10, 300, 80, 200), Area = 9000,
                     Colors = [new MeasuredColor("#6e4524", 0.8)] },
                 new Build { AssetId = asset.Id, ProgramVersionId = version.Id, GlbFileId = image, Validated = true,
-                    Report = JsonNode.Parse("""{ "silhouette": { "views": [ { "view": "front", "parts": [ { "mask": "wheel", "iou": 0.81, "width_error": -0.04 } ] } ] } }""")!.AsObject() });
+                    Report = JsonNode.Parse($$"""{ "silhouette": { "views": [ { "view": "front", "compareFileId": "{{image}}", "renderFileId": "{{image}}", "parts": [ { "mask": "wheel", "iou": 0.81, "width_error": -0.04 } ] } ] } }""")!.AsObject() });
             await db.SaveChangesAsync();
             (assetId, conceptId) = (asset.Id, concept.Id);
         }
@@ -109,7 +109,9 @@ public sealed partial class McpToolsTests
             Assert.That(Base64Run().IsMatch(JsonSerializer.Serialize(result)), Is.False, $"{tool} returned an encoded payload");
         }
         var report = await CallAsync(client, "get_build_report", new() { ["assetId"] = assetId });
-        Assert.That(report.GetProperty("report").GetProperty("silhouette").GetProperty("views")[0].GetProperty("parts")[0].GetProperty("width_error").GetDouble(), Is.EqualTo(-0.04));
+        var scored = report.GetProperty("report").GetProperty("silhouette").GetProperty("views")[0];
+        Assert.That(scored.GetProperty("parts")[0].GetProperty("width_error").GetDouble(), Is.EqualTo(-0.04));
+        Assert.That(scored.GetProperty("compareFileId").GetGuid(), Is.EqualTo(image)); // an id to pass to view_image, not image data
         var segmentation = await CallAsync(client, "get_segmentation", new() { ["conceptImageId"] = conceptId });
         var front = segmentation.GetProperty("views")[0];
         Assert.That(front.GetProperty("masks")[0].GetProperty("fileId").GetGuid(), Is.EqualTo(image));

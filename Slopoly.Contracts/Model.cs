@@ -12,6 +12,12 @@ public sealed class Pack
     public string Instructions { get; set; } = "";
     public string StyleText { get; set; } = "";
     public int PolyBudget { get; set; } = 2000;
+    /// <summary>Normals of every build: flat (all edges hard) or smooth (edges over <see cref="HardEdgeAngle"/> stay hard).</summary>
+    public ShadingMode ShadingMode { get; set; } = ShadingMode.Flat;
+    /// <summary>Degrees; in smooth mode, edges whose faces meet at more than this stay hard.</summary>
+    public double HardEdgeAngle { get; set; } = 60;
+    /// <summary>0..1 strength of the baked vertex shade (ambient occlusion and edge wear); 0 turns it off.</summary>
+    public double ShadeStrength { get; set; } = 0.5;
     /// <summary>Claude Code session id of the pack's chat; set by the agent worker.</summary>
     public string? AgentSessionId { get; set; }
     /// <summary>Rendered main palette texture; re-rendered on palette edits.</summary>
@@ -28,6 +34,8 @@ public sealed class StyleReference
 }
 
 public enum AssetStatus { Concept, Manifest, Built, Validated }
+
+public enum ShadingMode { Flat, Smooth }
 
 public sealed class Asset
 {

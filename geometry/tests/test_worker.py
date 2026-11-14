@@ -10,22 +10,27 @@ from slopoly_worker import JobFailed
 
 
 class FakeJob:
-    def __init__(self, inputs):
+    def __init__(self, inputs, files=None):
         self.id, self.inputs, self.uploads, self.progressed = "job1", inputs, {}, []
+        self.files = files or {}  # file id -> local path
 
     async def progress(self, fraction):
         self.progressed.append(fraction)
 
     async def download(self, file_id, target: Path):
-        raise AssertionError("no masks in these tests")
+        if file_id not in self.files:
+            raise AssertionError(f"unexpected download {file_id}")
+        target.parent.mkdir(parents=True, exist_ok=True)
+        target.write_bytes(Path(self.files[file_id]).read_bytes())
+        return target
 
     async def upload(self, content, name, content_type="application/octet-stream"):
         self.uploads[name] = content.read_bytes() if isinstance(content, Path) else content
         return f"file-{name}"
 
 
-def run(inputs):
-    job = FakeJob(inputs)
+def run(inputs, files=None):
+    job = FakeJob(inputs, files)
     return job, asyncio.run(geometry_worker.build(job))
 
 
@@ -127,3 +132,39 @@ def test_scene_places_builds_and_reports_overlaps_and_floating(cart_source):
     assert [(o["a"], o["b"]) for o in report["overlaps"]] == [("cart 1", "cart 2")]
     cart3 = next(p for p in report["placements"] if p["name"] == "cart 3")["bounds"]
     assert cart3[0][0] > 4 and cart3[0][1] >= 1
+
+
+def test_views_get_render_and_comparison_file_ids(tmp_path, cart_source):
+    import numpy as np
+    from PIL import Image
+
+    from slopoly_model import assembly, silhouette
+    from slopoly_model.runner import run_program
+
+    model = run_program(cart_source)
+    files, masks, views = {}, [], []
+    for view in ("front", "side"):
+        tris = np.concatenate([silhouette._projected(p, silhouette.VIEWS[view]) for p in model.parts.values()])
+        lo, hi = tris.reshape(-1, 2).min(0), tris.reshape(-1, 2).max(0)
+        scale = 150 / max(hi - lo)
+        mask = silhouette._fill(list(tris * scale + (np.array([128, 128]) - (lo + hi) / 2 * scale)), (256, 256))
+        path = tmp_path / f"{view}.png"
+        Image.fromarray((mask * 255).astype(np.uint8)).save(path)
+        files[f"mask-{view}"], files[f"view-{view}"] = path, path
+        masks.append({"part": "object", "view": view, "fileId": f"mask-{view}"})
+        views.append({"id": f"concept-{view}", "view": view, "fileId": f"view-{view}", "width": 256, "height": 256})
+    assembly.new_model()
+    job, outputs = run({"source": cart_source, "polyBudget": 2000, "palette": PALETTE, "masks": masks,
+                        "views": views}, files)
+    scored = {v["view"]: v for v in outputs["report"]["silhouette"]["views"]}
+    for view in ("front", "side"):
+        assert scored[view]["compareFileId"] == f"file-compare_{view}.png"
+        assert scored[view]["renderFileId"] == f"file-render_{view}.png"
+        assert job.uploads[f"compare_{view}.png"][1:4] == b"PNG"
+        assert "compare" not in scored[view] and "render" not in scored[view]
+
+
+def test_build_without_views_has_no_renders(cart_source):
+    job, outputs = run({"source": cart_source, "polyBudget": 2000, "palette": PALETTE})
+    assert outputs["report"]["silhouette"]["renders"].startswith("missing")
+    assert set(job.uploads) == {"model.glb"}

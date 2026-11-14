@@ -46,6 +46,9 @@ public sealed class StudioService(SlopolyDb db, FileStore files, Notifier notifi
         if (edit.Instructions is { } instructions) pack.Instructions = instructions;
         if (edit.StyleText is { } style) pack.StyleText = style;
         if (edit.PolyBudget is { } budget) pack.PolyBudget = budget > 0 ? budget : throw new StudioException("The polygon budget must be positive.");
+        if (edit.ShadingMode is { } mode) pack.ShadingMode = Enum.IsDefined(mode) ? mode : throw new StudioException("The shading mode must be Flat or Smooth.");
+        if (edit.HardEdgeAngle is { } angle) pack.HardEdgeAngle = angle is >= 0 and <= 180 ? angle : throw new StudioException("The hard-edge angle must be between 0 and 180 degrees.");
+        if (edit.ShadeStrength is { } shade) pack.ShadeStrength = shade is >= 0 and <= 1 ? shade : throw new StudioException("The shade strength must be between 0 and 1.");
     }
 
     public async Task<StyleReference> AddStyleReferenceAsync(Guid packId, Stream content, string name, string? contentType)

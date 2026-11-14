@@ -18,5 +18,8 @@ kind needs a different one. Typical low-poly ranges:
 
 - Spend triangles where the silhouette is: round parts that are seen in profile (wheels, heads) get 8–12 segments,
   hidden or small ones 5–6.
-- Wear and grooves (see "wear-and-imperfections") cost triangles: budget ~10–20 % for them on rustic assets.
-- If the build is over budget, reduce segment counts first, then remove booleans, then merge small parts.
+- Wear and grooves (see "wear-and-imperfections" and "surface-texture") cost triangles: budget ~10–20 % for them on rustic assets.
+- Modifiers multiply triangles: SUBSURF ×4 per level, SCREW `steps` × profile points, ARRAY `count` × the source,
+  curves `resolution` × spans × profile sides. Read `triangles` per part in the report.
+- If the build is over budget, reduce segment counts, resolutions and array counts first, then add DECIMATE
+  (`ratio` 0.4–0.7, or `decimate_type="DISSOLVE"` for flat areas), then remove booleans, then merge small parts.

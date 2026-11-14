@@ -58,6 +58,7 @@ class Part:
     mesh: str = ""  # parts with the same mesh name share one mesh (instances)
     mirror_of: str | None = None
     line: int | None = None  # program line that defined the part
+    shading: str | None = None  # "flat" or "smooth" overrides the pack's mode
 
     @property
     def origin(self) -> np.ndarray:
@@ -154,17 +155,25 @@ def _mirror_matrix(axis: str) -> Matrix:
     return Matrix.Diagonal(scale)
 
 
+def _shading(value: str | None) -> str | None:
+    if value not in (None, "flat", "smooth"):
+        raise ModelError(f"shading must be 'flat' or 'smooth', not {value!r}")
+    return value
+
+
 def part(name: str, shape: Shape, parent: str | None = None, at: Vec3 = (0, 0, 0), rot: Vec3 | None = None,
          mirror: str | None = None, joint: Joint | None = None, color: str | None = None,
-         overlaps: Sequence[str] = ()) -> Part:
+         overlaps: Sequence[str] = (), shading: str | None = None) -> Part:
     """Places ``shape`` as part ``name`` with its origin at world position ``at`` and Euler rotation ``rot``
     (degrees). ``mirror="x"`` also creates the mirror image across the X=0 plane, named with _L/_R swapped
     (its parent is the mirrored parent when one exists). ``overlaps`` lists parts it may intersect (e.g. an axle
-    through a wheel). ``color`` is the palette role for faces without their own tag. Returns the part."""
+    through a wheel). ``color`` is the palette role for faces without their own tag. ``shading`` ("flat" or
+    "smooth") overrides the pack's shading mode for this part. Returns the part."""
     if not isinstance(shape, Shape):
         raise ShapeError(f"part {name!r}: shape must be a Shape (box, prism, ...), got {type(shape).__name__}")
     line = _caller_line()
-    created = current.add(Part(name, shape, _placement(at, rot), parent, joint, color, tuple(overlaps), name, line=line))
+    created = current.add(Part(name, shape, _placement(at, rot), parent, joint, color, tuple(overlaps), name, line=line,
+                               shading=_shading(shading)))
     if mirror:
         m = _mirror_matrix(mirror)
         other_parent = parent
@@ -179,12 +188,12 @@ def part(name: str, shape: Shape, parent: str | None = None, at: Vec3 = (0, 0, 0
         other = mirror_name(name)
         current.add(Part(other, shape.transformed(m), m @ created.matrix @ m, other_parent, other_joint, color,
                          tuple(mirror_name(o) if mirror_name(o) in current.parts else o for o in overlaps), other,
-                         mirror_of=name, line=line))
+                         mirror_of=name, line=line, shading=created.shading))
     return created
 
 
 def instance(name: str, shape: Shape, transforms: Sequence, parent: str | None = None, color: str | None = None,
-             overlaps: Sequence[str] = ()) -> list[Part]:
+             overlaps: Sequence[str] = (), shading: str | None = None) -> list[Part]:
     """Places one shape many times, sharing one mesh: parts ``name_1``..``name_N``. Each transform is a position
     (x, y, z) or a dict {"at": (x, y, z), "rot": (x, y, z)}."""
     if not transforms:
@@ -194,7 +203,7 @@ def instance(name: str, shape: Shape, transforms: Sequence, parent: str | None =
     for i, t in enumerate(transforms, start=1):
         at, rot = (t.get("at", (0, 0, 0)), t.get("rot")) if isinstance(t, dict) else (t, None)
         placed.append(current.add(Part(f"{name}_{i}", shape, _placement(at, rot), parent, None, color,
-                                       tuple(overlaps), name, line=line)))
+                                       tuple(overlaps), name, line=line, shading=_shading(shading))))
     return placed
 
 

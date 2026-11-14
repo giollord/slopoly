@@ -87,11 +87,14 @@ def score_view(model: Model, view: str, masks: dict[str, np.ndarray]) -> dict:
     scale = float(np.sqrt((object_w / size[0]) * (object_h / size[1])))  # uniform: keeps the program's aspect
     offset = np.array([(tx0 + tx1) / 2, (ty0 + ty1) / 2]) - (lo + hi) / 2 * scale
     result = {"view": view, "scale": round(scale, 3), "parts": [],
+              # image pixel = projection * scale + offset; renders use it to frame the camera exactly
+              "fit": {"scale": scale, "offset": offset.tolist(), "image": [width, height]},
               "object": {"width_error": round((size[0] * scale - object_w) / object_w, 4),
                          "height_error": round((size[1] * scale - object_h) / object_h, 4)}}
     if silhouette is not None:
         whole = _fill([t * scale + offset for tri in tris.values() for t in tri], (width, height))
         result["object"]["iou"] = round(iou(whole, silhouette), 4)
+        result["_projection"] = whole  # for the comparison image; the runner drops it from the report
     for name, mask in masks.items():
         if name == OBJECT:
             continue

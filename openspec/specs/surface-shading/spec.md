@@ -1,9 +1,10 @@
-## Purpose
+# surface-shading Specification
 
+## Purpose
 Controls how a pack's low-poly assets are shaded: flat or smooth normals with hard edges where they belong, and a baked
 greyscale vertex shade that adds depth without breaking the shared palette atlas or its variants.
 
-## ADDED Requirements
+## Requirements
 
 ### Requirement: Pack shading mode
 Each pack SHALL have a shading mode, flat or smooth, that applies to every build of its assets.
@@ -11,11 +12,11 @@ Each pack SHALL have a shading mode, flat or smooth, that applies to every build
 - **Smooth:** normals are shared across edges, and edges whose faces meet at more than the pack's hard-edge angle stay
   hard.
 
-A new pack SHALL start in flat mode with a hard-edge angle of 40 degrees. Changing the mode or the angle SHALL take
+A new pack SHALL start in flat mode with a hard-edge angle of 60 degrees. Changing the mode or the angle SHALL take
 effect from the next build of each asset; existing builds are unchanged.
 
 #### Scenario: Smooth wheel, sharp box
-- **WHEN** a pack is set to smooth with a 40-degree hard-edge angle and a part program builds an 8-sided wheel and a
+- **WHEN** a pack is set to smooth with a 60-degree hard-edge angle and a part program builds an 8-sided wheel and a
   box
 - **THEN** the exported wheel shades round across its rim faces, and the box's corners stay hard
 

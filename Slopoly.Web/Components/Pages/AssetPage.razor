@@ -44,6 +44,24 @@
         {
             <MudAlert Severity="Severity.Info">No build with a model yet.</MudAlert>
         }
+        @if (Comparisons() is { Count: > 0 } comparisons)
+        {
+            <MudText Typo="Typo.subtitle1" Class="mt-4">Build vs views</MudText>
+            <MudText Typo="Typo.caption">Reference view · model render · difference (red: only the model, blue: only the view). Click to open full size.</MudText>
+            <MudGrid Spacing="1" Class="mt-1">
+                @foreach (var (view, iou, file) in comparisons)
+                {
+                    <MudItem xs="12" sm="6">
+                        <MudText Typo="Typo.body2">@view · object IoU @(iou?.ToString("0.00") ?? "–")</MudText>
+                        <a href="/files/@file" target="_blank"><img class="concept-image" src="/files/@file" alt="@view comparison" /></a>
+                    </MudItem>
+                }
+            </MudGrid>
+        }
+        else if (_build?.Report?["silhouette"]?["renders"] is { } why)
+        {
+            <MudText Typo="Typo.caption" Class="mt-2">No comparisons: @why</MudText>
+        }
 
         <MudStack Row="true" AlignItems="AlignItems.Center" Class="mt-4">
             <MudText Typo="Typo.subtitle1">Manifest</MudText>
@@ -57,7 +75,7 @@
     <MudItem xs="12" lg="6">
         <MudText Typo="Typo.subtitle1">Builds</MudText>
         <MudSimpleTable Dense="true" Hover="true">
-            <thead><tr><th>Created</th><th>Program</th><th>Validated</th><th>Mean IoU</th></tr></thead>
+            <thead><tr><th>Created</th><th>Program</th><th>Validated</th><th>Object IoU</th><th>Part IoU</th></tr></thead>
             <tbody>
                 @foreach (var b in _builds)
                 {
@@ -65,6 +83,7 @@
                         <td>@b.CreatedAt.ToLocalTime().ToString("g")</td>
                         <td>v@(_programs.FirstOrDefault(p => p.Id == b.ProgramVersionId)?.Number)</td>
                         <td><MudChip T="string" Size="Size.Small" Color="@(b.Validated ? Color.Success : Color.Warning)">@(b.Validated ? "yes" : "no")</MudChip></td>
+                        <td>@b.Report?["silhouette"]?["mean_object_iou"]</td>
                         <td>@b.Report?["silhouette"]?["mean_iou"]</td>
                     </tr>
                 }
@@ -154,6 +173,13 @@
     protected override bool Concerns(Guid? packId, Guid? assetId) => !_deleted && (assetId == AssetId || (assetId is null && packId == _asset?.PackId));
 
     private void SelectBuild(Build b) { _build = b; _variantId = null; }
+
+    /// <summary>The selected build's comparison images, in view order (front, side, top, back).</summary>
+    private List<(string View, double? Iou, string File)> Comparisons() =>
+        (_build?.Report?["silhouette"]?["views"] as JsonArray ?? []).OfType<JsonObject>()
+            .Where(v => v["compareFileId"] is not null)
+            .Select(v => (View: (string)v["view"]!, Iou: (double?)v["object"]?["iou"], File: (string)v["compareFileId"]!))
+            .OrderBy(v => Array.IndexOf(ViewNames.All, v.View)).ToList();
 
     private async Task SetVariantAsync(Guid? id)
     {

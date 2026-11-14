@@ -26,7 +26,9 @@ public sealed record VariantEdit(string Name, List<VariantColorEdit> Colors);
 
 public sealed record ChatTurn(Job Job, List<JobEvent> Events);
 
-public sealed record PackEdit(string? Name, string? Instructions, string? StyleText, int? PolyBudget);
+/// <summary>Null keeps a value.</summary>
+public sealed record PackEdit(string? Name, string? Instructions, string? StyleText, int? PolyBudget,
+    ShadingMode? ShadingMode = null, double? HardEdgeAngle = null, double? ShadeStrength = null);
 
 /// <summary>An entry as the geometry worker and the agent see it.</summary>
 public sealed record PaletteSlot(Guid Id, string Role, PaletteKind Kind, int Slot, string Color, string? Color2);

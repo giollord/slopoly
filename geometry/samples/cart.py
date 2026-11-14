@@ -11,7 +11,7 @@ wheel = extrude(inset(prism(8, r=0.3, length=0.08, axis="x"), "+x", 0.2, tag="me
 part("wheel_L", wheel, parent="axle", at=(0.5, 0.3, 0), color="wood dark", overlaps=["axle"], mirror="x")
 
 # Handles start on the bed's back face and bend up at the end.
-handle = sweep([(0, 0, 0), (0, 0, -0.6), (0, 0.1, -0.85)], ngon(6, r=0.03))
+handle = curve([(0, 0, 0), (0, 0, -0.6), (0, 0.1, -0.85)], ngon(6, r=0.03), smooth=False, resolution=1)
 part("handle_L", handle, parent="bed", at=(0.3, 0.55, -0.35), color="wood dark", mirror="x")
 
 socket("hitch", at=(0, 0.55, -1.2), parent="bed")

@@ -15,7 +15,7 @@ partial class SlopolyDbModelSnapshot : ModelSnapshot
     // If you encounter a merge conflict in the line below, it means you need to
     // discard one of the migration branches and recreate its migrations on top of
     // the other branch. See https://aka.ms/efcore-docs-migrations-conflicts for more info.
-    public override string LastMigrationId => "20261114194519_HeroesAndViews";
+    public override string LastMigrationId => "20261114230220_PackShading";
 
     protected override void BuildModel(ModelBuilder modelBuilder)
     {
@@ -282,6 +282,9 @@ partial class SlopolyDbModelSnapshot : ModelSnapshot
                 b.Property<long>("CreatedAt")
                     .HasColumnType("INTEGER");
 
+                b.Property<double>("HardEdgeAngle")
+                    .HasColumnType("REAL");
+
                 b.Property<string>("Instructions")
                     .IsRequired()
                     .HasColumnType("TEXT");
@@ -295,6 +298,13 @@ partial class SlopolyDbModelSnapshot : ModelSnapshot
 
                 b.Property<int>("PolyBudget")
                     .HasColumnType("INTEGER");
+
+                b.Property<double>("ShadeStrength")
+                    .HasColumnType("REAL");
+
+                b.Property<string>("ShadingMode")
+                    .IsRequired()
+                    .HasColumnType("TEXT");
 
                 b.Property<string>("StyleText")
                     .IsRequired()

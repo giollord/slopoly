@@ -43,18 +43,15 @@ def test_operations_do_not_change_their_input():
     assert len(base.faces()) == 6
 
 
-def test_sweep_keeps_thickness_at_corners():
-    handle = sm.sweep([(0, 0, 0), (0, 0, 1), (0, 1, 1)], sm.ngon(6, r=0.03))
+def test_curve_has_resolution_segments_per_span_and_is_closed():
+    handle = sm.curve([(0, 0, 0), (0, 0.5, 0.2), (0, 1, 0)], sm.ngon(6, r=0.03), resolution=4, tag="wood")
     assert all(e.is_manifold for e in handle.bm.edges)
-    assert len(handle.faces()) == 6 * 2 + 2
-    lo, hi = handle.bounds()
-    assert hi[1] == pytest.approx(1.0) and lo[2] == pytest.approx(0.0)
-    assert hi[2] == pytest.approx(1.03, abs=1e-6)  # outer corner is mitred, not pinched
+    assert len(handle.faces()) == 6 * 8 + 2  # 8 segments along, two n-gon caps
+    assert set(handle.face_tags()) == {"wood"}
 
 
 def test_boolean_cuts_and_keeps_tags():
-    import manifold3d  # noqa: F401
-    from slopoly_model.shapes import to_manifold
+    from slopoly_model.validate import to_manifold
 
     holed = sm.boolean(sm.box(1, 1, 1, tag="wood"), sm.prism(6, r=0.2, length=2, tag="hole"))
     assert holed.booleans == 1
@@ -65,14 +62,14 @@ def test_boolean_cuts_and_keeps_tags():
 
 def test_mirrored_part_is_x_negated():
     sm.part("bed", sm.box(1.2, 0.3, 0.7), at=(0, 0.5, 0))
-    handle = sm.sweep([(0.3, 0.5, 0.35), (0.3, 0.5, 1.0), (0.35, 0.6, 1.3)], sm.ngon(6, r=0.03))
+    handle = sm.curve([(0.3, 0.5, 0.35), (0.3, 0.5, 1.0), (0.35, 0.6, 1.3)], sm.ngon(6, r=0.03))
     left = sm.part("handle_L", handle, parent="bed", at=(0.1, 0, 0), rot=(0, 10, 5), mirror="x")
     right = assembly.current.parts["handle_R"]
     assert right.parent == "bed" and right.mirror_of == "handle_L"
     expected = left.world_vertices() * np.array([-1, 1, 1])
     np.testing.assert_allclose(right.world_vertices(), expected, atol=1e-6)
     # outward normals after mirroring: the signed volume stays positive
-    from slopoly_model.shapes import to_manifold
+    from slopoly_model.validate import to_manifold
     assert to_manifold(right.shape).volume() > 0
 
 

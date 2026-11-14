@@ -44,3 +44,12 @@ The Concepts tab SHALL let the user generate new style anchors and heroes with a
 #### Scenario: Make views
 - **WHEN** the user picks a cart hero and chooses "Make views"
 - **THEN** a views job starts, and the view images appear under the hero when it finishes
+
+### Requirement: Build comparison on the asset page
+The asset page SHALL show, for the selected build, each view's comparison image and object score next to the 3D
+viewer, so the user can see where the model differs from the hero's views.
+
+#### Scenario: Compare the cart
+- **WHEN** the user opens the cart's asset page after a build against its views
+- **THEN** the page shows the front, side, top and back comparisons with their object scores, and selecting an older
+  build shows that build's comparisons

@@ -9,7 +9,20 @@ from itertools import combinations
 import numpy as np
 
 from .assembly import Model, Part
-from .shapes import ShapeError, to_manifold
+from .shapes import Shape, ShapeError
+
+
+def to_manifold(shape: Shape):
+    """manifold3d solid of the shape (for volumes, overlaps and gaps)."""
+    import manifold3d
+
+    mesh = manifold3d.Mesh(vert_properties=np.asarray(shape.vertices(), dtype=np.float32),
+                           tri_verts=np.asarray(shape.triangles(), dtype=np.uint32).reshape(-1, 3))
+    mesh.merge()
+    solid = manifold3d.Manifold(mesh)
+    if solid.status() != manifold3d.Error.NoError:
+        raise ShapeError(f"shape is not a closed solid ({solid.status().name})")
+    return solid
 
 INTERSECTION_TOLERANCE = 0.01  # allowed overlap, as a fraction of the smaller part's volume
 CONTACT_TOLERANCE = 0.005  # metres: a connection touches when the gap is at most this

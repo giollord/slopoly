@@ -6,8 +6,9 @@
 
 <MudBreadcrumbs Items="@([new("Packs", "/"), new("Knowledge", null, disabled: true)])" Class="px-0 pt-0 pb-2" />
 <MudText Typo="Typo.body2" Class="mb-3">
-    Technique notes shared by all packs. The agent searches them before modelling and adds notes when it learns a technique.
-    They are files in the repository's <code>knowledge/</code> folder, so new notes show up in git.
+    Notes shared by all packs: <code>techniques/</code> (how to model something) and <code>objects/</code> (how to approach a
+    kind of object). The agent searches them before modelling and adds notes when it learns a technique. They are files
+    in the repository's <code>knowledge/</code> folder, so new notes show up in git.
 </MudText>
 
 <MudGrid>
@@ -21,7 +22,7 @@
             @foreach (var hit in _hits)
             {
                 <MudListItem T="string" Value="hit.Slug">
-                    <MudText Typo="Typo.body1">@hit.Title</MudText>
+                    <MudText Typo="Typo.body1">@hit.Title <MudText Typo="Typo.caption" Inline="true" Color="Color.Secondary">@hit.Slug.Split('/')[0]</MudText></MudText>
                     <MudText Typo="Typo.caption" Class="clamp-3">@hit.Summary</MudText>
                 </MudListItem>
             }
@@ -38,7 +39,7 @@
                 <MudStack Row="true" Spacing="2">
                     <MudTextField T="string" @bind-Value="_note.Title" Label="Title" Variant="Variant.Outlined" Margin="Margin.Dense" />
                     <MudTextField T="string" @bind-Value="_note.Slug" Label="File name" Variant="Variant.Outlined" Margin="Margin.Dense" ReadOnly="!_isNew"
-                                  Placeholder="hollow-containers" Style="max-width: 16rem" />
+                                  Placeholder="techniques/hollow-containers" Style="max-width: 20rem" />
                 </MudStack>
                 <MudTextField T="string" @bind-Value="_note.Tags" Label="Tags (comma separated)" Variant="Variant.Outlined" Margin="Margin.Dense" />
                 <MudTextField T="string" @bind-Value="_note.Summary" Label="Summary" Variant="Variant.Outlined" Margin="Margin.Dense" />
@@ -95,7 +96,7 @@
     private Task SaveAsync() => Try(async () =>
     {
         var tags = _note!.Tags.Split(',', StringSplitOptions.RemoveEmptyEntries | StringSplitOptions.TrimEntries).ToList();
-        await Api.PutAsync<KnowledgeNote>($"api/knowledge/{Uri.EscapeDataString(_note.Slug.Trim())}",
+        await Api.PutAsync<KnowledgeNote>($"api/knowledge/{_note.Slug.Trim()}",
             new KnowledgeNote(_note.Slug.Trim(), _note.Title, tags, _note.Summary, _note.Body));
         _isNew = false;
         Snackbar.Add("Note saved.", Severity.Success);
