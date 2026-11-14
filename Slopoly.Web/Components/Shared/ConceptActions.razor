@@ -1,0 +1,32 @@
+@* Pick / reject / undecided / delete buttons of one concept image (gallery cards and the concept page). *@
+@inject StudioApi Api
+@inject ISnackbar Snackbar
+@inject IDialogService Dialogs
+
+<MudTooltip Text="Pick"><MudIconButton Icon="@Icons.Material.Filled.CheckCircle" Color="@(Concept.Selection == Selection.Picked ? Color.Success : Color.Default)" OnClick="() => SelectAsync(Selection.Picked)" /></MudTooltip>
+<MudTooltip Text="Reject (hidden from the agent)"><MudIconButton Icon="@Icons.Material.Filled.Cancel" Color="@(Concept.Selection == Selection.Rejected ? Color.Error : Color.Default)" OnClick="() => SelectAsync(Selection.Rejected)" /></MudTooltip>
+<MudTooltip Text="Undecided"><MudIconButton Icon="@Icons.Material.Filled.RadioButtonUnchecked" OnClick="() => SelectAsync(Selection.None)" /></MudTooltip>
+<MudTooltip Text="Delete"><MudIconButton Icon="@Icons.Material.Filled.Delete" OnClick="DeleteAsync" /></MudTooltip>
+
+@code {
+    [Parameter, EditorRequired] public ConceptImage Concept { get; set; } = null!;
+    [Parameter] public EventCallback OnDeleted { get; set; }
+
+    private async Task SelectAsync(Selection selection)
+    {
+        try { await Api.PutAsync<ConceptImage>($"api/concepts/{Concept.Id}/selection", new SelectionEdit(selection)); }
+        catch (ApiException ex) { Snackbar.Add(ex.Message, Severity.Error); }
+    }
+
+    private async Task DeleteAsync()
+    {
+        if (await Dialogs.ShowMessageBoxAsync("Delete image", "Delete this concept image and its part masks? This can't be undone.",
+                yesText: "Delete", cancelText: "Cancel") != true) return;
+        try
+        {
+            await Api.DeleteAsync($"api/concepts/{Concept.Id}");
+            await OnDeleted.InvokeAsync();
+        }
+        catch (ApiException ex) { Snackbar.Add(ex.Message, Severity.Error); }
+    }
+}

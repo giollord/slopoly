@@ -71,9 +71,12 @@ def build(job: dict, out: Path) -> dict:
                                      "message": "palette roles not in the pack palette: add them first"})
     validation["validated"] = validation["validated"] and not untagged and not missing
     used = sorted({pal.split_tag(t)[0] for p in model.parts.values() for t in p.face_tags() if t})
+    parts = summary(model)
+    corners = np.array([b for p in parts for b in p["bounds"]]).reshape(-1, 3)
     return {
         "validated": validation["validated"],
-        "parts": summary(model),
+        "bounds": [corners.min(0).tolist(), corners.max(0).tolist()] if len(corners) else None,  # whole model, metres
+        "parts": parts,
         "validation": validation,
         "silhouette": score(model, load_masks(job.get("masks") or [])),
         "colors": likeness(model, job.get("masks") or [], entries),

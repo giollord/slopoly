@@ -1,0 +1,115 @@
+@page "/knowledge"
+@inherits LiveComponent
+@inject IDialogService Dialogs
+
+<PageTitle>Knowledge · Slopoly</PageTitle>
+
+<MudBreadcrumbs Items="@([new("Packs", "/"), new("Knowledge", null, disabled: true)])" Class="px-0 pt-0 pb-2" />
+<MudText Typo="Typo.body2" Class="mb-3">
+    Technique notes shared by all packs. The agent searches them before modelling and adds notes when it learns a technique.
+    They are files in the repository's <code>knowledge/</code> folder, so new notes show up in git.
+</MudText>
+
+<MudGrid>
+    <MudItem xs="12" md="4">
+        <MudStack Row="true" AlignItems="AlignItems.Center" Class="mb-2">
+            <MudTextField T="string" Value="_query" ValueChanged="SearchAsync" Placeholder="Search" Adornment="Adornment.Start" AdornmentIcon="@Icons.Material.Filled.Search"
+                          Immediate="true" DebounceInterval="250" Variant="Variant.Outlined" Margin="Margin.Dense" />
+            <MudButton Variant="Variant.Filled" Color="Color.Primary" StartIcon="@Icons.Material.Filled.Add" OnClick="New">New</MudButton>
+        </MudStack>
+        <MudList T="string" SelectedValue="_note?.Slug" SelectedValueChanged="OpenAsync" Dense="true">
+            @foreach (var hit in _hits)
+            {
+                <MudListItem T="string" Value="hit.Slug">
+                    <MudText Typo="Typo.body1">@hit.Title</MudText>
+                    <MudText Typo="Typo.caption" Class="clamp-3">@hit.Summary</MudText>
+                </MudListItem>
+            }
+        </MudList>
+    </MudItem>
+    <MudItem xs="12" md="8">
+        @if (_note is null)
+        {
+            <MudAlert Severity="Severity.Info">Choose a note, or create one.</MudAlert>
+        }
+        else
+        {
+            <MudStack Spacing="2">
+                <MudStack Row="true" Spacing="2">
+                    <MudTextField T="string" @bind-Value="_note.Title" Label="Title" Variant="Variant.Outlined" Margin="Margin.Dense" />
+                    <MudTextField T="string" @bind-Value="_note.Slug" Label="File name" Variant="Variant.Outlined" Margin="Margin.Dense" ReadOnly="!_isNew"
+                                  Placeholder="hollow-containers" Style="max-width: 16rem" />
+                </MudStack>
+                <MudTextField T="string" @bind-Value="_note.Tags" Label="Tags (comma separated)" Variant="Variant.Outlined" Margin="Margin.Dense" />
+                <MudTextField T="string" @bind-Value="_note.Summary" Label="Summary" Variant="Variant.Outlined" Margin="Margin.Dense" />
+                <MudTextField T="string" @bind-Value="_note.Body" Label="Markdown" Variant="Variant.Outlined" Lines="22" Class="code-input" />
+                <MudStack Row="true">
+                    <MudSpacer />
+                    @if (!_isNew)
+                    {
+                        <MudButton Variant="Variant.Outlined" StartIcon="@Icons.Material.Filled.Delete" OnClick="DeleteAsync">Delete</MudButton>
+                    }
+                    <MudButton Variant="Variant.Filled" Color="Color.Primary" OnClick="SaveAsync">Save</MudButton>
+                </MudStack>
+            </MudStack>
+        }
+    </MudItem>
+</MudGrid>
+
+@code {
+    private sealed class Draft
+    {
+        public string Slug { get; set; } = "";
+        public string Title { get; set; } = "";
+        public string Tags { get; set; } = "";
+        public string Summary { get; set; } = "";
+        public string Body { get; set; } = "";
+    }
+
+    private List<KnowledgeHit> _hits = [];
+    private Draft? _note;
+    private bool _isNew;
+    private string _query = "";
+
+    protected override async Task LoadAsync() =>
+        _hits = await Api.GetAsync<List<KnowledgeHit>>($"api/knowledge?q={Uri.EscapeDataString(_query)}");
+
+    // Notes are global: their change events carry no pack.
+    protected override bool Concerns(Guid? packId, Guid? assetId) => packId is null && assetId is null;
+
+    private Task SearchAsync(string query)
+    {
+        _query = query;
+        return Try(LoadAsync);
+    }
+
+    private Task OpenAsync(string? slug) => slug is null ? Task.CompletedTask : Try(async () =>
+    {
+        var note = await Api.GetAsync<KnowledgeNote>($"api/knowledge/{slug}");
+        _note = new Draft { Slug = note.Slug, Title = note.Title, Tags = string.Join(", ", note.Tags), Summary = note.Summary, Body = note.Body };
+        _isNew = false;
+    });
+
+    private void New() => (_note, _isNew) = (new Draft(), true);
+
+    private Task SaveAsync() => Try(async () =>
+    {
+        var tags = _note!.Tags.Split(',', StringSplitOptions.RemoveEmptyEntries | StringSplitOptions.TrimEntries).ToList();
+        await Api.PutAsync<KnowledgeNote>($"api/knowledge/{Uri.EscapeDataString(_note.Slug.Trim())}",
+            new KnowledgeNote(_note.Slug.Trim(), _note.Title, tags, _note.Summary, _note.Body));
+        _isNew = false;
+        Snackbar.Add("Note saved.", Severity.Success);
+        await LoadAsync();
+    });
+
+    private async Task DeleteAsync()
+    {
+        if (await Dialogs.ShowMessageBoxAsync("Delete note", $"Delete \"{_note!.Title}\" from the knowledge folder?", yesText: "Delete", cancelText: "Cancel") != true) return;
+        await Try(async () =>
+        {
+            await Api.DeleteAsync($"api/knowledge/{_note.Slug}");
+            _note = null;
+            await LoadAsync();
+        });
+    }
+}

@@ -18,7 +18,7 @@ services:
   # Geometry (bpy) tests run in the geometry worker image: docker compose -f workers/compose.test.yaml run --rm geometry-tests
   geometry-tests:
     build: { context: .., dockerfile: containers/geometry/Dockerfile }
-    volumes: ["../geometry:/opt/slopoly/geometry:ro", "../containers/geometry/geometry_worker.py:/opt/slopoly/geometry_worker.py:ro", "../agent:/opt/slopoly/agent:ro"]
+    volumes: ["../geometry:/opt/slopoly/geometry:ro", "../containers/geometry/geometry_worker.py:/opt/slopoly/geometry_worker.py:ro", "../agent:/opt/slopoly/agent:ro", "../knowledge:/opt/slopoly/knowledge:ro"]
     working_dir: /opt/slopoly/geometry
     command: ["pytest", "-q", "-p", "no:cacheprovider", "-W", "ignore::DeprecationWarning", "tests"]
   # Agent worker tests (stubbed SDK): docker compose -f workers/compose.test.yaml run --rm agent-tests

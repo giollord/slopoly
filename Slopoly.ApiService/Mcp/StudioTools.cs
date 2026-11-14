@@ -17,9 +17,14 @@ namespace Slopoly.ApiService.Mcp;
 /// </summary>
 [McpServerToolType]
 public sealed class StudioTools(StudioService studio, GenerationService generation, PaletteService palette, JobService jobs,
-    SlopolyDb db, FileStore files)
+    KnowledgeService knowledge, SlopolyDb db, FileStore files)
 {
-    public sealed record PackOverview(Pack Pack, List<Asset> Assets, List<StyleReference> StyleReferences, List<Job> ActiveJobs);
+    /// <summary>An asset with the world bounds ([min, max], metres) of its latest build, for placing it in scenes.</summary>
+    public sealed record AssetInfo(Asset Asset, JsonNode? Bounds);
+
+    public sealed record SceneInfo(Guid Id, string Name, int Placements);
+
+    public sealed record PackOverview(Pack Pack, List<AssetInfo> Assets, List<SceneInfo> Scenes, List<StyleReference> StyleReferences, List<Job> ActiveJobs);
 
     public sealed record MaskInfo(Guid Id, string Part, string View, Guid FileId, Rect Bounds, int Area);
 
@@ -31,12 +36,19 @@ public sealed class StudioTools(StudioService studio, GenerationService generati
     public sealed record BuildReport(Guid BuildId, Guid ProgramVersionId, int ProgramVersion, bool Validated, Guid? GlbFileId,
         JsonObject? Report);
 
-    [McpServerTool(Name = "get_pack", ReadOnly = true), Description("The pack (instructions, style text, polygon budget), its assets, style reference file ids and queued or running jobs.")]
+    [McpServerTool(Name = "get_pack", ReadOnly = true), Description("The pack (instructions, style text, default triangle budget), its assets (own budget, bounds of the latest build), scenes, style reference file ids and queued or running jobs.")]
     public async Task<PackOverview> GetPack(Guid packId)
     {
         var pack = await studio.GetPackAsync(packId);
-        return new(pack,
-            await db.Assets.Where(a => a.PackId == packId).OrderBy(a => a.CreatedAt).ToListAsync(),
+        var assets = await db.Assets.Where(a => a.PackId == packId).OrderBy(a => a.CreatedAt).ToListAsync();
+        var infos = new List<AssetInfo>();
+        foreach (var asset in assets)
+        {
+            var report = await db.Builds.Where(b => b.AssetId == asset.Id).OrderByDescending(b => b.CreatedAt).Select(b => b.Report).FirstOrDefaultAsync();
+            infos.Add(new(asset, report?["bounds"]?.DeepClone()));
+        }
+        return new(pack, infos,
+            (await db.Scenes.Where(s => s.PackId == packId).ToListAsync()).Select(s => new SceneInfo(s.Id, s.Name, s.Placements.Count)).ToList(),
             await db.StyleReferences.Where(r => r.PackId == packId).ToListAsync(),
             await db.Jobs.Where(j => j.PackId == packId && (j.State == JobState.Queued || j.State == JobState.Running)).ToListAsync());
     }
@@ -45,8 +57,13 @@ public sealed class StudioTools(StudioService studio, GenerationService generati
     public Task<Pack> UpdateStyle(Guid packId, string? styleText = null, string? instructions = null) =>
         studio.UpdatePackAsync(packId, new PackEdit(null, instructions, styleText, null));
 
-    [McpServerTool(Name = "create_asset"), Description("Creates an asset (one object of the pack) and returns it.")]
-    public Task<Asset> CreateAsset(Guid packId, string name, string description) => studio.CreateAssetAsync(packId, name, description);
+    [McpServerTool(Name = "create_asset"), Description("Creates an asset (one object of the pack) and returns it. polyBudget: its own triangle budget (omit to use the pack's).")]
+    public Task<Asset> CreateAsset(Guid packId, string name, string description, int? polyBudget = null) =>
+        studio.CreateAssetAsync(packId, name, description, polyBudget);
+
+    [McpServerTool(Name = "update_asset"), Description("Changes an asset's name, description or triangle budget (null keeps a value; polyBudget 0 returns to the pack's budget).")]
+    public Task<Asset> UpdateAsset(Guid assetId, string? name = null, string? description = null, int? polyBudget = null) =>
+        studio.UpdateAssetAsync(assetId, new AssetEdit(name, description, polyBudget));
 
     [McpServerTool(Name = "start_job"), Description("""
         Starts a generation job and returns it (poll get_job). operation:
@@ -77,8 +94,12 @@ public sealed class StudioTools(StudioService studio, GenerationService generati
     [McpServerTool(Name = "list_concepts", ReadOnly = true), Description("Concept images the user has not rejected (style anchors and turnarounds), with selection (Picked/None), size and view rectangles. Optionally for one asset.")]
     public Task<List<ConceptImage>> ListConcepts(Guid packId, Guid? assetId = null) => studio.ListConceptsAsync(packId, assetId);
 
-    [McpServerTool(Name = "more_variants"), Description("Generates more images like a concept (its generation again with a new seed, 1-4 images) and returns the job. Use when the user asks for more options.")]
-    public Task<Job> MoreVariants(Guid conceptImageId, int count = 2) => generation.MoreVariantsAsync(conceptImageId, count);
+    [McpServerTool(Name = "revise_concept"), Description("""
+        New images from a concept (1-4, new seed), returned as a job. Without change: more options like it. With
+        change: a short instruction of what to change ("red roof, no chimney"); the concept becomes the first reference
+        image and the change is added to its prompt. Use the count the user asks for.
+        """)]
+    public Task<Job> ReviseConcept(Guid conceptImageId, string? change = null, int count = 2) => generation.ReviseAsync(conceptImageId, change, count);
 
     [McpServerTool(Name = "get_segmentation", ReadOnly = true), Description("Part masks of a turnaround: per part and view the mask file id, bounds in image pixels and area, plus parts that were not found.")]
     public async Task<Segmentation> GetSegmentation(Guid conceptImageId)
@@ -123,6 +144,31 @@ public sealed class StudioTools(StudioService studio, GenerationService generati
         var version = await db.ProgramVersions.FindAsync(build.ProgramVersionId);
         return new(build.Id, build.ProgramVersionId, version?.Number ?? 0, build.Validated, build.GlbFileId, build.Report);
     }
+
+    [McpServerTool(Name = "save_scene"), Description("""
+        Creates or replaces a scene (by name) of built pack assets and starts its build (poll get_job, then get_scene).
+        placements: [{"name": "cart 1", "assetId", "at": [x, y, z], "rot": [x, y, z] (degrees, optional), "scale": 1}],
+        metres, Y up, ground at y = 0, assets face +Z. Every asset needs a build of its current program.
+        """)]
+    public Task<Scene> SaveScene(Guid packId, string name, List<ScenePlacement> placements, string? description = null) =>
+        generation.SaveSceneAsync(packId, new SceneEdit(name, description, placements));
+
+    [McpServerTool(Name = "get_scene", ReadOnly = true), Description("A scene's placements and its build report: per placement world bounds and grounded, plus overlapping pairs.")]
+    public async Task<Scene> GetScene(Guid sceneId) => await db.Scenes.FindAsync(sceneId) ?? throw StudioException.NotFound("Scene");
+
+    [McpServerTool(Name = "search_knowledge", ReadOnly = true), Description("Searches the global technique notes (modelling tricks, wear, containers, budgets...) by words; returns slug, title, summary and score.")]
+    public Task<List<KnowledgeHit>> SearchKnowledge(string query) => knowledge.SearchAsync(query);
+
+    [McpServerTool(Name = "read_knowledge", ReadOnly = true), Description("Reads one technique note (Markdown) by slug.")]
+    public Task<KnowledgeNote> ReadKnowledge(string slug) => knowledge.ReadAsync(slug);
+
+    [McpServerTool(Name = "write_knowledge"), Description("""
+        Creates or replaces a global technique note. slug: lowercase words with hyphens ("hollow-containers"). Write
+        it for any pack (no pack names or ids), with a short summary, search tags and a Markdown body with a
+        slopoly_model example. Read the note first when updating it.
+        """)]
+    public Task<KnowledgeNote> WriteKnowledge(string slug, string title, List<string> tags, string summary, string body) =>
+        knowledge.WriteAsync(new KnowledgeNote(slug, title, tags, summary, body));
 
     [McpServerTool(Name = "view_image", ReadOnly = true), Description("Returns an image file (concept, mask, palette) for viewing. Costly: use only when numbers aren't enough.")]
     public async Task<CallToolResult> ViewImage(Guid fileId)

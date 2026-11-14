@@ -28,6 +28,7 @@ public sealed class ConceptImageResults(SlopolyDb db) : IJobResultHandler
                 FileId = image!["fileId"]!.GetValue<Guid>(),
                 Width = image["width"]?.GetValue<int>() ?? 0,
                 Height = image["height"]?.GetValue<int>() ?? 0,
+                Seed = image["seed"]?.GetValue<long>(),
                 Views = image["views"]?.Deserialize<Dictionary<string, Rect>>(Broker.Json) ?? [],
             });
         }
@@ -78,6 +79,19 @@ public sealed class BuildResults(SlopolyDb db) : IJobResultHandler
         var asset = await db.Assets.FindAsync(build.AssetId);
         if (asset is not null && asset.CurrentProgramVersionId == versionId)
             asset.Status = build.Validated ? AssetStatus.Validated : AssetStatus.Built;
+    }
+}
+
+/// <summary>scene: <c>{ glbFileId, report }</c>, stored on the scene.</summary>
+public sealed class SceneResults(SlopolyDb db) : IJobResultHandler
+{
+    public bool Handles(Job job) => job.Kind == JobKinds.Scene;
+
+    public async Task ApplyAsync(Job job, JsonObject outputs)
+    {
+        if (await db.Scenes.FindAsync(job.Inputs["sceneId"]!.GetValue<Guid>()) is not { } scene) return;
+        scene.GlbFileId = outputs["glbFileId"]?.GetValue<Guid>();
+        scene.Report = outputs["report"]?.DeepClone().AsObject();
     }
 }
 

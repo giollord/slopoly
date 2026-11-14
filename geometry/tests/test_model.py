@@ -107,3 +107,14 @@ def test_model_errors_are_explicit():
         sm.prism(2, r=1, length=1)
     with pytest.raises(sm.ShapeError, match="no faces match"):
         sm.extrude(sm.box(1, 1, 1), "lid", 0.1)
+
+
+def test_jitter_is_seeded_closed_and_limited_to_the_selection():
+    base = sm.bevel(sm.box(1, 0.4, 1), 0.03)
+    a, b = sm.jitter(base, 0.02, seed=3), sm.jitter(base, 0.02, seed=3)
+    assert np.array_equal(a.vertices(), b.vertices())
+    assert not np.array_equal(a.vertices(), base.vertices())
+    assert np.abs(a.vertices() - base.vertices()).max() <= 0.02
+    assert all(e.is_manifold for e in a.bm.edges)
+    top = sm.jitter(sm.box(1, 1, 1), 0.05, faces="top")
+    assert top.vertices()[:, 1].min() == pytest.approx(-0.5)  # bottom vertices stay put

@@ -79,6 +79,7 @@
 ## 11. End-to-end
 
 - [ ] 11.1 Run the cart scenario from the design-agent spec on the target machine: brief → anchor approval → cart turnaround approval → segmentation → manifest → iterate to a validated build; record outcome, timings and blockers in the change's notes; verify the final GLB is viewable, palette-coloured with role-named entries, and its axle/wheel node spins in place; then create an "autumn" variant through the chat and recolour one main entry in the UI, verifying both without a rebuild
+      - Open at archive (2026-11-14): the parts were each exercised (agent chat turn, picks, segmentation, a validated cart build, variants, recolouring), but the full scenario was not run in one pass, and its notes were not recorded.
 - [x] 11.2 Run `git grep` for the developer's host path fragments and token prefixes; verify no matches in tracked files
 
 ## Workflow follow-up

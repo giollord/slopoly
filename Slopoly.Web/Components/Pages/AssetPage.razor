@@ -1,6 +1,8 @@
 @page "/assets/{AssetId:guid}"
 @inherits LiveComponent
 @inject IJSRuntime JS
+@inject IDialogService Dialogs
+@inject NavigationManager Nav
 
 <PageTitle>@(_asset?.Name ?? "Asset") · Slopoly</PageTitle>
 
@@ -10,11 +12,14 @@
     return;
 }
 
+<PackCrumbs PackId="_asset.PackId" PackName="@_pack?.Name" Tab="assets" Current="@_asset.Name" />
 <MudStack Row="true" AlignItems="AlignItems.Center" Class="mb-2">
-    <MudLink Href="@($"/packs/{_asset.PackId}")">Pack</MudLink>
     <MudText Typo="Typo.h5">@_asset.Name</MudText>
     <MudChip T="string" Size="Size.Small" Color="@AssetList.StatusColor(_asset.Status)">@_asset.Status</MudChip>
-    <MudText Typo="Typo.body2">@_asset.Description</MudText>
+    <MudText Typo="Typo.body2">@_asset.Description · @(_asset.PolyBudget is { } b ? $"{b} triangles" : $"pack budget ({_pack?.PolyBudget} triangles)")</MudText>
+    <MudSpacer />
+    <MudButton Variant="Variant.Outlined" StartIcon="@Icons.Material.Filled.Edit" OnClick="EditAsync">Edit</MudButton>
+    <MudButton Variant="Variant.Outlined" StartIcon="@Icons.Material.Filled.Delete" OnClick="DeleteAsync">Delete</MudButton>
 </MudStack>
 
 <MudGrid>
@@ -40,15 +45,13 @@
             <MudAlert Severity="Severity.Info">No build with a model yet.</MudAlert>
         }
 
-        <MudText Typo="Typo.subtitle1" Class="mt-4">Manifest</MudText>
-        @if (_manifest is null)
-        {
-            <MudText Typo="Typo.body2">No manifest yet.</MudText>
-        }
-        else
-        {
-            <pre class="code">@_manifest.Content.ToJsonString(Indented)</pre>
-        }
+        <MudStack Row="true" AlignItems="AlignItems.Center" Class="mt-4">
+            <MudText Typo="Typo.subtitle1">Manifest</MudText>
+            <MudSpacer />
+            <MudButton Size="Size.Small" Variant="Variant.Outlined" Disabled="_manifestText == _manifestSaved" OnClick="SaveManifestAsync">Save manifest</MudButton>
+        </MudStack>
+        <MudTextField T="string" @bind-Value="_manifestText" Variant="Variant.Outlined" Lines="14" Class="code-input" Immediate="true"
+                      Placeholder='{ "parts": [ { "name": "bed" }, { "name": "wheel", "parent": "bed", "mirror": "x" } ] }' />
     </MudItem>
 
     <MudItem xs="12" lg="6">
@@ -91,6 +94,17 @@
             <JsonTable Title="Colours" Rows="@(report["colors"] as JsonArray)" Columns="@(["mask", "view", "role", "role_color", "mask_color", "delta_e", "ok"])" />
         }
 
+        <MudStack Row="true" AlignItems="AlignItems.Center" Class="mt-4">
+            <MudText Typo="Typo.subtitle1">New program version</MudText>
+            <MudSpacer />
+            <MudButton Size="Size.Small" Variant="Variant.Outlined" OnClick="LoadCurrentSource">Start from current</MudButton>
+        </MudStack>
+        <MudTextField T="string" @bind-Value="_source" Variant="Variant.Outlined" Lines="16" Class="code-input" Placeholder="part(&quot;bed&quot;, box(0.8, 0.3, 0.7), color=&quot;wood&quot;)" />
+        <MudStack Row="true" AlignItems="AlignItems.Center" Class="mt-2">
+            <MudTextField T="string" @bind-Value="_note" Label="Note" Variant="Variant.Outlined" Margin="Margin.Dense" />
+            <MudButton Variant="Variant.Filled" Color="Color.Primary" Disabled="string.IsNullOrWhiteSpace(_source)" OnClick="SubmitProgramAsync">Submit and build</MudButton>
+        </MudStack>
+
         <MudText Typo="Typo.subtitle1" Class="mt-4">Program versions</MudText>
         <MudExpansionPanels Dense="true">
             @foreach (var p in _programs)
@@ -111,6 +125,9 @@
     private static readonly System.Text.Json.JsonSerializerOptions Indented = new() { WriteIndented = true };
     [Parameter] public Guid AssetId { get; set; }
     private Asset? _asset;
+    private Pack? _pack;
+    private bool _deleted;
+    private string _manifestText = "", _manifestSaved = "", _source = "", _note = "";
     private Manifest? _manifest;
     private List<ProgramVersion> _programs = [];
     private List<Build> _builds = [];
@@ -122,7 +139,11 @@
     protected override async Task LoadAsync()
     {
         _asset = await Api.GetAsync<Asset>($"api/assets/{AssetId}");
+        _pack = await Api.GetAsync<Pack>($"api/packs/{_asset.PackId}");
         _manifest = await Api.FindAsync<Manifest>($"api/assets/{AssetId}/manifest");
+        var saved = _manifest?.Content.ToJsonString(Indented) ?? "";
+        if (_manifestText == _manifestSaved) _manifestText = saved; // keep unsaved edits
+        _manifestSaved = saved;
         _programs = await Api.GetAsync<List<ProgramVersion>>($"api/assets/{AssetId}/programs");
         _builds = await Api.GetAsync<List<Build>>($"api/assets/{AssetId}/builds");
         _variants = (await Api.GetAsync<PaletteView>($"api/packs/{_asset.PackId}/palette")).Variants;
@@ -130,7 +151,7 @@
     }
 
     // Palette edits of the pack (asset-less changes) re-render textures, so they concern this page too.
-    protected override bool Concerns(Guid? packId, Guid? assetId) => assetId == AssetId || (assetId is null && packId == _asset?.PackId);
+    protected override bool Concerns(Guid? packId, Guid? assetId) => !_deleted && (assetId == AssetId || (assetId is null && packId == _asset?.PackId));
 
     private void SelectBuild(Build b) { _build = b; _variantId = null; }
 
@@ -146,6 +167,43 @@
 
     private Task SetCurrentAsync(ProgramVersion p) =>
         Try(() => Api.PutAsync<Asset>($"api/assets/{AssetId}/current-version", new CurrentVersionEdit(p.Id)));
+
+    private async Task EditAsync()
+    {
+        if (await AssetDialog.ShowAsync(Dialogs, _asset, _pack?.PolyBudget ?? 0) is { } edit)
+            await Try(() => Api.PatchAsync<Asset>($"api/assets/{AssetId}", edit));
+    }
+
+    private async Task DeleteAsync()
+    {
+        if (await Dialogs.ShowMessageBoxAsync("Delete asset", $"Delete \"{_asset!.Name}\" with its concept images, manifest, programs and builds? This can't be undone.",
+                yesText: "Delete", cancelText: "Cancel") != true) return;
+        await Try(async () =>
+        {
+            _deleted = true;
+            await Api.DeleteAsync($"api/assets/{AssetId}");
+            Nav.NavigateTo($"/packs/{_asset.PackId}?tab=assets");
+        });
+    }
+
+    private Task SaveManifestAsync() => Try(async () =>
+    {
+        JsonObject content;
+        try { content = JsonNode.Parse(_manifestText) as JsonObject ?? throw new System.Text.Json.JsonException("not an object"); }
+        catch (System.Text.Json.JsonException ex) { Snackbar.Add($"The manifest is not a JSON object: {ex.Message}", Severity.Error); return; }
+        var saved = await Api.PutAsync<Manifest>($"api/assets/{AssetId}/manifest", content);
+        _manifestText = _manifestSaved = saved.Content.ToJsonString(Indented);
+        Snackbar.Add("Manifest saved.", Severity.Success);
+    });
+
+    private void LoadCurrentSource() => _source = _programs.FirstOrDefault(p => p.Id == _asset?.CurrentProgramVersionId)?.Source ?? "";
+
+    private Task SubmitProgramAsync() => Try(async () =>
+    {
+        await Api.PostAsync<System.Text.Json.Nodes.JsonObject>($"api/assets/{AssetId}/programs", new ProgramSubmit(_source, string.IsNullOrWhiteSpace(_note) ? "edited by hand" : _note.Trim()));
+        _note = "";
+        Snackbar.Add("New version submitted; the build appears in the table when done.", Severity.Info);
+    });
 
     private static string Text(JsonArray a) => string.Join(", ", a.Select(x => x?.ToString()));
 }

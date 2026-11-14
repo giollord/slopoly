@@ -14,7 +14,7 @@ The API side is `Slopoly.ApiService/Jobs/Broker.cs`; `slopoly_worker/protocol.py
 | `job-events` | topic | `<kind>.<type>` | `{jobId, type, progress?, data?, outputs?, error?, errorCode?}`, consumed by the API (`api.job-events`) |
 | `job-control` | fanout | — | `{type: "cancel", jobId}`; every worker listens with its own exclusive queue |
 
-Kinds: `comfy`, `build`, `palette-render`, `agent-turn`.
+Kinds: `comfy`, `build`, `palette-render`, `agent-turn`, `scene`.
 
 Event types, in order:
 

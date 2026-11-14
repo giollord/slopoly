@@ -29,8 +29,12 @@ public static class ApiEndpoints
 
         // Assets and concepts
         api.MapGet("/packs/{id:guid}/assets", (Guid id, SlopolyDb db) => db.Assets.Where(a => a.PackId == id).OrderBy(a => a.CreatedAt).ToListAsync());
-        api.MapPost("/packs/{id:guid}/assets", (Guid id, AssetCreate create, StudioService s) => s.CreateAssetAsync(id, create.Name, create.Description));
+        api.MapPost("/packs/{id:guid}/assets", (Guid id, AssetCreate create, StudioService s) => s.CreateAssetAsync(id, create.Name, create.Description, create.PolyBudget));
         api.MapGet("/assets/{id:guid}", (Guid id, StudioService s) => s.GetAssetAsync(id));
+        api.MapPatch("/assets/{id:guid}", (Guid id, AssetEdit edit, StudioService s) => s.UpdateAssetAsync(id, edit));
+        api.MapDelete("/assets/{id:guid}", (Guid id, StudioService s) => s.DeleteAssetAsync(id));
+        api.MapGet("/concepts/{id:guid}", async (Guid id, SlopolyDb db) => await db.ConceptImages.FindAsync(id) ?? throw StudioException.NotFound("Concept image"));
+        api.MapDelete("/concepts/{id:guid}", (Guid id, StudioService s) => s.DeleteConceptAsync(id));
         api.MapGet("/packs/{id:guid}/concepts", (Guid id, Guid? assetId, bool? includeRejected, StudioService s) =>
             s.ListConceptsAsync(id, assetId, includeRejected ?? false));
         api.MapPut("/concepts/{id:guid}/selection", (Guid id, SelectionEdit edit, StudioService s) => s.SelectConceptAsync(id, edit.Selection));
@@ -40,7 +44,7 @@ public static class ApiEndpoints
             Workflows.Turnaround when request.AssetId is { } assetId => g.TurnaroundAsync(assetId, request.Description, request.Count, request.Seed),
             _ => throw new StudioException($"Unknown generation \"{request.Operation}\" (style-anchor, or turnaround with an assetId)."),
         });
-        api.MapPost("/concepts/{id:guid}/more", (Guid id, int? count, GenerationService g) => g.MoreVariantsAsync(id, count ?? 2));
+        api.MapPost("/concepts/{id:guid}/revise", (Guid id, ReviseRequest request, GenerationService g) => g.ReviseAsync(id, request.Change, request.Count));
         api.MapPost("/concepts/{id:guid}/segment", (Guid id, SegmentRequest request, GenerationService g) => g.SegmentAsync(id, request.Parts));
         api.MapGet("/concepts/{id:guid}/masks", (Guid id, SlopolyDb db) => db.PartMasks.Where(m => m.ConceptImageId == id).OrderBy(m => m.Part).ThenBy(m => m.View).ToListAsync());
 
@@ -71,6 +75,24 @@ public static class ApiEndpoints
             zip.Position = 0;
             return Results.File(zip, "application/zip", $"{FileName(asset.Name)}.zip");
         });
+
+        // Scenes
+        api.MapGet("/packs/{id:guid}/scenes", (Guid id, SlopolyDb db) => db.Scenes.Where(s => s.PackId == id).OrderBy(s => s.Name).ToListAsync());
+        api.MapPut("/packs/{id:guid}/scenes", (Guid id, SceneEdit edit, GenerationService g) => g.SaveSceneAsync(id, edit));
+        api.MapGet("/scenes/{id:guid}", async (Guid id, SlopolyDb db) => await db.Scenes.FindAsync(id) ?? throw StudioException.NotFound("Scene"));
+        api.MapDelete("/scenes/{id:guid}", async (Guid id, SlopolyDb db, Notifier notifier) =>
+        {
+            var scene = await db.Scenes.FindAsync(id) ?? throw StudioException.NotFound("Scene");
+            db.Scenes.Remove(scene);
+            await db.SaveChangesAsync();
+            await notifier.Changed<Scene>(id, scene.PackId);
+        });
+
+        // Knowledge notes (global)
+        api.MapGet("/knowledge", (string? q, KnowledgeService k) => k.SearchAsync(q ?? "", 200)); // no query: every note
+        api.MapGet("/knowledge/{slug}", (string slug, KnowledgeService k) => k.ReadAsync(slug));
+        api.MapPut("/knowledge/{slug}", (string slug, KnowledgeNote note, KnowledgeService k) => k.WriteAsync(note with { Slug = slug }));
+        api.MapDelete("/knowledge/{slug}", (string slug, KnowledgeService k) => k.DeleteAsync(slug));
 
         // Palette
         api.MapGet("/packs/{id:guid}/palette", (Guid id, PaletteService p) => p.GetAsync(id));

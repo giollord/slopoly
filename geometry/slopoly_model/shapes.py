@@ -309,6 +309,20 @@ def bevel(shape: Shape, width: float, segments: int = 1, faces: FaceSelector = N
     return result
 
 
+def jitter(shape: Shape, amount: float, seed: int = 0, faces: FaceSelector = None) -> Shape:
+    """Moves each vertex of the selected faces (all when no selection) by a seeded random offset of up to ``amount``
+    per axis: dents, sag and uneven chips. Shared vertices move once, so the shape stays closed."""
+    _positive("amount", amount)
+    result = shape.copy()
+    result.bm.verts.index_update()
+    verts = sorted({v for f in _selected(result, faces) for v in f.verts}, key=lambda v: v.index)
+    offsets = np.random.default_rng(seed).uniform(-amount, amount, (len(verts), 3))
+    for v, offset in zip(verts, offsets):
+        v.co += Vector(offset.tolist())
+    result.bm.normal_update()
+    return result
+
+
 def paint(shape: Shape, tag: str, faces: FaceSelector = None) -> Shape:
     """Tags the selected faces (all when no selection) with a palette role."""
     result = shape.copy()

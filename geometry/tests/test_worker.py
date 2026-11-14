@@ -95,3 +95,35 @@ def test_palette_render_keeps_an_empty_build_as_is():
     job, _ = run({"source": "pass", "polyBudget": 2000, "palette": PALETTE})
     empty = job.uploads["model.glb"]
     assert glb.replace_image(empty, b"png") == empty
+
+
+def test_scene_places_builds_and_reports_overlaps_and_floating(cart_source):
+    import json as _json
+
+    from slopoly_model import glb
+
+    build_job, _ = run({"source": cart_source, "polyBudget": 2000, "palette": PALETTE})
+    model = build_job.uploads["model.glb"]
+
+    class SceneJob(FakeJob):
+        async def download(self, file_id, target: Path):
+            target.parent.mkdir(parents=True, exist_ok=True)
+            target.write_bytes(model)
+            return target
+
+    job = SceneJob({"sceneId": "s1", "placements": [
+        {"name": "cart 1", "glbFileId": "g", "at": [0, 0, 0], "rot": [0, 0, 0], "scale": 1},
+        {"name": "cart 2", "glbFileId": "g", "at": [0.1, 0, 0], "rot": [0, 90, 0], "scale": 1},
+        {"name": "cart 3", "glbFileId": "g", "at": [5, 1, 0], "rot": [0, 0, 0], "scale": 0.5},
+    ]})
+    outputs = asyncio.run(geometry_worker.scene(job))
+    report = outputs["report"]
+    assert outputs["glbFileId"] == "file-scene.glb"
+    gltf, _ = glb.read(job.uploads["scene.glb"])
+    assert {"cart 1", "cart 2", "cart 3"} <= {n.get("name") for n in gltf["nodes"]}
+    assert len(gltf.get("materials", [])) == 1
+    grounded = {p["name"]: p["grounded"] for p in report["placements"]}
+    assert grounded == {"cart 1": True, "cart 2": True, "cart 3": False}, _json.dumps(report)
+    assert [(o["a"], o["b"]) for o in report["overlaps"]] == [("cart 1", "cart 2")]
+    cart3 = next(p for p in report["placements"] if p["name"] == "cart 3")["bounds"]
+    assert cart3[0][0] > 4 and cart3[0][1] >= 1

@@ -38,8 +38,9 @@ public sealed partial class McpToolsTests
         Assert.That(tools, Is.EqualTo(new[]
         {
             "cancel_job", "create_asset", "get_build_report", "get_job", "get_pack", "get_palette", "get_part_colors",
-            "get_segmentation", "list_concepts", "more_variants", "retry_job", "save_manifest", "start_job", "submit_program",
-            "update_style", "upsert_palette_entries", "upsert_palette_variant", "view_image",
+            "get_scene", "get_segmentation", "list_concepts", "read_knowledge", "retry_job", "revise_concept", "save_manifest",
+            "save_scene", "search_knowledge", "start_job", "submit_program", "update_asset", "update_style",
+            "upsert_palette_entries", "upsert_palette_variant", "view_image", "write_knowledge",
         }));
 
         var pack = await CreatePackAsync();

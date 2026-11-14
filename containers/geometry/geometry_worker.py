@@ -6,6 +6,8 @@ build: inputs {programVersionId, source, polyBudget, palette: [entries], turnaro
 palette-render: inputs {main: [entries], variants: [{id, name, entries}], builds: [{buildId, glbFileId}]};
   outputs {textureFileId, variants: {variantId: fileId}, builds: {buildId: glbFileId}}. Builds get the new main
   texture embedded; their meshes, UVs and programs are untouched.
+scene: inputs {sceneId, placements: [{name, glbFileId, at, rot, scale}]}; outputs {glbFileId, report} (see
+  slopoly_model.scene).
 """
 
 from __future__ import annotations
@@ -26,9 +28,9 @@ from slopoly_worker import Job, JobFailed, run
 BUILD_TIMEOUT = float(os.environ.get("SLOPOLY_BUILD_TIMEOUT", "120"))
 
 
-async def run_runner(folder: Path) -> str:
-    """Runs the build subprocess; returns its output. Kills it on timeout or cancellation."""
-    process = await asyncio.create_subprocess_exec(sys.executable, "-m", "slopoly_model.runner", str(folder),
+async def run_runner(folder: Path, module: str = "slopoly_model.runner") -> str:
+    """Runs a bpy subprocess (build runner or scene composer); returns its output. Kills it on timeout or cancellation."""
+    process = await asyncio.create_subprocess_exec(sys.executable, "-m", module, str(folder),
                                                    stdout=asyncio.subprocess.PIPE, stderr=asyncio.subprocess.STDOUT)
     try:
         output, _ = await asyncio.wait_for(process.communicate(), BUILD_TIMEOUT)
@@ -92,5 +94,20 @@ async def palette_render(job: Job) -> dict[str, Any]:
     return outputs
 
 
+async def scene(job: Job) -> dict[str, Any]:
+    placements = job.inputs.get("placements") or []
+    with tempfile.TemporaryDirectory(prefix=f"scene_{job.id}_") as directory:
+        folder = Path(directory)
+        items = []
+        for i, p in enumerate(placements):
+            path = await job.download(p["glbFileId"], folder / "assets" / f"{i}.glb")
+            items.append({**p, "path": str(path)})
+            await job.progress(0.5 * (i + 1) / max(len(placements), 1))
+        (folder / "scene.json").write_text(json.dumps({"placements": items}), encoding="utf-8")
+        await run_runner(folder, "slopoly_model.scene")
+        report = json.loads((folder / "report.json").read_text(encoding="utf-8"))
+        return {"glbFileId": await job.upload(folder / "scene.glb", "scene.glb", "model/gltf-binary"), "report": report}
+
+
 if __name__ == "__main__":
-    run({"build": build, "palette-render": palette_render})
+    run({"build": build, "palette-render": palette_render, "scene": scene})

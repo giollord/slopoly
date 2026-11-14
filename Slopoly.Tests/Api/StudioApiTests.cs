@@ -79,18 +79,91 @@ public sealed class StudioApiTests
 
         // More variants: the same generation with a fresh seed; new images join the old ones, undecided.
         await client.PutAsJsonAsync($"/api/concepts/{concepts[1].Id}/selection", new SelectionEdit(Selection.Picked), Json);
-        var more = await ReadAsync<Job>(await client.PostAsync($"/api/concepts/{concepts[1].Id}/more?count=3", null));
+        var more = await ReadAsync<Job>(await client.PostAsJsonAsync($"/api/concepts/{concepts[1].Id}/revise", new ReviseRequest(null, 3), Json));
         var moreMessage = await TakeJobAsync(JobKinds.Comfy, more.Id);
         Assert.That(more.Operation, Is.EqualTo(Workflows.StyleAnchor));
         Assert.That(moreMessage.Inputs["prompt"]!.GetValue<string>(), Is.EqualTo(message.Inputs["prompt"]!.GetValue<string>()));
         Assert.That((moreMessage.Inputs["count"]!.GetValue<int>(), moreMessage.Inputs["seed"]), Is.EqualTo((3, (JsonNode?)null)));
         await PublishEventAsync(JobKinds.Comfy, more.Id, "succeeded", new JsonObject
         {
-            ["images"] = new JsonArray(new JsonObject { ["fileId"] = await UploadAsync([3], "c.png"), ["width"] = 64, ["height"] = 64 }),
+            ["images"] = new JsonArray(new JsonObject { ["fileId"] = await UploadAsync([3], "c.png"), ["width"] = 64, ["height"] = 64, ["seed"] = 1234 }),
         });
         await WaitForJobAsync(more.Id, j => j.State == JobState.Succeeded);
         all = await ReadAsync<List<ConceptImage>>(await client.GetAsync($"/api/packs/{pack.Id}/concepts?includeRejected=true"));
         Assert.That(all.Select(c => c.Selection), Is.EquivalentTo(new[] { Selection.Rejected, Selection.Picked, Selection.None }));
+        Assert.That(all.Single(c => c.Selection == Selection.None).Seed, Is.EqualTo(1234));
+
+        // A change: the concept becomes the first reference and the change joins the prompt.
+        var changed = await ReadAsync<Job>(await client.PostAsJsonAsync($"/api/concepts/{concepts[1].Id}/revise", new ReviseRequest("red roofs", 1), Json));
+        var changedMessage = await TakeJobAsync(JobKinds.Comfy, changed.Id);
+        Assert.That(changedMessage.Inputs["prompt"]!.GetValue<string>(), Does.EndWith("Change from image 1: red roofs"));
+        Assert.That(changedMessage.Inputs["references"]![0]!.GetValue<Guid>(), Is.EqualTo(concepts[1].FileId));
+
+        // Deleting a concept removes it for everyone.
+        Assert.That((await client.DeleteAsync($"/api/concepts/{concepts[0].Id}")).IsSuccessStatusCode);
+        all = await ReadAsync<List<ConceptImage>>(await client.GetAsync($"/api/packs/{pack.Id}/concepts?includeRejected=true"));
+        Assert.That(all.Select(c => c.Id), Does.Not.Contain(concepts[0].Id));
+    }
+
+    [Test]
+    public async Task AssetBudgetOverridesThePackBudgetAndDeleteRemovesTheAsset()
+    {
+        var pack = await CreatePackAsync();
+        var client = Client();
+        var gnome = await ReadAsync<Asset>(await client.PostAsJsonAsync($"/api/packs/{pack.Id}/assets", new AssetCreate("gnome", "a character", 3500), Json));
+        var brick = await ReadAsync<Asset>(await client.PostAsJsonAsync($"/api/packs/{pack.Id}/assets", new AssetCreate("brick", ""), Json));
+        Assert.That((gnome.PolyBudget, brick.PolyBudget), Is.EqualTo((3500, (int?)null)));
+
+        foreach (var (asset, budget) in new[] { (gnome, 3500), (brick, pack.PolyBudget) })
+        {
+            var submitted = await ReadAsync<JsonObject>(await client.PostAsJsonAsync($"/api/assets/{asset.Id}/programs", new ProgramSubmit("part('a', box(1, 1, 1))", null), Json));
+            var build = await TakeJobAsync(JobKinds.Build, submitted["job"]!["id"]!.GetValue<Guid>());
+            Assert.That(build.Inputs["polyBudget"]!.GetValue<int>(), Is.EqualTo(budget), asset.Name);
+        }
+
+        var edited = await ReadAsync<Asset>(await client.PatchAsJsonAsync($"/api/assets/{gnome.Id}", new AssetEdit("garden gnome", null, 0), Json));
+        Assert.That((edited.Name, edited.Description, edited.PolyBudget), Is.EqualTo(("garden gnome", "a character", (int?)null)));
+
+        Assert.That((await client.DeleteAsync($"/api/assets/{gnome.Id}")).IsSuccessStatusCode);
+        Assert.That((await client.GetAsync($"/api/assets/{gnome.Id}")).StatusCode, Is.EqualTo(HttpStatusCode.NotFound));
+        Assert.That(await ReadAsync<List<ProgramVersion>>(await client.GetAsync($"/api/assets/{gnome.Id}/programs")), Is.Empty);
+    }
+
+    [Test]
+    public async Task SceneBuildUsesCurrentBuildsAndStoresTheReport()
+    {
+        var pack = await CreatePackAsync();
+        var client = Client();
+        var cart = await ReadAsync<Asset>(await client.PostAsJsonAsync($"/api/packs/{pack.Id}/assets", new AssetCreate("cart", ""), Json));
+        var placements = new List<ScenePlacement> { new("cart 1", cart.Id, [0, 0, 0]), new("cart 2", cart.Id, [2, 0, 0], [0, 90, 0]) };
+
+        var refused = await client.PutAsJsonAsync($"/api/packs/{pack.Id}/scenes", new SceneEdit("market", null, placements), Json);
+        Assert.That(await refused.Content.ReadAsStringAsync(), Does.Contain("\\\"cart\\\" has no build"));
+
+        var submitted = await ReadAsync<JsonObject>(await client.PostAsJsonAsync($"/api/assets/{cart.Id}/programs", new ProgramSubmit("part('a', box(1, 1, 1))", null), Json));
+        var buildJob = submitted["job"]!["id"]!.GetValue<Guid>();
+        await TakeJobAsync(JobKinds.Build, buildJob);
+        var glb = await UploadAsync([7], "model.glb");
+        await PublishEventAsync(JobKinds.Build, buildJob, "succeeded", new JsonObject { ["glbFileId"] = glb, ["validated"] = true, ["report"] = new JsonObject() });
+        await WaitForJobAsync(buildJob, j => j.State == JobState.Succeeded);
+
+        var scene = await ReadAsync<Scene>(await client.PutAsJsonAsync($"/api/packs/{pack.Id}/scenes", new SceneEdit("market", "a square", placements), Json));
+        var jobs = await ReadAsync<List<Job>>(await client.GetAsync($"/api/jobs?packId={pack.Id}&kind={JobKinds.Scene}"));
+        var message = await TakeJobAsync(JobKinds.Scene, jobs.Single().Id);
+        Assert.That(message.Inputs["placements"]!.AsArray().Select(p => p!["glbFileId"]!.GetValue<Guid>()), Is.All.EqualTo(glb));
+        Assert.That(message.Inputs["placements"]![1]!["rot"]![1]!.GetValue<double>(), Is.EqualTo(90));
+
+        var sceneGlb = await UploadAsync([8], "scene.glb");
+        await PublishEventAsync(JobKinds.Scene, jobs[0].Id, "succeeded", new JsonObject
+        {
+            ["glbFileId"] = sceneGlb, ["report"] = new JsonObject { ["overlaps"] = new JsonArray() },
+        });
+        await WaitForJobAsync(jobs[0].Id, j => j.State == JobState.Succeeded);
+        var stored = await ReadAsync<Scene>(await client.GetAsync($"/api/scenes/{scene.Id}"));
+        Assert.That((stored.GlbFileId, stored.Placements.Count, stored.Description), Is.EqualTo(((Guid?)sceneGlb, 2, "a square")));
+
+        // A placed asset can't be deleted.
+        Assert.That((await client.DeleteAsync($"/api/assets/{cart.Id}")).StatusCode, Is.EqualTo(HttpStatusCode.Conflict));
     }
 
     [Test]

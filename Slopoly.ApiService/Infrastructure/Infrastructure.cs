@@ -13,6 +13,8 @@ public sealed class SlopolyOptions
     /// <summary>Redeliveries after which a job fails instead of running again.</summary>
     public int MaxAttempts { get; set; } = 3;
     public string FilesDir => Path.Combine(DataDir, "files");
+    /// <summary>Global technique notes; the AppHost points it at the repo's knowledge/ folder.</summary>
+    public string? KnowledgeDir { get; set; }
 }
 
 /// <summary>Files under &lt;data-dir&gt;/files, named by id, recorded as <see cref="StoredFile"/>.</summary>

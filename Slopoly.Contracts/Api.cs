@@ -2,7 +2,10 @@ namespace Slopoly.Contracts;
 
 // Request and response shapes of the REST API (shared by the API, the UI and the tests).
 
-public sealed record AssetCreate(string Name, string Description);
+public sealed record AssetCreate(string Name, string Description, int? PolyBudget = null);
+
+/// <summary>Null keeps a value; a PolyBudget of 0 clears the asset's own budget.</summary>
+public sealed record AssetEdit(string? Name, string? Description, int? PolyBudget);
 
 public sealed record SelectionEdit(Selection Selection);
 
@@ -32,3 +35,12 @@ public sealed record VariantColorEdit(string Role, string Color, string? Color2)
 public sealed record PaletteView(List<PaletteEntry> Entries, List<VariantView> Variants, Guid? TextureFileId);
 
 public sealed record VariantView(Guid Id, string Name, Guid? TextureFileId, List<PaletteSlot> Entries);
+
+public sealed record ReviseRequest(string? Change, int Count = 2);
+
+public sealed record SceneEdit(string Name, string? Description, List<ScenePlacement> Placements);
+
+/// <summary>A knowledge note: front matter plus Markdown body.</summary>
+public sealed record KnowledgeNote(string Slug, string Title, List<string> Tags, string Summary, string Body);
+
+public sealed record KnowledgeHit(string Slug, string Title, List<string> Tags, string Summary, double Score);

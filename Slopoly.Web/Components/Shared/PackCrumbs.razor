@@ -1,0 +1,19 @@
+@* Breadcrumbs from a detail page back to its pack tab: Packs › pack › tab › current. *@
+<MudBreadcrumbs Items="_items" Class="px-0 pt-0 pb-2" />
+
+@code {
+    [Parameter, EditorRequired] public Guid PackId { get; set; }
+    [Parameter] public string? PackName { get; set; }
+    /// <summary>Pack tab key (see <see cref="Pages.PackPage.Tabs"/>).</summary>
+    [Parameter, EditorRequired] public string Tab { get; set; } = "";
+    [Parameter, EditorRequired] public string Current { get; set; } = "";
+    private List<BreadcrumbItem> _items = [];
+
+    protected override void OnParametersSet() => _items =
+    [
+        new("Packs", "/"),
+        new(PackName ?? "Pack", $"/packs/{PackId}"),
+        new(char.ToUpperInvariant(Tab[0]) + Tab[1..], $"/packs/{PackId}?tab={Tab}"),
+        new(Current, null, disabled: true),
+    ];
+}

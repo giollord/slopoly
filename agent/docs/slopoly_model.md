@@ -49,6 +49,7 @@ Primitives return a `Shape`. Operations return a new `Shape` and leave their inp
 | `extrude(shape, faces, distance, tag=None)` | Moves the selected faces along their average normal and adds side quads. A negative distance pushes them in. |
 | `inset(shape, faces, thickness, depth=0.0, tag=None)` | Insets the selected faces as one region and adds a rim of quads. `tag` applies to the inner faces, so follow it with `extrude(..., "<tag>", d)` to make a hub or boss. |
 | `bevel(shape, width, segments=1, faces=None)` | Bevels the edges of the selected faces, or every edge when `faces` is None. |
+| `jitter(shape, amount, seed=0, faces=None)` | Moves each vertex of the selected faces by a seeded random offset of up to `amount` metres per axis, for dents, sag and uneven chips. The shape stays closed. Use 1–3 % of the part's size. |
 | `boolean(a, b, op="difference")` | Combines two closed shapes with `"union"`, `"difference"` or `"intersection"`. Coplanar triangles are merged back. Booleans are counted in the report. |
 | `join(*shapes)` | One shape made of several shapes. Nothing is merged. |
 | `paint(shape, tag, faces=None)` | Sets the palette role of the selected faces. |

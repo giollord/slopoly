@@ -57,8 +57,11 @@ public sealed class GenerationService(SlopolyDb db, StudioService studio, JobSer
         });
     }
 
-    /// <summary>More images like a concept: its generation job again with a fresh random seed. New images start undecided.</summary>
-    public async Task<Job> MoreVariantsAsync(Guid conceptImageId, int count)
+    /// <summary>
+    /// New images from a concept's generation with a fresh seed. With a change, the concept itself becomes the first
+    /// reference and the change is added to the prompt (FLUX.2 klein edits the reference). New images start undecided.
+    /// </summary>
+    public async Task<Job> ReviseAsync(Guid conceptImageId, string? change, int count)
     {
         var concept = await db.ConceptImages.FindAsync(conceptImageId) ?? throw StudioException.NotFound("Concept image");
         var source = concept.JobId is { } jobId ? await db.Jobs.FindAsync(jobId) : null;
@@ -66,6 +69,12 @@ public sealed class GenerationService(SlopolyDb db, StudioService studio, JobSer
         var inputs = source.Inputs.DeepClone().AsObject();
         inputs["seed"] = null;
         inputs["count"] = Math.Clamp(count, 1, 4);
+        if (!string.IsNullOrWhiteSpace(change))
+        {
+            inputs["prompt"] = $"{inputs["prompt"]?.GetValue<string>()}\n\nChange from image 1: {change.Trim()}";
+            var references = (inputs["references"]?.AsArray() ?? []).Select(r => r!.GetValue<Guid>()).Where(r => r != concept.FileId);
+            inputs["references"] = Ids(references.Prepend(concept.FileId).Take(MaxReferences));
+        }
         return await jobs.SubmitAsync(source.Kind, source.Operation, source.PackId, source.AssetId, inputs);
     }
 
@@ -117,11 +126,62 @@ public sealed class GenerationService(SlopolyDb db, StudioService studio, JobSer
         {
             ["programVersionId"] = version.Id,
             ["source"] = version.Source,
-            ["polyBudget"] = pack.PolyBudget,
+            ["polyBudget"] = asset.PolyBudget ?? pack.PolyBudget,
             ["palette"] = JsonSerializer.SerializeToNode(await palette.MainEntriesAsync(pack.Id), Broker.Json),
             ["turnaround"] = turnaround is null ? null : JsonSerializer.SerializeToNode(new { turnaround.Id, turnaround.FileId, turnaround.Width, turnaround.Height, turnaround.Views }, Broker.Json),
             ["masks"] = JsonSerializer.SerializeToNode(masks, Broker.Json),
         };
+    }
+
+    /// <summary>Creates or replaces a scene (matched by name within the pack) and queues its build.</summary>
+    public async Task<Scene> SaveSceneAsync(Guid packId, SceneEdit edit)
+    {
+        await studio.GetPackAsync(packId);
+        var name = string.IsNullOrWhiteSpace(edit.Name) ? throw new StudioException("A scene needs a name.") : edit.Name.Trim();
+        var names = new HashSet<string>();
+        foreach (var p in edit.Placements)
+        {
+            if (string.IsNullOrWhiteSpace(p.Name) || !names.Add(p.Name))
+                throw new StudioException($"Placement names must be unique and non-empty (\"{p.Name}\").");
+            if (p.At is not { Length: 3 } || p.Rot is not (null or { Length: 3 }) || p.Scale <= 0)
+                throw new StudioException($"Placement \"{p.Name}\" needs at = [x, y, z], optional rot = [x, y, z] and a positive scale.");
+        }
+        var scene = await db.Scenes.FirstOrDefaultAsync(s => s.PackId == packId && s.Name == name);
+        if (scene is null) db.Scenes.Add(scene = new Scene { PackId = packId, Name = name });
+        scene.Description = edit.Description ?? scene.Description;
+        scene.Placements = edit.Placements;
+        scene.UpdatedAt = DateTimeOffset.UtcNow;
+        var inputs = await SceneInputsAsync(scene);
+        await db.SaveChangesAsync();
+        await notifier.Changed<Scene>(scene.Id, packId);
+        if (scene.Placements.Count > 0) await jobs.SubmitAsync(JobKinds.Scene, null, packId, null, inputs);
+        else (scene.GlbFileId, scene.Report) = (null, null);
+        await db.SaveChangesAsync();
+        return scene;
+    }
+
+    /// <summary>Scene build inputs: each placement with the GLB of its asset's latest build of the current version.</summary>
+    private async Task<JsonObject> SceneInputsAsync(Scene scene)
+    {
+        var placements = new JsonArray();
+        foreach (var p in scene.Placements)
+        {
+            var asset = await db.Assets.FirstOrDefaultAsync(a => a.Id == p.AssetId && a.PackId == scene.PackId)
+                        ?? throw new StudioException($"Placement \"{p.Name}\" refers to an asset that is not in this pack.");
+            var glb = await db.Builds
+                          .Where(b => b.AssetId == asset.Id && b.ProgramVersionId == asset.CurrentProgramVersionId && b.GlbFileId != null)
+                          .OrderByDescending(b => b.CreatedAt).Select(b => b.GlbFileId).FirstOrDefaultAsync()
+                      ?? throw new StudioException($"\"{asset.Name}\" has no build of its current program yet.");
+            placements.Add(new JsonObject
+            {
+                ["name"] = p.Name,
+                ["glbFileId"] = glb,
+                ["at"] = JsonSerializer.SerializeToNode(p.At),
+                ["rot"] = JsonSerializer.SerializeToNode(p.Rot ?? [0, 0, 0]),
+                ["scale"] = p.Scale,
+            });
+        }
+        return new JsonObject { ["sceneId"] = scene.Id, ["placements"] = placements };
     }
 
     private static string Join(params string?[] parts) => string.Join("\n\n", parts.Where(p => !string.IsNullOrWhiteSpace(p)).Select(p => p!.Trim()));

@@ -36,6 +36,8 @@ public sealed class Asset
     public string Name { get; set; } = "";
     public string Description { get; set; } = "";
     public AssetStatus Status { get; set; }
+    /// <summary>Triangle budget of this asset's builds; null uses the pack's budget.</summary>
+    public int? PolyBudget { get; set; }
     public Guid? CurrentProgramVersionId { get; set; }
     public DateTimeOffset CreatedAt { get; set; } = DateTimeOffset.UtcNow;
 }
@@ -56,6 +58,8 @@ public sealed class ConceptImage
     public Guid? JobId { get; set; }
     public ConceptKind Kind { get; set; }
     public Selection Selection { get; set; }
+    /// <summary>Sampler seed the image was generated with (reported by the comfy worker).</summary>
+    public long? Seed { get; set; }
     public int Width { get; set; }
     public int Height { get; set; }
     /// <summary>Turnaround view regions by view name (front, side, top).</summary>
@@ -143,6 +147,23 @@ public sealed class Build
     public List<Guid> PaletteEntryIds { get; set; } = [];
     public DateTimeOffset CreatedAt { get; set; } = DateTimeOffset.UtcNow;
 }
+
+/// <summary>Built assets of a pack placed together; built into one GLB with a placement report.</summary>
+public sealed class Scene
+{
+    public Guid Id { get; set; } = Guid.CreateVersion7();
+    public Guid PackId { get; set; }
+    public string Name { get; set; } = "";
+    public string Description { get; set; } = "";
+    public List<ScenePlacement> Placements { get; set; } = [];
+    public Guid? GlbFileId { get; set; }
+    /// <summary>Scene build report: placements (bounds, grounded) and overlaps.</summary>
+    public JsonObject? Report { get; set; }
+    public DateTimeOffset UpdatedAt { get; set; } = DateTimeOffset.UtcNow;
+}
+
+/// <summary>One asset in a scene. Metres, Y up; rotation in Euler degrees (X, then Y, then Z).</summary>
+public sealed record ScenePlacement(string Name, Guid AssetId, double[] At, double[]? Rot = null, double Scale = 1);
 
 public enum JobState { Queued, Running, Succeeded, Failed, Cancelled }
 

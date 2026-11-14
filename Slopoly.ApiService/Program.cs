@@ -40,6 +40,8 @@ builder.Services.AddScoped<IJobResultHandler, ConceptImageResults>();
 builder.Services.AddScoped<IJobResultHandler, SegmentationResults>();
 builder.Services.AddScoped<IJobResultHandler, BuildResults>();
 builder.Services.AddScoped<IJobResultHandler, AgentTurnResults>();
+builder.Services.AddScoped<IJobResultHandler, SceneResults>();
+builder.Services.AddScoped<KnowledgeService>();
 builder.Services.AddScoped<IJobResultHandler, PaletteRenderResults>();
 builder.Services.AddHostedService<JobEventConsumer>();
 builder.Services.AddMcpServer()

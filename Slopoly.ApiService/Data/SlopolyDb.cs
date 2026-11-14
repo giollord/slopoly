@@ -19,6 +19,7 @@ public sealed class SlopolyDb(DbContextOptions<SlopolyDb> options) : DbContext(o
     public DbSet<Manifest> Manifests => Set<Manifest>();
     public DbSet<ProgramVersion> ProgramVersions => Set<ProgramVersion>();
     public DbSet<Build> Builds => Set<Build>();
+    public DbSet<Scene> Scenes => Set<Scene>();
     public DbSet<Job> Jobs => Set<Job>();
     public DbSet<JobEvent> JobEvents => Set<JobEvent>();
     public DbSet<StoredFile> Files => Set<StoredFile>();
@@ -44,6 +45,7 @@ public sealed class SlopolyDb(DbContextOptions<SlopolyDb> options) : DbContext(o
         b.Entity<Manifest>(e => { e.HasKey(m => m.AssetId); e.Json(m => m.Content); });
         b.Entity<ProgramVersion>().HasIndex(v => new { v.AssetId, v.Number }).IsUnique();
         b.Entity<Build>(e => { e.HasIndex(x => x.AssetId); e.HasIndex(x => x.JobId); e.Json(x => x.Report); });
+        b.Entity<Scene>(e => { e.HasIndex(x => new { x.PackId, x.Name }).IsUnique(); e.Json(x => x.Placements); e.Json(x => x.Report); });
         b.Entity<Job>(e => { e.HasIndex(j => j.PackId); e.HasIndex(j => j.AssetId); e.Json(j => j.Inputs); e.Json(j => j.Outputs); });
         b.Entity<JobEvent>(e => { e.HasIndex(x => x.JobId); e.Json(x => x.Data); });
     }

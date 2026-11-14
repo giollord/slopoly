@@ -1,0 +1,49 @@
+@inherits LiveComponent
+@inject NavigationManager Nav
+
+<MudStack Row="true" AlignItems="AlignItems.Center" Class="mb-3">
+    <MudText Typo="Typo.body2">Scenes place built assets together. Ask the agent to assemble one, or create it here and add placements.</MudText>
+    <MudSpacer />
+    <MudTextField T="string" @bind-Value="_name" Placeholder="New scene name" Variant="Variant.Outlined" Margin="Margin.Dense" Style="max-width: 16rem" />
+    <MudButton Variant="Variant.Filled" Color="Color.Primary" StartIcon="@Icons.Material.Filled.Add" Disabled="string.IsNullOrWhiteSpace(_name)" OnClick="CreateAsync">New scene</MudButton>
+</MudStack>
+
+@if (_scenes.Count == 0)
+{
+    <MudAlert Severity="Severity.Info">No scenes yet.</MudAlert>
+}
+else
+{
+    <MudSimpleTable Dense="true" Hover="true">
+        <thead><tr><th>Scene</th><th>Placements</th><th>Overlaps</th><th>Floating</th><th>Updated</th><th>Description</th></tr></thead>
+        <tbody>
+            @foreach (var s in _scenes)
+            {
+                <tr>
+                    <td><MudLink Href="@($"/scenes/{s.Id}")">@s.Name</MudLink></td>
+                    <td>@s.Placements.Count</td>
+                    <td>@((s.Report?["overlaps"] as JsonArray)?.Count)</td>
+                    <td>@((s.Report?["placements"] as JsonArray)?.Count(p => p?["grounded"]?.GetValue<bool>() == false))</td>
+                    <td>@s.UpdatedAt.ToLocalTime().ToString("g")</td>
+                    <td>@s.Description</td>
+                </tr>
+            }
+        </tbody>
+    </MudSimpleTable>
+}
+
+@code {
+    [Parameter, EditorRequired] public Guid PackId { get; set; }
+    private List<Scene> _scenes = [];
+    private string _name = "";
+
+    protected override async Task LoadAsync() => _scenes = await Api.GetAsync<List<Scene>>($"api/packs/{PackId}/scenes");
+
+    protected override bool Concerns(Guid? packId, Guid? assetId) => packId == PackId && assetId is null;
+
+    private Task CreateAsync() => Try(async () =>
+    {
+        var scene = await Api.PutAsync<Scene>($"api/packs/{PackId}/scenes", new SceneEdit(_name.Trim(), null, []));
+        Nav.NavigateTo($"/scenes/{scene.Id}");
+    });
+}

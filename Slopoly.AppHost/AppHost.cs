@@ -23,6 +23,8 @@ var apiService = builder.AddProject<Projects.Slopoly_ApiService>("apiservice")
     .WithReference(rabbitmq)
     .WaitFor(rabbitmq)
     .WithEnvironment("Slopoly__DataDir", dataDir)
+    // Global technique notes live in the repo, so notes the agent writes show up in git (design section 6).
+    .WithEnvironment("Slopoly__KnowledgeDir", Path.Combine(repoRoot, "knowledge"))
     .WithEnvironment("Slopoly__WorkerKey", workerKey);
 
 // Workers reach the broker and the API over connections they open themselves (design section 1).

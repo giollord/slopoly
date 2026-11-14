@@ -1,0 +1,147 @@
+@page "/scenes/{SceneId:guid}"
+@inherits LiveComponent
+@inject IDialogService Dialogs
+@inject NavigationManager Nav
+
+<PageTitle>@(_scene?.Name ?? "Scene") · Slopoly</PageTitle>
+
+@if (_scene is null || _pack is null)
+{
+    <MudProgressLinear Indeterminate="true" />
+    return;
+}
+
+<PackCrumbs PackId="_pack.Id" PackName="@_pack.Name" Tab="scenes" Current="@_scene.Name" />
+<MudStack Row="true" AlignItems="AlignItems.Center" Class="mb-2">
+    <MudText Typo="Typo.h5">@_scene.Name</MudText>
+    @if (_building)
+    {
+        <MudChip T="string" Size="Size.Small" Color="Color.Info">building…</MudChip>
+    }
+    <MudSpacer />
+    <MudButton Variant="Variant.Outlined" StartIcon="@Icons.Material.Filled.Delete" OnClick="DeleteAsync">Delete</MudButton>
+</MudStack>
+
+<MudGrid>
+    <MudItem xs="12" lg="6">
+        @if (_scene.GlbFileId is { } glb)
+        {
+            <model-viewer src="/files/@glb" camera-controls shadow-intensity="0.6" exposure="1"
+                          style="width: 100%; height: 520px; background: var(--mud-palette-background-gray)"></model-viewer>
+        }
+        else
+        {
+            <MudAlert Severity="Severity.Info">Not built yet. Add placements and save.</MudAlert>
+        }
+        <MudTextField T="string" @bind-Value="_description" Label="Description" Variant="Variant.Outlined" Lines="2" Sizing="InputSizing.Auto" Class="mt-3"
+                      Immediate="true" />
+    </MudItem>
+    <MudItem xs="12" lg="6">
+        <MudStack Row="true" AlignItems="AlignItems.Center">
+            <MudText Typo="Typo.subtitle1">Placements</MudText>
+            <MudText Typo="Typo.caption">metres, Y up, ground at y = 0; rotation in degrees</MudText>
+            <MudSpacer />
+            <MudButton Size="Size.Small" Variant="Variant.Outlined" StartIcon="@Icons.Material.Filled.Add" OnClick="Add" Disabled="_assets.Count == 0">Add</MudButton>
+            <MudButton Size="Size.Small" Variant="Variant.Filled" Color="Color.Primary" Disabled="!Dirty" OnClick="SaveAsync">Save and build</MudButton>
+        </MudStack>
+        <MudSimpleTable Dense="true" Class="scene-table">
+            <thead><tr><th>Name</th><th>Asset</th><th>x</th><th>y</th><th>z</th><th>rot y</th><th>scale</th><th></th></tr></thead>
+            <tbody>
+                @foreach (var row in _rows)
+                {
+                    <tr>
+                        <td><MudTextField T="string" @bind-Value="row.Name" Margin="Margin.Dense" Variant="Variant.Text" /></td>
+                        <td>
+                            <MudSelect T="Guid" @bind-Value="row.AssetId" Margin="Margin.Dense" Variant="Variant.Text">
+                                @foreach (var a in _assets)
+                                {
+                                    <MudSelectItem T="Guid" Value="a.Id">@a.Name</MudSelectItem>
+                                }
+                            </MudSelect>
+                        </td>
+                        @for (var i = 0; i < 3; i++)
+                        {
+                            var axis = i;
+                            <td><MudNumericField T="double" Value="row.At[axis]" ValueChanged="v => { row.At[axis] = v; }" Step="0.1" Margin="Margin.Dense" Variant="Variant.Text" HideSpinButtons="true" /></td>
+                        }
+                        <td><MudNumericField T="double" Value="row.Rot[1]" ValueChanged="v => { row.Rot[1] = v; }" Step="15" Margin="Margin.Dense" Variant="Variant.Text" HideSpinButtons="true" /></td>
+                        <td><MudNumericField T="double" Value="row.Scale" ValueChanged="v => { row.Scale = v; }" Step="0.1" Min="0.01" Margin="Margin.Dense" Variant="Variant.Text" HideSpinButtons="true" /></td>
+                        <td><MudIconButton Icon="@Icons.Material.Filled.Close" Size="Size.Small" OnClick="() => { _rows.Remove(row); }" /></td>
+                    </tr>
+                }
+            </tbody>
+        </MudSimpleTable>
+
+        @if (_scene.Report is { } report)
+        {
+            <JsonTable Title="Overlaps (bounding boxes)" Rows="@(report["overlaps"] as JsonArray)" Columns="@(["a", "b", "fraction"])" />
+            <JsonTable Title="Placement bounds" Rows="@(report["placements"] as JsonArray)" Columns="@(["name", "grounded", "bounds"])" />
+        }
+    </MudItem>
+</MudGrid>
+
+@code {
+    /// <summary>An editable placement row (X/Z rotations are kept as they are; the table edits the Y turn).</summary>
+    private sealed class Row
+    {
+        public string Name { get; set; } = "";
+        public Guid AssetId { get; set; }
+        public double[] At { get; set; } = [0, 0, 0];
+        public double[] Rot { get; set; } = [0, 0, 0];
+        public double Scale { get; set; } = 1;
+    }
+
+    [Parameter] public Guid SceneId { get; set; }
+    private Scene? _scene;
+    private Pack? _pack;
+    private List<Asset> _assets = [];
+    private List<Row> _rows = [];
+    private string _description = "";
+    private string _saved = "";
+    private bool _building, _deleted;
+
+    /// <summary>The editor differs from the stored scene (unsaved edits are kept when the scene reloads).</summary>
+    private bool Dirty => Snapshot() != _saved;
+
+    private string Snapshot() => System.Text.Json.JsonSerializer.Serialize(new { _description, _rows });
+
+    protected override async Task LoadAsync()
+    {
+        _scene = await Api.GetAsync<Scene>($"api/scenes/{SceneId}");
+        _pack = await Api.GetAsync<Pack>($"api/packs/{_scene.PackId}");
+        _assets = await Api.GetAsync<List<Asset>>($"api/packs/{_scene.PackId}/assets");
+        _building = (await Api.GetAsync<List<Job>>($"api/jobs?packId={_scene.PackId}&kind={JobKinds.Scene}"))
+            .Any(j => j.State is JobState.Queued or JobState.Running && j.Inputs["sceneId"]?.GetValue<Guid>() == SceneId);
+        if (_saved.Length > 0 && Dirty) return; // keep the user's unsaved edits
+        _description = _scene.Description;
+        _rows = _scene.Placements.Select(p => new Row { Name = p.Name, AssetId = p.AssetId, At = [.. p.At], Rot = [.. p.Rot ?? [0, 0, 0]], Scale = p.Scale }).ToList();
+        _saved = Snapshot();
+    }
+
+    protected override bool Concerns(Guid? packId, Guid? assetId) => !_deleted && packId == _scene?.PackId && assetId is null;
+
+    private void Add()
+    {
+        var n = _rows.Count + 1;
+        _rows.Add(new Row { Name = $"{_assets[0].Name} {n}", AssetId = _assets[0].Id, At = [n * 1.5, 0, 0] });
+    }
+
+    private Task SaveAsync() => Try(async () =>
+    {
+        await Api.PutAsync<Scene>($"api/packs/{_scene!.PackId}/scenes", new SceneEdit(_scene.Name, _description,
+            _rows.Select(r => new ScenePlacement(r.Name.Trim(), r.AssetId, r.At, r.Rot, r.Scale)).ToList()));
+        _saved = "";
+        await LoadAsync();
+    });
+
+    private async Task DeleteAsync()
+    {
+        if (await Dialogs.ShowMessageBoxAsync("Delete scene", $"Delete scene \"{_scene!.Name}\"? The assets stay.", yesText: "Delete", cancelText: "Cancel") != true) return;
+        await Try(async () =>
+        {
+            _deleted = true;
+            await Api.DeleteAsync($"api/scenes/{SceneId}");
+            Nav.NavigateTo($"/packs/{_scene.PackId}?tab=scenes");
+        });
+    }
+}

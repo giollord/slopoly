@@ -1,0 +1,138 @@
+@page "/concepts/{ConceptId:guid}"
+@inherits LiveComponent
+@inject NavigationManager Nav
+
+<PageTitle>Concept · Slopoly</PageTitle>
+
+@if (_concept is null || _pack is null)
+{
+    <MudProgressLinear Indeterminate="true" />
+    return;
+}
+
+<PackCrumbs PackId="_pack.Id" PackName="@_pack.Name" Tab="concepts" Current="@($"{Kind} {_concept.CreatedAt.ToLocalTime():g}")" />
+
+<MudGrid>
+    <MudItem xs="12" lg="8">
+        <a href="/files/@_concept.FileId" target="_blank" title="Open the image file">
+            <img src="/files/@_concept.FileId" alt="@Kind" style="width: 100%; height: auto; border-radius: 4px; background: var(--mud-palette-background-gray)" />
+        </a>
+    </MudItem>
+    <MudItem xs="12" lg="4">
+        <MudStack Spacing="3">
+            <MudStack Row="true" AlignItems="AlignItems.Center" Spacing="1">
+                <MudChip T="string" Size="Size.Small" Color="@(_concept.Selection switch { Selection.Picked => Color.Success, Selection.Rejected => Color.Error, _ => Color.Default })">
+                    @(_concept.Selection == Selection.None ? "Undecided" : _concept.Selection)
+                </MudChip>
+                <MudSpacer />
+                <ConceptActions Concept="_concept" OnDeleted="@(() => Nav.NavigateTo($"/packs/{_pack.Id}?tab=concepts"))" />
+            </MudStack>
+
+            <MudSimpleTable Dense="true">
+                <tbody>
+                    <tr><td>Kind</td><td>@Kind</td></tr>
+                    @if (_asset is not null)
+                    {
+                        <tr><td>Asset</td><td><MudLink Href="@($"/assets/{_asset.Id}")">@_asset.Name</MudLink></td></tr>
+                    }
+                    <tr><td>Seed</td><td>@(_concept.Seed?.ToString() ?? "not recorded")</td></tr>
+                    <tr><td>Size</td><td>@_concept.Width × @_concept.Height</td></tr>
+                    <tr><td>Created</td><td>@_concept.CreatedAt.ToLocalTime().ToString("g")</td></tr>
+                    @if (_job is not null)
+                    {
+                        <tr><td>Job</td><td>@_job.Operation · @(_job.Inputs["count"]) image(s) · @_job.State</td></tr>
+                    }
+                </tbody>
+            </MudSimpleTable>
+
+            @if (_job?.Inputs["prompt"]?.GetValue<string>() is { } prompt)
+            {
+                <div>
+                    <MudText Typo="Typo.subtitle2">Prompt</MudText>
+                    <MudText Typo="Typo.body2" Style="white-space: pre-wrap">@prompt</MudText>
+                </div>
+            }
+            @if (_job?.Inputs["references"] is JsonArray { Count: > 0 } references)
+            {
+                <div>
+                    <MudText Typo="Typo.subtitle2">Reference images</MudText>
+                    <MudStack Row="true" Spacing="1" Wrap="Wrap.Wrap">
+                        @foreach (var r in references)
+                        {
+                            <a href="/files/@r" target="_blank"><img src="/files/@r" alt="reference" style="height: 72px; border-radius: 4px" /></a>
+                        }
+                    </MudStack>
+                </div>
+            }
+
+            <MudPaper Outlined="true" Class="pa-3">
+                <MudText Typo="Typo.subtitle2" Class="mb-2">Change with the agent</MudText>
+                <MudTextField T="string" @bind-Value="_change" Variant="Variant.Outlined" Lines="3" Sizing="InputSizing.Auto"
+                              Placeholder="What should change? e.g. taller wheels, darker wood, no cargo. Leave empty for more options like this one." />
+                <MudStack Row="true" AlignItems="AlignItems.Center" Class="mt-2">
+                    <MudNumericField T="int" @bind-Value="_count" Label="Images" Min="1" Max="4" Variant="Variant.Outlined" Margin="Margin.Dense" Style="max-width: 7rem" />
+                    <MudSpacer />
+                    <MudButton Variant="Variant.Filled" Color="Color.Secondary" StartIcon="@Icons.Material.Filled.Send" OnClick="AskAgentAsync">Ask the agent</MudButton>
+                </MudStack>
+            </MudPaper>
+
+            @if (_concept.Kind == ConceptKind.Turnaround && _concept.Selection == Selection.Picked)
+            {
+                <MudPaper Outlined="true" Class="pa-3">
+                    <MudText Typo="Typo.subtitle2" Class="mb-2">Segment parts</MudText>
+                    <MudStack Row="true" AlignItems="AlignItems.Center">
+                        <MudTextField T="string" @bind-Value="_parts" Label="Parts (comma separated)" Variant="Variant.Outlined" Margin="Margin.Dense" Placeholder="bed, wheel, handle, axle" />
+                        <MudButton Variant="Variant.Outlined" OnClick="SegmentAsync">Segment</MudButton>
+                    </MudStack>
+                </MudPaper>
+            }
+        </MudStack>
+    </MudItem>
+</MudGrid>
+
+@code {
+    [Parameter] public Guid ConceptId { get; set; }
+    private ConceptImage? _concept;
+    private Pack? _pack;
+    private Asset? _asset;
+    private Job? _job;
+    private string _change = "", _parts = "";
+    private int _count = 2;
+
+    private string Kind => _concept?.Kind == ConceptKind.Anchor ? "Style anchor" : "Turnaround";
+
+    protected override async Task LoadAsync()
+    {
+        _concept = await Api.GetAsync<ConceptImage>($"api/concepts/{ConceptId}");
+        _pack = await Api.GetAsync<Pack>($"api/packs/{_concept.PackId}");
+        _asset = _concept.AssetId is { } assetId ? await Api.GetAsync<Asset>($"api/assets/{assetId}") : null;
+        _job = _concept.JobId is { } jobId ? await Api.GetAsync<Job>($"api/jobs/{jobId}") : null;
+    }
+
+    protected override bool Concerns(Guid? packId, Guid? assetId) => packId == _concept?.PackId;
+
+    protected override Task OnJobEventAsync(JobEventMessage e) => Task.CompletedTask; // new images show in the gallery
+
+    /// <summary>The agent words the change and calls revise_concept; the user follows it in the pack's chat.</summary>
+    private Task AskAgentAsync() => Try(async () =>
+    {
+        var request = string.IsNullOrWhiteSpace(_change)
+            ? $"Revise concept {ConceptId}: more options like it, no change. Make {_count} images."
+            : $"Revise concept {ConceptId}: {_change.Trim()}. Make {_count} images.";
+        await Api.PostAsync<Job>($"api/packs/{_concept!.PackId}/chat", new ChatMessage(request));
+        _change = "";
+        Snackbar.Add("Sent to the agent; the new images will appear in Concepts.", Severity.Info, o =>
+        {
+            o.Action = "Open chat";
+            o.OnClick = _ => { Nav.NavigateTo($"/packs/{_concept.PackId}?tab=concepts&chat=true"); return Task.CompletedTask; };
+        });
+    });
+
+    private Task SegmentAsync() => Try(async () =>
+    {
+        var parts = _parts.Split(',', StringSplitOptions.RemoveEmptyEntries | StringSplitOptions.TrimEntries).ToList();
+        if (parts.Count == 0) { Snackbar.Add("Name the parts first.", Severity.Warning); return; }
+        await Api.PostAsync<Job>($"api/concepts/{ConceptId}/segment", new SegmentRequest(parts));
+        Snackbar.Add("Segmentation queued; masks appear on the asset page.", Severity.Info);
+    });
+}

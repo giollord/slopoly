@@ -1,5 +1,6 @@
 @page "/packs/{PackId:guid}"
 @inherits LiveComponent
+@inject NavigationManager Nav
 
 <PageTitle>@(_pack?.Name ?? "Pack") · Slopoly</PageTitle>
 
@@ -9,16 +10,18 @@
 }
 else
 {
+    <MudBreadcrumbs Items="@([new("Packs", "/"), new(_pack.Name, null, disabled: true)])" Class="px-0 pt-0 pb-2" />
     <MudStack Row="true" AlignItems="AlignItems.Center" Class="mb-2">
         <MudText Typo="Typo.h5">@_pack.Name</MudText>
         <MudSpacer />
         <MudButton Variant="Variant.Filled" Color="Color.Secondary" StartIcon="@Icons.Material.Filled.Chat" OnClick="() => _chatOpen = true">Agent</MudButton>
     </MudStack>
 
-    <MudTabs Outlined="true" Rounded="true" TabPanelsClass="pa-4" KeepPanelsAlive="true">
+    <MudTabs Outlined="true" Rounded="true" TabPanelsClass="pa-4" KeepPanelsAlive="true" ActivePanelIndex="_tab" ActivePanelIndexChanged="TabChanged">
         <MudTabPanel Text="Style"><PackStyle Pack="_pack" /></MudTabPanel>
         <MudTabPanel Text="Concepts"><ConceptGallery PackId="PackId" /></MudTabPanel>
         <MudTabPanel Text="Assets"><AssetList PackId="PackId" /></MudTabPanel>
+        <MudTabPanel Text="Scenes"><SceneList PackId="PackId" /></MudTabPanel>
         <MudTabPanel Text="Palette"><PaletteEditor PackId="PackId" /></MudTabPanel>
         <MudTabPanel Text="Jobs"><JobList PackId="PackId" /></MudTabPanel>
     </MudTabs>
@@ -33,13 +36,32 @@ else
 }
 
 @code {
+    /// <summary>Tab keys in panel order; <c>?tab=assets</c> opens a tab directly.</summary>
+    public static readonly string[] Tabs = ["style", "concepts", "assets", "scenes", "palette", "jobs"];
     [Parameter] public Guid PackId { get; set; }
+    [SupplyParameterFromQuery(Name = "tab")] public string? Tab { get; set; }
+    /// <summary><c>?chat=1</c> opens the agent chat (e.g. after sending it a request from another page).</summary>
+    [SupplyParameterFromQuery(Name = "chat")] public bool Chat { get; set; }
     private Pack? _pack;
     private bool _chatOpen;
+    private int _tab;
+
+    protected override async Task OnParametersSetAsync()
+    {
+        _tab = Math.Max(0, Array.IndexOf(Tabs, Tab ?? ""));
+        _chatOpen |= Chat;
+        await base.OnParametersSetAsync();
+    }
 
     protected override async Task LoadAsync() => _pack = await Api.GetAsync<Pack>($"api/packs/{PackId}");
 
     protected override bool Concerns(Guid? packId, Guid? assetId) => packId == PackId && assetId is null;
 
     protected override Task OnJobEventAsync(JobEventMessage e) => Task.CompletedTask; // the tabs follow their own jobs
+
+    private void TabChanged(int index)
+    {
+        _tab = index;
+        Nav.NavigateTo(Nav.GetUriWithQueryParameters(new Dictionary<string, object?> { ["tab"] = Tabs[index], ["chat"] = null }), replace: true);
+    }
 }

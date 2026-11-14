@@ -67,15 +67,63 @@ public sealed class StudioService(SlopolyDb db, FileStore files, Notifier notifi
         await notifier.Changed<StyleReference>(id, reference.PackId);
     }
 
-    public async Task<Asset> CreateAssetAsync(Guid packId, string name, string description)
+    public async Task<Asset> CreateAssetAsync(Guid packId, string name, string description, int? polyBudget = null)
     {
         await GetPackAsync(packId);
         if (string.IsNullOrWhiteSpace(name)) throw new StudioException("An asset needs a name.");
-        var asset = new Asset { PackId = packId, Name = name.Trim(), Description = description };
+        var asset = new Asset { PackId = packId, Name = name.Trim(), Description = description, PolyBudget = Budget(polyBudget) };
         db.Assets.Add(asset);
         await db.SaveChangesAsync();
         await notifier.Changed<Asset>(asset.Id, packId, asset.Id);
         return asset;
+    }
+
+    public async Task<Asset> UpdateAssetAsync(Guid id, AssetEdit edit)
+    {
+        var asset = await GetAssetAsync(id);
+        if (edit.Name is { } name) asset.Name = string.IsNullOrWhiteSpace(name) ? throw new StudioException("An asset needs a name.") : name.Trim();
+        if (edit.Description is { } description) asset.Description = description;
+        if (edit.PolyBudget is { } budget) asset.PolyBudget = Budget(budget);
+        await db.SaveChangesAsync();
+        await notifier.Changed<Asset>(asset.Id, asset.PackId, asset.Id);
+        return asset;
+    }
+
+    /// <summary>A budget of 0 (or none) means "use the pack's budget".</summary>
+    private static int? Budget(int? budget) => budget switch
+    {
+        null or 0 => null,
+        < 0 => throw new StudioException("The triangle budget must be positive."),
+        _ => budget,
+    };
+
+    /// <summary>Deletes an asset with its concepts, masks, manifest, programs and builds. Refused while a scene places it.</summary>
+    public async Task DeleteAssetAsync(Guid id)
+    {
+        var asset = await GetAssetAsync(id);
+        var scenes = (await db.Scenes.Where(s => s.PackId == asset.PackId).ToListAsync())
+            .Where(s => s.Placements.Any(p => p.AssetId == id)).Select(s => s.Name).ToList();
+        if (scenes.Count > 0)
+            throw new StudioException($"\"{asset.Name}\" is placed in {string.Join(", ", scenes)}; remove it from the scene first.", StatusCodes.Status409Conflict);
+        var concepts = db.ConceptImages.Where(c => c.AssetId == id).Select(c => c.Id);
+        await db.PartMasks.Where(m => concepts.Contains(m.ConceptImageId)).ExecuteDeleteAsync();
+        await db.ConceptImages.Where(c => c.AssetId == id).ExecuteDeleteAsync();
+        await db.Manifests.Where(m => m.AssetId == id).ExecuteDeleteAsync();
+        await db.Builds.Where(b => b.AssetId == id).ExecuteDeleteAsync();
+        await db.ProgramVersions.Where(v => v.AssetId == id).ExecuteDeleteAsync();
+        db.Assets.Remove(asset);
+        await db.SaveChangesAsync();
+        await notifier.Changed<Asset>(id, asset.PackId, id);
+    }
+
+    /// <summary>Deletes a concept image and its part masks (the files stay: builds keep their own inputs).</summary>
+    public async Task DeleteConceptAsync(Guid id)
+    {
+        var concept = await db.ConceptImages.FindAsync(id) ?? throw StudioException.NotFound("Concept image");
+        await db.PartMasks.Where(m => m.ConceptImageId == id).ExecuteDeleteAsync();
+        db.ConceptImages.Remove(concept);
+        await db.SaveChangesAsync();
+        await notifier.Changed<ConceptImage>(id, concept.PackId, concept.AssetId);
     }
 
     public async Task<ConceptImage> SelectConceptAsync(Guid id, Selection selection)

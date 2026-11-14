@@ -1,42 +1,70 @@
 @inherits LiveComponent
+@inject IDialogService Dialogs
 
-<MudStack Row="true" AlignItems="AlignItems.Center" Class="mb-3">
-    <MudTextField @bind-Value="_name" Label="Asset name" Variant="Variant.Outlined" Margin="Margin.Dense" />
-    <MudTextField @bind-Value="_description" Label="Description" Variant="Variant.Outlined" Margin="Margin.Dense" />
-    <MudButton Variant="Variant.Filled" Color="Color.Primary" Disabled="string.IsNullOrWhiteSpace(_name)" OnClick="CreateAsync">Add asset</MudButton>
-</MudStack>
-
-<MudSimpleTable Dense="true" Hover="true">
-    <thead><tr><th>Asset</th><th>Status</th><th>Description</th><th style="width: 22rem">Turnaround</th></tr></thead>
-    <tbody>
-        @foreach (var asset in _assets)
-        {
-            <tr>
-                <td><MudLink Href="@($"/assets/{asset.Id}")">@asset.Name</MudLink></td>
-                <td><MudChip T="string" Size="Size.Small" Color="@StatusColor(asset.Status)">@asset.Status</MudChip></td>
-                <td>@asset.Description</td>
-                <td>
-                    <MudStack Row="true" AlignItems="AlignItems.Center" Spacing="1">
-                        <MudNumericField T="int" @bind-Value="_counts[asset.Id]" Min="1" Max="4" Variant="Variant.Outlined" Margin="Margin.Dense" Style="max-width: 5rem" />
-                        <MudButton Variant="Variant.Outlined" Size="Size.Small" OnClick="() => TurnaroundAsync(asset)">Generate</MudButton>
-                    </MudStack>
-                </td>
-            </tr>
-        }
-    </tbody>
-</MudSimpleTable>
+<MudDataGrid T="Asset" Items="Filtered()" QuickFilter="QuickFilter" Dense="true" Hover="true" SortMode="SortMode.Single" Elevation="0">
+    <ToolBarContent>
+        <MudStack Row="true" AlignItems="AlignItems.Center" Style="width: 100%" Wrap="Wrap.Wrap">
+            <MudTextField T="string" @bind-Value="_search" Placeholder="Search" Adornment="Adornment.Start" AdornmentIcon="@Icons.Material.Filled.Search"
+                          Immediate="true" Variant="Variant.Outlined" Margin="Margin.Dense" Class="filter-field" />
+            <div class="filter-field"><MudSelect T="AssetStatus?" @bind-Value="_status" Label="Status" Clearable="true" Variant="Variant.Outlined" Margin="Margin.Dense">
+                @foreach (var s in Enum.GetValues<AssetStatus>())
+                {
+                    <MudSelectItem T="AssetStatus?" Value="s">@s</MudSelectItem>
+                }
+            </MudSelect></div>
+            <MudSpacer />
+            <MudButton Variant="Variant.Filled" Color="Color.Primary" StartIcon="@Icons.Material.Filled.Add" OnClick="CreateAsync">New asset</MudButton>
+        </MudStack>
+    </ToolBarContent>
+    <Columns>
+        <TemplateColumn T="Asset" Title="Asset" SortBy="a => a.Name">
+            <CellTemplate><MudLink Href="@($"/assets/{context.Item.Id}")">@context.Item.Name</MudLink></CellTemplate>
+        </TemplateColumn>
+        <TemplateColumn T="Asset" Title="Status" SortBy="a => a.Status">
+            <CellTemplate><MudChip T="string" Size="Size.Small" Color="@StatusColor(context.Item.Status)">@context.Item.Status</MudChip></CellTemplate>
+        </TemplateColumn>
+        <TemplateColumn T="Asset" Title="Triangles" SortBy="a => a.PolyBudget ?? _packBudget">
+            <CellTemplate>@(context.Item.PolyBudget?.ToString() ?? $"{_packBudget} (pack)")</CellTemplate>
+        </TemplateColumn>
+        <PropertyColumn Property="a => a.Description" Sortable="false" />
+        <PropertyColumn Property="a => a.CreatedAt" Title="Created" Format="g" />
+        <TemplateColumn T="Asset" Title="Turnaround" Sortable="false">
+            <CellTemplate>
+                <MudStack Row="true" AlignItems="AlignItems.Center" Spacing="1">
+                    <MudNumericField T="int" @bind-Value="_counts[context.Item.Id]" Min="1" Max="4" Variant="Variant.Outlined" Margin="Margin.Dense" Style="width: 4.5rem" />
+                    <MudButton Variant="Variant.Outlined" Size="Size.Small" OnClick="() => TurnaroundAsync(context.Item)">Generate</MudButton>
+                </MudStack>
+            </CellTemplate>
+        </TemplateColumn>
+        <TemplateColumn T="Asset" Sortable="false" CellStyle="white-space: nowrap">
+            <CellTemplate>
+                <MudTooltip Text="Edit"><MudIconButton Icon="@Icons.Material.Filled.Edit" Size="Size.Small" OnClick="() => EditAsync(context.Item)" /></MudTooltip>
+                <MudTooltip Text="Delete"><MudIconButton Icon="@Icons.Material.Filled.Delete" Size="Size.Small" OnClick="() => DeleteAsync(context.Item)" /></MudTooltip>
+            </CellTemplate>
+        </TemplateColumn>
+    </Columns>
+    <NoRecordsContent><MudText Typo="Typo.body2">No assets match.</MudText></NoRecordsContent>
+</MudDataGrid>
 
 @code {
     [Parameter, EditorRequired] public Guid PackId { get; set; }
     private List<Asset> _assets = [];
     private readonly Dictionary<Guid, int> _counts = [];
-    private string _name = "", _description = "";
+    private string _search = "";
+    private AssetStatus? _status;
+    private int _packBudget;
 
     protected override async Task LoadAsync()
     {
         _assets = await Api.GetAsync<List<Asset>>($"api/packs/{PackId}/assets");
+        _packBudget = (await Api.GetAsync<Pack>($"api/packs/{PackId}")).PolyBudget;
         foreach (var a in _assets) _counts.TryAdd(a.Id, 2);
     }
+
+    private IEnumerable<Asset> Filtered() => _assets.Where(a => _status is null || a.Status == _status);
+
+    private Func<Asset, bool> QuickFilter => a => string.IsNullOrWhiteSpace(_search)
+        || a.Name.Contains(_search, StringComparison.OrdinalIgnoreCase) || a.Description.Contains(_search, StringComparison.OrdinalIgnoreCase);
 
     protected override bool Concerns(Guid? packId, Guid? assetId) => packId == PackId;
 
@@ -49,11 +77,24 @@
         _ => Color.Default,
     };
 
-    private Task CreateAsync() => Try(async () =>
+    private async Task CreateAsync()
     {
-        await Api.PostAsync<Asset>($"api/packs/{PackId}/assets", new AssetCreate(_name.Trim(), _description.Trim()));
-        _name = _description = "";
-    });
+        if (await AssetDialog.ShowAsync(Dialogs, null, _packBudget) is { } edit)
+            await Try(() => Api.PostAsync<Asset>($"api/packs/{PackId}/assets", new AssetCreate(edit.Name!, edit.Description ?? "", edit.PolyBudget)));
+    }
+
+    private async Task EditAsync(Asset asset)
+    {
+        if (await AssetDialog.ShowAsync(Dialogs, asset, _packBudget) is { } edit)
+            await Try(() => Api.PatchAsync<Asset>($"api/assets/{asset.Id}", edit));
+    }
+
+    private async Task DeleteAsync(Asset asset)
+    {
+        if (await Dialogs.ShowMessageBoxAsync("Delete asset", $"Delete \"{asset.Name}\" with its concept images, manifest, programs and builds? This can't be undone.",
+                yesText: "Delete", cancelText: "Cancel") == true)
+            await Try(() => Api.DeleteAsync($"api/assets/{asset.Id}"));
+    }
 
     private Task TurnaroundAsync(Asset asset) => Try(async () =>
     {

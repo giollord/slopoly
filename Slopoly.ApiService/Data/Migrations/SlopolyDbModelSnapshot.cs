@@ -15,7 +15,7 @@ partial class SlopolyDbModelSnapshot : ModelSnapshot
     // If you encounter a merge conflict in the line below, it means you need to
     // discard one of the migration branches and recreate its migrations on top of
     // the other branch. See https://aka.ms/efcore-docs-migrations-conflicts for more info.
-    public override string LastMigrationId => "20261113234255_Initial";
+    public override string LastMigrationId => "20261114180150_ScenesBudgetsSeeds";
 
     protected override void BuildModel(ModelBuilder modelBuilder)
     {
@@ -44,6 +44,9 @@ partial class SlopolyDbModelSnapshot : ModelSnapshot
 
                 b.Property<Guid>("PackId")
                     .HasColumnType("TEXT");
+
+                b.Property<int?>("PolyBudget")
+                    .HasColumnType("INTEGER");
 
                 b.Property<string>("Status")
                     .IsRequired()
@@ -123,6 +126,9 @@ partial class SlopolyDbModelSnapshot : ModelSnapshot
 
                 b.Property<Guid>("PackId")
                     .HasColumnType("TEXT");
+
+                b.Property<long?>("Seed")
+                    .HasColumnType("INTEGER");
 
                 b.Property<string>("Selection")
                     .IsRequired()
@@ -434,6 +440,44 @@ partial class SlopolyDbModelSnapshot : ModelSnapshot
                     .IsUnique();
 
                 b.ToTable("ProgramVersions");
+            });
+
+        modelBuilder.Entity("Slopoly.Contracts.Scene", b =>
+            {
+                b.Property<Guid>("Id")
+                    .ValueGeneratedOnAdd()
+                    .HasColumnType("TEXT");
+
+                b.Property<string>("Description")
+                    .IsRequired()
+                    .HasColumnType("TEXT");
+
+                b.Property<Guid?>("GlbFileId")
+                    .HasColumnType("TEXT");
+
+                b.Property<string>("Name")
+                    .IsRequired()
+                    .HasColumnType("TEXT");
+
+                b.Property<Guid>("PackId")
+                    .HasColumnType("TEXT");
+
+                b.Property<string>("Placements")
+                    .IsRequired()
+                    .HasColumnType("TEXT");
+
+                b.Property<string>("Report")
+                    .HasColumnType("TEXT");
+
+                b.Property<long>("UpdatedAt")
+                    .HasColumnType("INTEGER");
+
+                b.HasKey("Id");
+
+                b.HasIndex("PackId", "Name")
+                    .IsUnique();
+
+                b.ToTable("Scenes");
             });
 
         modelBuilder.Entity("Slopoly.Contracts.StoredFile", b =>

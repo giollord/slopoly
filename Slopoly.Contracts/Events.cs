@@ -24,7 +24,8 @@ public static class JobKinds
     public const string Build = "build";
     public const string PaletteRender = "palette-render";
     public const string AgentTurn = "agent-turn";
-    public static readonly string[] All = [Comfy, Build, PaletteRender, AgentTurn];
+    public const string Scene = "scene";
+    public static readonly string[] All = [Comfy, Build, PaletteRender, AgentTurn, Scene];
 }
 
 public static class Workflows
