@@ -52,56 +52,61 @@ See proposal.md for the reasons. Current state:
 **Alternative rejected:** per-view generation with an edit model. Each view would be a separate sample, so
 proportions drift between them.
 
-### 2. Two workflows: `views` builds the splat, `render-views` renders it
+### 2. One `views` workflow: splat and two turntables
 
-**`views`** (built with the comfy CLI from the Idol template):
-
-```
-in:image -> RemoveBackground(BiRefNet) -> TripoSplat (Idol) -> SPLAT
-                                                    +-> SplatToFile3D(spz) -> out:splat
-                                                    +-> RenderSplat(ortho, frames=24, 256 px) -> out:turntable_mask
-```
-
-**`render-views`:**
+**`views`** (built with the comfy CLI from `recipes/idol-views.recipe.json`, wired after the Idol template):
 
 ```
-in:splat (File3DToSplat) + in:yaw -> 4 x CreateCameraInfo(ortho, same distance/zoom) -> RenderSplat 1024 px
-    -> out:front / out:side / out:top / out:back (image) + out:*_mask (mask)
+in:image -> RemoveBackground(BiRefNet) -> TripoSplat (Idol, in:seed) -> SPLAT
+    +-> RenderSplat(ortho, pitch 0,  72 frames, 768 px) -> out:ring  + out:ring_mask
+    +-> RenderSplat(ortho, pitch 89, 72 frames, 768 px) -> out:above + out:above_mask
+RemoveBackground mask -> out:hero_mask
 ```
 
-**How the worker runs them.** It runs `views` and uploads the `.spz` file as the hero's `SplatFileId`. It then picks
-the front yaw (decision 3) and runs `render-views`.
+Both turntables use the same distance and zoom, so every frame shares one pixel scale. Frame k of `above` has the
+same yaw as frame k of `ring`.
 
-**Correcting the front.** This reruns only `render-views` with the user's yaw. That takes seconds, needs no new
-sampling, and the splat stays identical.
+**How the worker uses it.** It runs `views` once, picks the front frame (decision 3) and keeps four frames: front,
+side, back (from `ring`) and top (from `above`), each with its silhouette. No splat file is stored.
 
-**Why two workflows.** Separating rendering from generation makes the front correction cheap and deterministic.
+**Correcting the front.** The job is rerun with the same seed and a given `frontYaw`. The same seed rebuilds the same
+splat, so only the choice of frames changes. A run takes about a minute.
+
+**Why one workflow.** `Load3D` needs a frontend viewport, so a stored splat can't be reloaded headlessly for a cheap
+re-render. Rendering full turntables in the same run also gives the symmetry search all 72 directions at full size.
 
 **Alternative rejected:** `SplatToMesh` and rendering the mesh in the geometry worker. That loses colour, which part
 segmentation needs, and adds a step.
 
 ### 3. Front direction from silhouette symmetry
 
-For each of the 24 turntable masks the worker computes the mirror symmetry of the silhouette: the IoU of the mask with
-its left-right flip about the mask's bounding-box centre.
+The front is the object's mirror plane. Under an orthographic camera the turntable axis is the image's centre
+column, so if the plane faces direction t, the frame at t + d is the mirror image of the frame at t - d.
 
-- **Front-or-back ambiguity.** The front and back of a symmetric object both score high. Among the local maxima, the
-  worker picks the one nearest the yaw the hero faces. That yaw is the constant `HERO_YAW`, the three-quarter angle
-  in the prompt, adjusted by the calibration in task 3.3.
-- **Asymmetric objects.** If no direction scores at least 0.8, the worker uses `HERO_YAW` alone. The job then reports
+- **Mirror plane.** Each candidate t, in half-frame steps, scores the mirror IoU of the frame pairs t ± d averaged over
+  d = 0 to 9 frames (0 to 45 degrees). The plane is the best candidate if it scores at least 0.08 above the median
+  candidate.
+- **Why pairs, not single frames.** Single-frame symmetry was too noisy: on the picked cart it peaked at 70 and 100
+  degrees around the true plane at 92.5. A cart is also nearly symmetric from the side, which lifts the median.
+- **The hero frame.** The ring frame that best matches the hero image is the direction it was seen from. The match is
+  silhouette IoU after normalising the box, times aspect agreement, times colour agreement inside both silhouettes.
+  Colour is needed because with a mirror plane the silhouette d degrees off the front equals the one d degrees off the
+  back.
+- **Front or back.** The plane shows twice, 180 degrees apart; the one nearer the hero frame is the front.
+- **Asymmetric objects.** With no clear plane, the hero frame itself is the front. The job then reports
   `front: "assumed"`, so the UI and the agent can ask the user to check it.
+
+**Calibration (task 3.3).** On the cart, the side view is a quarter turn back from the front frame, which puts the
+camera on +X with the object's front on the image's left. The constant `QUARTER_SIGN = -1` records this.
 
 **View axes** follow the `slopoly_model` conventions:
 
-| View | Camera |
+| View | Frame |
 |---|---|
-| front | looks from +Z at `yaw` |
-| side | looks from +X at `yaw + 90°` |
-| top | `pitch = 89°` |
-| back | `yaw + 180°` |
-
-All four use orthographic cameras with the same distance and zoom, so every view shares one pixel scale. The job
-records that scale as pixels per splat unit.
+| front | ring frame `f` (looks from +Z) |
+| side | ring frame `f - N/4` (looks from +X) |
+| back | ring frame `f + N/2` |
+| top | above frame `f` (front at the bottom) |
 
 ### 4. Data model
 
@@ -110,7 +115,7 @@ records that scale as pixels per splat unit.
   - `View` (front, side, top or back, for views);
   - `SourceConceptId` (a view's hero);
   - `MaskFileId` (a view's silhouette);
-  - `SplatFileId` and `FrontYaw` (on heroes).
+  - `FrontYaw` and the views job's `ViewsSeed` (on heroes).
 - `Views` (rectangles inside one image) is dropped.
 
 **Migration.** It deletes `Turnaround` concepts and their `PartMasks` before the column changes; the kinds are stored
@@ -158,8 +163,10 @@ silhouette, so scoring treats it like any part mask. `PartMask.ConceptImageId` p
 **Candidates:**
 
 - FLUX.2 klein 4B fp8 (installed);
-- Qwen-Image-Edit-2511 at Q4 GGUF, with the Qwen2.5-VL text encoder, a Lightning 4-step LoRA if its licence allows
-  commercial use, and the `ComfyUI-GGUF` custom node pinned in the Dockerfile.
+- Qwen-Image-Edit-2511 in ComfyUI's native `fp8mixed` format (20.5 GB), with the fp8 Qwen2.5-VL 7B text encoder
+  and the Apache 2.0 Lightning 4-step LoRA. ComfyUI offloads the weights that don't fit in 12 GB to RAM (the machine
+  has 64 GB). GGUF Q4 was rejected: it needs a custom node pack (`ComfyUI-GGUF`) and loses quality. GGUF is the
+  fallback only if fp8 runs out of memory.
 
 **Procedure.** Both models get the same Gnome-village anchor references, the same prompts (one scene anchor plus the
 cart and one house hero) and 2 seeds each. The comparison records:
@@ -173,7 +180,7 @@ The results go into `notes.md` in this change.
 **Choosing.** The winner's workflows become `style-anchor` and `hero`; the loser's files are deleted. The choice can
 also be split, one model per operation.
 
-Qwen needs about 12 GB of disk for the model plus its text encoder; you approved the download.
+Qwen needs about 31 GB of disk for the model, text encoder, VAE and LoRA; you approved the download.
 
 ### 8. Agent and UI
 
@@ -191,7 +198,7 @@ Qwen needs about 12 GB of disk for the model plus its text encoder; you approved
 - The Concepts tab has kind groups Anchors / Heroes / Views; the views sit under their hero.
 - A picked hero card shows "Make views".
 - The hero's concept page shows its four views, front-direction buttons (turn ±90°, flip 180°) that rerun
-  `render-views`, and the parts segmentation box.
+  `views` with the same seed, and the parts segmentation box.
 - The asset list's per-row generate button makes heroes.
 
 ### 9. Licences checked before use
@@ -213,7 +220,7 @@ If one fails, we look for a replacement before continuing; for example, a differ
 - **[Thin parts (an axle, rope) vanish in the splat]** → `object` scoring tolerates them. The parts appear as missing,
   and the agent sizes them from the manifest, as it does now.
 - **[The splat's coordinate frame differs from the assumption]** (the yaw sign, or which way is up) → Task 3.3
-  calibrates on a known object: the cart, whose handles point backwards. `HERO_YAW` and the axis map are fixed there
+  calibrates on a known object: the cart, whose handles point backwards. `QUARTER_SIGN` and the axis map are fixed there
   before scoring work starts.
 - **[Qwen at Q4 is too slow, or doesn't fit next to the encoder]** → That is a bake-off outcome, not a blocker. klein
   stays the default.
@@ -226,7 +233,6 @@ If one fails, we look for a replacement before continuing; for example, a differ
 
 1. Back up `<data-dir>/slopoly.db`.
 2. Download the Idol models (and Qwen for the bake-off) into `<models-dir>`.
-3. Rebuild the comfyui image (ComfyUI-GGUF).
-4. Run the stack; the migration deletes turnarounds.
+3. Run the stack; the migration deletes turnarounds.
 
 **Rollback:** a git revert of the change plus restoring the database backup.

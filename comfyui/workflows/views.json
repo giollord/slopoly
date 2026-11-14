@@ -1,0 +1,350 @@
+{
+ "1782907104532587": {
+  "inputs": {
+   "image": "cart_hero.png"
+  },
+  "class_type": "LoadImage",
+  "_meta": {
+   "title": "in:image"
+  }
+ },
+ "1008297396115162": {
+  "inputs": {
+   "bg_removal_name": "birefnet.safetensors"
+  },
+  "class_type": "LoadBackgroundRemovalModel",
+  "_meta": {
+   "title": "Load Background Removal Model"
+  }
+ },
+ "3856473735370030": {
+  "inputs": {
+   "bg_removal_model": [
+    "1008297396115162",
+    0
+   ],
+   "image": [
+    "1782907104532587",
+    0
+   ]
+  },
+  "class_type": "RemoveBackground",
+  "_meta": {
+   "title": "Remove Background"
+  }
+ },
+ "3508762597274772": {
+  "inputs": {
+   "erode_radius": 1,
+   "size": 1024,
+   "image": [
+    "1782907104532587",
+    0
+   ],
+   "mask": [
+    "3856473735370030",
+    0
+   ]
+  },
+  "class_type": "TripoSplatPreprocessImage",
+  "_meta": {
+   "title": "TripoSplat Preprocess Image"
+  }
+ },
+ "1118931644652721": {
+  "inputs": {
+   "clip_name": "dino_v3_vit_h_bf16.safetensors"
+  },
+  "class_type": "CLIPVisionLoader",
+  "_meta": {
+   "title": "Load CLIP Vision"
+  }
+ },
+ "2284321366020625": {
+  "inputs": {
+   "vae_name": "flux2-vae.safetensors"
+  },
+  "class_type": "VAELoader",
+  "_meta": {
+   "title": "Load VAE"
+  }
+ },
+ "2409782684980671": {
+  "inputs": {
+   "vae_name": "idol_decoder_fp16.safetensors"
+  },
+  "class_type": "VAELoader",
+  "_meta": {
+   "title": "Load VAE"
+  }
+ },
+ "3696041466479843": {
+  "inputs": {
+   "unet_name": "idol_fp16.safetensors",
+   "weight_dtype": "default"
+  },
+  "class_type": "UNETLoader",
+  "_meta": {
+   "title": "Load Diffusion Model"
+  }
+ },
+ "3282599500680948": {
+  "inputs": {
+   "clip_vision": [
+    "1118931644652721",
+    0
+   ],
+   "vae": [
+    "2284321366020625",
+    0
+   ],
+   "image": [
+    "3508762597274772",
+    0
+   ]
+  },
+  "class_type": "TripoSplatConditioning",
+  "_meta": {
+   "title": "TripoSplat Conditioning"
+  }
+ },
+ "1211566640252054": {
+  "inputs": {
+   "seed": 0,
+   "steps": 20,
+   "cfg": 3,
+   "sampler_name": "dpmpp_2m",
+   "scheduler": "simple",
+   "denoise": 1.0,
+   "model": [
+    "3696041466479843",
+    0
+   ],
+   "positive": [
+    "3282599500680948",
+    0
+   ],
+   "negative": [
+    "3282599500680948",
+    1
+   ],
+   "latent_image": [
+    "3282599500680948",
+    2
+   ]
+  },
+  "class_type": "KSampler",
+  "_meta": {
+   "title": "in:seed"
+  }
+ },
+ "1600587656740444": {
+  "inputs": {
+   "num_gaussians": 262144,
+   "seed": 0,
+   "samples": [
+    "1211566640252054",
+    0
+   ],
+   "vae": [
+    "2409782684980671",
+    0
+   ]
+  },
+  "class_type": "VAEDecodeTripoSplat",
+  "_meta": {
+   "title": "TripoSplat Decode"
+  }
+ },
+ "1023920152064301": {
+  "inputs": {
+   "mode": "orbit",
+   "target_x": 0.0,
+   "target_y": 0.0,
+   "target_z": 0.0,
+   "roll": 0.0,
+   "fov": 35.0,
+   "zoom": 2.5,
+   "camera_type": "orthographic",
+   "camera_info_state": null,
+   "mode.yaw": 0,
+   "mode.pitch": 0,
+   "mode.distance": 4.0
+  },
+  "class_type": "CreateCameraInfo",
+  "_meta": {
+   "title": "Create Camera Info"
+  }
+ },
+ "364151508175590": {
+  "inputs": {
+   "width": 768,
+   "height": 768,
+   "frames": 72,
+   "splat_scale": 1.0,
+   "sharpen": 2.0,
+   "headlight_shading": 0.0,
+   "opacity_threshold": 0.0,
+   "render_style": "color",
+   "background": "#ffffff",
+   "splat": [
+    "1600587656740444",
+    0
+   ],
+   "camera_info": [
+    "1023920152064301",
+    0
+   ]
+  },
+  "class_type": "RenderSplat",
+  "_meta": {
+   "title": "Render Splat"
+  }
+ },
+ "2594036322075737": {
+  "inputs": {
+   "mode": "orbit",
+   "target_x": 0.0,
+   "target_y": 0.0,
+   "target_z": 0.0,
+   "roll": 0.0,
+   "fov": 35.0,
+   "zoom": 2.5,
+   "camera_type": "orthographic",
+   "camera_info_state": null,
+   "mode.yaw": 0,
+   "mode.pitch": 89.0,
+   "mode.distance": 4.0
+  },
+  "class_type": "CreateCameraInfo",
+  "_meta": {
+   "title": "Create Camera Info"
+  }
+ },
+ "2829206087851717": {
+  "inputs": {
+   "width": 768,
+   "height": 768,
+   "frames": 72,
+   "splat_scale": 1.0,
+   "sharpen": 2.0,
+   "headlight_shading": 0.0,
+   "opacity_threshold": 0.0,
+   "render_style": "color",
+   "background": "#ffffff",
+   "splat": [
+    "1600587656740444",
+    0
+   ],
+   "camera_info": [
+    "2594036322075737",
+    0
+   ]
+  },
+  "class_type": "RenderSplat",
+  "_meta": {
+   "title": "Render Splat"
+  }
+ },
+ "1374062767227651": {
+  "inputs": {
+   "filename_prefix": "slopoly/views_ring",
+   "images": [
+    "364151508175590",
+    0
+   ]
+  },
+  "class_type": "SaveImage",
+  "_meta": {
+   "title": "out:ring"
+  }
+ },
+ "1485870174965199": {
+  "inputs": {
+   "mask": [
+    "364151508175590",
+    1
+   ]
+  },
+  "class_type": "MaskToImage",
+  "_meta": {
+   "title": "Convert Mask to Image"
+  }
+ },
+ "4316679730683643": {
+  "inputs": {
+   "filename_prefix": "slopoly/views_ring_mask",
+   "images": [
+    "1485870174965199",
+    0
+   ]
+  },
+  "class_type": "SaveImage",
+  "_meta": {
+   "title": "out:ring_mask"
+  }
+ },
+ "2736843871961666": {
+  "inputs": {
+   "filename_prefix": "slopoly/views_above",
+   "images": [
+    "2829206087851717",
+    0
+   ]
+  },
+  "class_type": "SaveImage",
+  "_meta": {
+   "title": "out:above"
+  }
+ },
+ "4230286946089626": {
+  "inputs": {
+   "mask": [
+    "2829206087851717",
+    1
+   ]
+  },
+  "class_type": "MaskToImage",
+  "_meta": {
+   "title": "Convert Mask to Image"
+  }
+ },
+ "1033232249484555": {
+  "inputs": {
+   "filename_prefix": "slopoly/views_above_mask",
+   "images": [
+    "4230286946089626",
+    0
+   ]
+  },
+  "class_type": "SaveImage",
+  "_meta": {
+   "title": "out:above_mask"
+  }
+ },
+ "4074726834903843": {
+  "inputs": {
+   "mask": [
+    "3856473735370030",
+    0
+   ]
+  },
+  "class_type": "MaskToImage",
+  "_meta": {
+   "title": "Convert Mask to Image"
+  }
+ },
+ "2110594893966681": {
+  "inputs": {
+   "filename_prefix": "slopoly/views_hero_mask",
+   "images": [
+    "4074726834903843",
+    0
+   ]
+  },
+  "class_type": "SaveImage",
+  "_meta": {
+   "title": "out:hero_mask"
+  }
+ }
+}

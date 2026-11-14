@@ -31,6 +31,7 @@ public static class JobKinds
 public static class Workflows
 {
     public const string StyleAnchor = "style-anchor";
-    public const string Turnaround = "turnaround";
+    public const string Hero = "hero";
+    public const string Views = "views";
     public const string SegmentParts = "segment-parts";
 }

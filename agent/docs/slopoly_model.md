@@ -8,10 +8,11 @@ read `get_build_report`.
 
 - Units are metres, with Y up.
 - The front of the object faces +Z, and its left/right are on X. Use `_L` for +X and `_R` for −X.
-- Turnaround views map as follows:
+- The view images (rendered from the hero's splat) map as follows:
   - **front** looks from +Z;
-  - **side** looks from +X;
-  - **top** looks down from +Y.
+  - **side** looks from +X, with the object's front on the image's left;
+  - **top** looks down from +Y, with the front at the bottom;
+  - **back** looks from −Z.
 - Shapes are centred on their own origin, and `part(..., at=...)` puts that origin at a world position. Build moving
   parts around their pivot.
 - Every face needs a palette role, set with `color=` on the part or with `tag=`/`paint` on faces. Roles must exist in
@@ -123,14 +124,19 @@ The build fails with the message and the program line.
 **validation** contains `intersections` (a, b, volume, fraction, allowed, ok), `contacts` (part, parent, gap, ok),
 `disconnected`, `triangles` and `issues`.
 
-**silhouette** gives, for each turnaround view:
+**silhouette** gives, for each view image that has masks:
 
-- the flip used (sheets may be mirrored);
-- `object` width and height errors;
-- per mask: the parts it matched, `iou`, `width_error` and `height_error` (signed fractions of the object's size in
-  the image; negative means the model is too small) and `centre_offset`.
+- `object`: the whole model against the view's silhouette (the `object` mask): `iou`, `width_error` and
+  `height_error`;
+- per part mask: the parts it matched, `iou`, `width_error` and `height_error` (signed fractions of the object's size
+  in the image; negative means the model is too small) and `centre_offset`;
+- `mean_iou` over the view's part masks.
 
-A mask named `wheel` matches `wheel`, both `wheel_L` and `wheel_R`, or every instance of a mesh called `wheel`. Masks
+The model is scaled uniformly to the silhouette's size, so the errors show proportions, not absolute size. Over all
+views, `mean_object_iou` averages the object scores and `mean_iou` the part scores.
+
+A mask named `wheel` matches the part `wheel`, or else every part whose name starts with `wheel_` (`wheel_L`,
+`wheel_front_R`, ...) and every instance of a mesh called `wheel`. Masks
 show only visible pixels, so parts that are hidden behind others score low.
 
 **palette** lists the roles in use and the roles missing from the palette.

@@ -1,12 +1,12 @@
-@* Generates style anchors (scenes) or a turnaround of one asset. *@
+@* Generates style anchors (scenes) or heroes of one asset. *@
 <MudDialog>
     <DialogContent>
         <MudStack Spacing="3" Style="min-width: min(32rem, 80vw)">
             <MudRadioGroup T="string" @bind-Value="_operation">
                 <MudRadio T="string" Value="Workflows.StyleAnchor" Color="Color.Primary">Style anchor (scene)</MudRadio>
-                <MudRadio T="string" Value="Workflows.Turnaround" Color="Color.Primary">Turnaround (one asset)</MudRadio>
+                <MudRadio T="string" Value="Workflows.Hero" Color="Color.Primary">Hero (one asset)</MudRadio>
             </MudRadioGroup>
-            @if (_operation == Workflows.Turnaround)
+            @if (_operation == Workflows.Hero)
             {
                 <MudSelect T="Guid?" @bind-Value="_assetId" Label="Asset" Variant="Variant.Outlined" Margin="Margin.Dense">
                     @foreach (var a in PackAssets)
@@ -38,11 +38,11 @@
     protected override void OnInitialized()
     {
         _assetId = AssetId;
-        if (AssetId is not null) _operation = Workflows.Turnaround;
+        if (AssetId is not null) _operation = Workflows.Hero;
     }
 
     private bool Valid => _operation == Workflows.StyleAnchor ? !string.IsNullOrWhiteSpace(_description) : _assetId is not null;
 
-    private void Submit() => Dialog.Close(DialogResult.Ok(new GenerateRequest(_operation, _operation == Workflows.Turnaround ? _assetId : null,
+    private void Submit() => Dialog.Close(DialogResult.Ok(new GenerateRequest(_operation, _operation == Workflows.Hero ? _assetId : null,
         string.IsNullOrWhiteSpace(_description) ? null : _description.Trim(), _count)));
 }

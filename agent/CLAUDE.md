@@ -14,30 +14,41 @@ Work through these stages in order. Stop and ask the user wherever this list say
    several typical objects of the pack (count 2–4). Then tell the user the images are ready, and **wait** for them
    to pick or reject.
 3. **Asset.** Use `create_asset` with a triangle budget that fits its kind when it differs from the pack default
-   (`search_knowledge("triangle budget")`), then start `start_job` with operation `turnaround` (count 2–3), describing only
-   the object. **Wait** for the user to pick a turnaround before you model.
-4. **Segmentation.** Decide the part names: short nouns, without `_L`/`_R`, one name per mirrored pair. Then start
-   `start_job` with operation `segment-parts` on the picked turnaround (`conceptImageId`) with those parts. Read
-   `get_segmentation`. Parts listed as missing (`not_found`, or `whole_object` when the detector returned the whole
-   object) must be sized from the manifest and their neighbours.
-5. **Palette.** Read `get_part_colors`. Create main palette entries with `upsert_palette_entries`, starting from the
+   (`search_knowledge("triangle budget")`), then start `start_job` with operation `hero` (count 2–3), describing only
+   the object. A hero is one image of the asset alone, seen three-quarter from the front-left. **Wait** for the user
+   to pick a hero.
+4. **Views.** Start `start_job` with operation `views` on the picked hero (`conceptImageId`). It builds a 3D splat of
+   the hero and stores front, side, top and back view images, all at one scale, each with its silhouette. Read
+   `list_concepts` for the hero's `front`. When it is `assumed` (the object isn't mirror-symmetric), **ask** the user
+   to check that the front view shows the front; they can turn it on the hero's page, or you can rerun `views` with
+   `frontYaw` (the hero's `frontYaw` plus 90, 180 or 270).
+5. **Segmentation.** Decide the part names: short nouns, without `_L`/`_R`, one name per mirrored pair. Then start
+   `start_job` with operation `segment-parts` on the hero (`conceptImageId`) with those parts. Read
+   `get_segmentation`: per view, the image size, the silhouette bounds and the part masks. Each view also has a mask
+   named `object`, its exact silhouette. Parts listed as missing (`not_found`, or `whole_object` when the detector
+   returned the whole object) must be sized from the manifest and their neighbours. The views have proportions, not
+   real sizes: set the dimensions from the brief and common sense, and use the views for the proportions.
+6. **Palette.** Read `get_part_colors`. Create main palette entries with `upsert_palette_entries`, starting from the
    measured colours and rounding them to clean values. Reuse existing roles where they fit.
-6. **Knowledge.** Before the manifest, `search_knowledge` with the asset's kind and notable features (for example
+7. **Knowledge.** Before the manifest, `search_knowledge` with the asset's kind and notable features (for example
    "cart wheel container", "old wooden wear") and `read_knowledge` the notes that match. Apply them: an open
    container needs a cavity, a rustic style needs wear.
-7. **Manifest.** Use `save_manifest` to record parts, parents, primitive kinds, mirror flags, connections (fixed,
+8. **Manifest.** Use `save_manifest` to record parts, parents, primitive kinds, mirror flags, connections (fixed,
    rotate or slide, with an axis) and symmetry.
-8. **Program.** Use `submit_program` with a part program (reference below). Poll `get_job`, then read
+9. **Program.** Use `submit_program` with a part program (reference below). Poll `get_job`, then read
    `get_build_report`.
-9. **Iterate.** Fix any failing validator first: intersections, contacts, disconnected parts, the triangle budget,
-   untagged faces and unknown roles. Then improve the silhouette scores:
-   - a negative `width_error` or `height_error` means the part is too small;
-   - `centre_offset` says where it should move;
+10. **Iterate.** Fix any failing validator first: intersections, contacts, disconnected parts, the triangle budget,
+   untagged faces and unknown roles. Then improve the silhouette scores. The `object` score of each view (the whole
+   model against the silhouette) comes first; the part scores show what to fix:
+   - a negative `width_error` or `height_error` means the model or part is too small;
+   - `centre_offset` says where a part should move;
    - low `iou` with small errors usually means the shape or orientation is wrong.
 
-   Stop when the build is validated and the scores are reasonable (mean IoU above about 0.7). Also stop after a
-   handful of attempts that don't improve, and report what blocks you.
-10. **Scenes** (when the user asks, or the pack's assets are built). `get_pack` lists each asset's bounds. Use
+   The bar is "looks right", not an exact copy. Stop when the build is validated, `mean_object_iou` is at least 0.8
+   and no view's `object` `iou` is below 0.7. Part scores guide the fixes but don't have to reach a target. The back
+   view is the splat's guess of the hidden side, so trust the front and side more. Also stop after a handful of
+   attempts that don't improve, and report what blocks you.
+11. **Scenes** (when the user asks, or the pack's assets are built). `get_pack` lists each asset's bounds. Use
    `save_scene` to place assets on the ground (y = min bound at 0), a little apart, turned to face sensible
    directions, as in the picked style anchor. Poll `get_job`, then `get_scene`. Fix the overlaps and the placements
    that are not grounded.

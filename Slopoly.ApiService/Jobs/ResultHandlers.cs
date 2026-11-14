@@ -9,14 +9,14 @@ namespace Slopoly.ApiService.Jobs;
 // Output shapes are produced by the workers (see workers/README.md). The UI refreshes from the job's "succeeded"
 // broadcast, so handlers only add or update records.
 
-/// <summary>style-anchor and turnaround: <c>{ images: [ { fileId, width, height, views? } ] }</c>.</summary>
+/// <summary>style-anchor and hero: <c>{ images: [ { fileId, width, height, seed } ] }</c>.</summary>
 public sealed class ConceptImageResults(SlopolyDb db) : IJobResultHandler
 {
-    public bool Handles(Job job) => job.Kind == JobKinds.Comfy && job.Operation is Workflows.StyleAnchor or Workflows.Turnaround;
+    public bool Handles(Job job) => job.Kind == JobKinds.Comfy && job.Operation is Workflows.StyleAnchor or Workflows.Hero;
 
     public Task ApplyAsync(Job job, JsonObject outputs)
     {
-        var kind = job.Operation == Workflows.Turnaround ? ConceptKind.Turnaround : ConceptKind.Anchor;
+        var kind = job.Operation == Workflows.Hero ? ConceptKind.Hero : ConceptKind.Anchor;
         foreach (var image in outputs["images"]?.AsArray() ?? [])
         {
             db.ConceptImages.Add(new ConceptImage
@@ -29,28 +29,65 @@ public sealed class ConceptImageResults(SlopolyDb db) : IJobResultHandler
                 Width = image["width"]?.GetValue<int>() ?? 0,
                 Height = image["height"]?.GetValue<int>() ?? 0,
                 Seed = image["seed"]?.GetValue<long>(),
-                Views = image["views"]?.Deserialize<Dictionary<string, Rect>>(Broker.Json) ?? [],
             });
         }
         return Task.CompletedTask;
     }
 }
 
-/// <summary>segment-parts: <c>{ masks: [ { part, view, fileId, bounds, area, colors } ], missing: [ { part, view } ] }</c>.</summary>
+/// <summary>
+/// views: <c>{ frontYaw, front, views: [ { view, fileId, maskFileId, width, height } ] }</c>. The new views replace the
+/// hero's old ones (and their masks); the hero keeps the front and the seed.
+/// </summary>
+public sealed class ViewsResults(SlopolyDb db) : IJobResultHandler
+{
+    public bool Handles(Job job) => job.Kind == JobKinds.Comfy && job.Operation == Workflows.Views;
+
+    public async Task ApplyAsync(Job job, JsonObject outputs)
+    {
+        if (await db.ConceptImages.FindAsync(job.Inputs["heroId"]!.GetValue<Guid>()) is not { } hero) return;
+        var old = db.ConceptImages.Where(c => c.SourceConceptId == hero.Id && c.Kind == ConceptKind.View);
+        await db.PartMasks.Where(m => old.Any(v => v.Id == m.ConceptImageId)).ExecuteDeleteAsync();
+        await old.ExecuteDeleteAsync();
+        hero.FrontYaw = outputs["frontYaw"]?.GetValue<double>();
+        hero.Front = outputs["front"]?.GetValue<string>();
+        hero.ViewsSeed = job.Inputs["seed"]?.GetValue<long>();
+        foreach (var view in outputs["views"]?.AsArray() ?? [])
+        {
+            db.ConceptImages.Add(new ConceptImage
+            {
+                PackId = hero.PackId,
+                AssetId = hero.AssetId,
+                JobId = job.Id,
+                Kind = ConceptKind.View,
+                View = view!["view"]!.GetValue<string>(),
+                SourceConceptId = hero.Id,
+                FileId = view["fileId"]!.GetValue<Guid>(),
+                MaskFileId = view["maskFileId"]?.GetValue<Guid>(),
+                Width = view["width"]?.GetValue<int>() ?? 0,
+                Height = view["height"]?.GetValue<int>() ?? 0,
+            });
+        }
+    }
+}
+
+/// <summary>
+/// segment-parts: <c>{ masks: [ { conceptImageId, part, view, fileId, bounds, area, colors } ], missing: [ { part,
+/// view, reason } ] }</c>, one mask per view and part, including each view's <c>object</c> silhouette.
+/// </summary>
 public sealed class SegmentationResults(SlopolyDb db) : IJobResultHandler
 {
     public bool Handles(Job job) => job.Kind == JobKinds.Comfy && job.Operation == Workflows.SegmentParts;
 
     public async Task ApplyAsync(Job job, JsonObject outputs)
     {
-        var conceptId = job.Inputs["conceptImageId"]!.GetValue<Guid>();
-        // A new segmentation of the same image replaces the previous masks.
-        await db.PartMasks.Where(m => m.ConceptImageId == conceptId).ExecuteDeleteAsync();
+        // A new segmentation of the same views replaces the previous masks.
+        var viewIds = (job.Inputs["views"]?.AsArray() ?? []).Select(v => v!["conceptImageId"]!.GetValue<Guid>()).ToList();
+        await db.PartMasks.Where(m => viewIds.Contains(m.ConceptImageId)).ExecuteDeleteAsync();
         foreach (var mask in outputs["masks"]?.AsArray() ?? [])
         {
             var parsed = mask.Deserialize<PartMask>(Broker.Json)!;
             parsed.Id = Guid.CreateVersion7();
-            parsed.ConceptImageId = conceptId;
             parsed.JobId = job.Id;
             db.PartMasks.Add(parsed);
         }

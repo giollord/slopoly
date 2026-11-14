@@ -28,11 +28,11 @@
         </TemplateColumn>
         <PropertyColumn Property="a => a.Description" Sortable="false" />
         <PropertyColumn Property="a => a.CreatedAt" Title="Created" Format="g" />
-        <TemplateColumn T="Asset" Title="Turnaround" Sortable="false">
+        <TemplateColumn T="Asset" Title="Heroes" Sortable="false">
             <CellTemplate>
                 <MudStack Row="true" AlignItems="AlignItems.Center" Spacing="1">
                     <MudNumericField T="int" @bind-Value="_counts[context.Item.Id]" Min="1" Max="4" Variant="Variant.Outlined" Margin="Margin.Dense" Style="width: 4.5rem" />
-                    <MudButton Variant="Variant.Outlined" Size="Size.Small" OnClick="() => TurnaroundAsync(context.Item)">Generate</MudButton>
+                    <MudButton Variant="Variant.Outlined" Size="Size.Small" OnClick="() => HeroAsync(context.Item)">Generate</MudButton>
                 </MudStack>
             </CellTemplate>
         </TemplateColumn>
@@ -96,9 +96,9 @@
             await Try(() => Api.DeleteAsync($"api/assets/{asset.Id}"));
     }
 
-    private Task TurnaroundAsync(Asset asset) => Try(async () =>
+    private Task HeroAsync(Asset asset) => Try(async () =>
     {
-        await Api.PostAsync<Job>($"api/packs/{PackId}/generate", new GenerateRequest(Workflows.Turnaround, asset.Id, null, _counts[asset.Id]));
-        Snackbar.Add($"Turnaround for {asset.Name} queued.", Severity.Info);
+        await Api.PostAsync<Job>($"api/packs/{PackId}/generate", new GenerateRequest(Workflows.Hero, asset.Id, null, _counts[asset.Id]));
+        Snackbar.Add($"Heroes for {asset.Name} queued.", Severity.Info);
     });
 }

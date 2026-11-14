@@ -120,9 +120,10 @@ public sealed class StudioService(SlopolyDb db, FileStore files, Notifier notifi
     public async Task DeleteConceptAsync(Guid id)
     {
         var concept = await db.ConceptImages.FindAsync(id) ?? throw StudioException.NotFound("Concept image");
-        await db.PartMasks.Where(m => m.ConceptImageId == id).ExecuteDeleteAsync();
-        db.ConceptImages.Remove(concept);
-        await db.SaveChangesAsync();
+        // A hero takes its views (and their masks) with it.
+        var gone = db.ConceptImages.Where(c => c.Id == id || (c.SourceConceptId == id && c.Kind == ConceptKind.View));
+        await db.PartMasks.Where(m => gone.Any(c => c.Id == m.ConceptImageId)).ExecuteDeleteAsync();
+        await gone.ExecuteDeleteAsync();
         await notifier.Changed<ConceptImage>(id, concept.PackId, concept.AssetId);
     }
 
@@ -135,11 +136,13 @@ public sealed class StudioService(SlopolyDb db, FileStore files, Notifier notifi
         return concept;
     }
 
-    /// <summary>Concepts of a pack (or of one asset), rejected ones excluded unless asked for.</summary>
+    /// <summary>Concepts of a pack (or of one asset). Rejected ones, and the views of rejected heroes, are excluded
+    /// unless asked for.</summary>
     public Task<List<ConceptImage>> ListConceptsAsync(Guid packId, Guid? assetId = null, bool includeRejected = false) =>
         db.ConceptImages
             .Where(c => c.PackId == packId && (assetId == null || c.AssetId == assetId)
-                        && (includeRejected || c.Selection != Selection.Rejected))
+                        && (includeRejected || (c.Selection != Selection.Rejected
+                            && !db.ConceptImages.Any(h => h.Id == c.SourceConceptId && h.Selection == Selection.Rejected))))
             .OrderBy(c => c.CreatedAt).ToListAsync();
 
     public async Task<Manifest> SaveManifestAsync(Guid assetId, JsonObject content)

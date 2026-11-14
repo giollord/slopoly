@@ -15,7 +15,7 @@ partial class SlopolyDbModelSnapshot : ModelSnapshot
     // If you encounter a merge conflict in the line below, it means you need to
     // discard one of the migration branches and recreate its migrations on top of
     // the other branch. See https://aka.ms/efcore-docs-migrations-conflicts for more info.
-    public override string LastMigrationId => "20261114180150_ScenesBudgetsSeeds";
+    public override string LastMigrationId => "20261114194519_HeroesAndViews";
 
     protected override void BuildModel(ModelBuilder modelBuilder)
     {
@@ -114,6 +114,12 @@ partial class SlopolyDbModelSnapshot : ModelSnapshot
                 b.Property<Guid>("FileId")
                     .HasColumnType("TEXT");
 
+                b.Property<string>("Front")
+                    .HasColumnType("TEXT");
+
+                b.Property<double?>("FrontYaw")
+                    .HasColumnType("REAL");
+
                 b.Property<int>("Height")
                     .HasColumnType("INTEGER");
 
@@ -122,6 +128,9 @@ partial class SlopolyDbModelSnapshot : ModelSnapshot
 
                 b.Property<string>("Kind")
                     .IsRequired()
+                    .HasColumnType("TEXT");
+
+                b.Property<Guid?>("MaskFileId")
                     .HasColumnType("TEXT");
 
                 b.Property<Guid>("PackId")
@@ -134,9 +143,14 @@ partial class SlopolyDbModelSnapshot : ModelSnapshot
                     .IsRequired()
                     .HasColumnType("TEXT");
 
-                b.Property<string>("Views")
-                    .IsRequired()
+                b.Property<Guid?>("SourceConceptId")
                     .HasColumnType("TEXT");
+
+                b.Property<string>("View")
+                    .HasColumnType("TEXT");
+
+                b.Property<long?>("ViewsSeed")
+                    .HasColumnType("INTEGER");
 
                 b.Property<int>("Width")
                     .HasColumnType("INTEGER");
@@ -146,6 +160,8 @@ partial class SlopolyDbModelSnapshot : ModelSnapshot
                 b.HasIndex("AssetId");
 
                 b.HasIndex("PackId");
+
+                b.HasIndex("SourceConceptId");
 
                 b.ToTable("ConceptImages");
             });

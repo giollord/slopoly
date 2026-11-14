@@ -1,0 +1,366 @@
+{
+ "1587190068390284": {
+  "inputs": {
+   "unet_name": "qwen_image_edit_2511_fp8mixed.safetensors",
+   "weight_dtype": "default"
+  },
+  "class_type": "UNETLoader",
+  "_meta": {
+   "title": "Load Diffusion Model"
+  }
+ },
+ "2176439530896942": {
+  "inputs": {
+   "shift": 3.1,
+   "sampling": "flow",
+   "model": [
+    "1587190068390284",
+    0
+   ]
+  },
+  "class_type": "ModelSamplingAuraFlow",
+  "_meta": {
+   "title": "ModelSamplingAuraFlow"
+  }
+ },
+ "3979221922393941": {
+  "inputs": {
+   "strength": 1,
+   "pre_cfg": false,
+   "model": [
+    "2176439530896942",
+    0
+   ]
+  },
+  "class_type": "CFGNorm",
+  "_meta": {
+   "title": "CFGNorm"
+  }
+ },
+ "28438227033620": {
+  "inputs": {
+   "lora_name": "Qwen-Image-Edit-2511-Lightning-4steps-V1.0-bf16.safetensors",
+   "strength_model": 1,
+   "model": [
+    "3979221922393941",
+    0
+   ]
+  },
+  "class_type": "LoraLoaderModelOnly",
+  "_meta": {
+   "title": "Load LoRA"
+  }
+ },
+ "2792089133732502": {
+  "inputs": {
+   "clip_name": "qwen_2.5_vl_7b_fp8_scaled.safetensors",
+   "type": "qwen_image",
+   "device": "default"
+  },
+  "class_type": "CLIPLoader",
+  "_meta": {
+   "title": "Load CLIP"
+  }
+ },
+ "435108457559644": {
+  "inputs": {
+   "vae_name": "qwen_image_vae.safetensors"
+  },
+  "class_type": "VAELoader",
+  "_meta": {
+   "title": "Load VAE"
+  }
+ },
+ "1703277577573753": {
+  "inputs": {
+   "prompt": null,
+   "clip": [
+    "2792089133732502",
+    0
+   ],
+   "vae": [
+    "435108457559644",
+    0
+   ],
+   "image1": [
+    "845774021634665",
+    0
+   ],
+   "image2": [
+    "4494325662186951",
+    0
+   ],
+   "image3": [
+    "3330815039554844",
+    0
+   ]
+  },
+  "class_type": "TextEncodeQwenImageEditPlus",
+  "_meta": {
+   "title": "in:prompt"
+  }
+ },
+ "254409487333357": {
+  "inputs": {
+   "prompt": "",
+   "clip": [
+    "2792089133732502",
+    0
+   ],
+   "vae": [
+    "435108457559644",
+    0
+   ],
+   "image1": [
+    "845774021634665",
+    0
+   ],
+   "image2": [
+    "4494325662186951",
+    0
+   ],
+   "image3": [
+    "3330815039554844",
+    0
+   ]
+  },
+  "class_type": "TextEncodeQwenImageEditPlus",
+  "_meta": {
+   "title": "Text Encode Qwen Image Edit Plus"
+  }
+ },
+ "1730070106877363": {
+  "inputs": {
+   "image": "example.png"
+  },
+  "class_type": "LoadImage",
+  "_meta": {
+   "title": "in:reference_1"
+  }
+ },
+ "1289942661659731": {
+  "inputs": {
+   "image": [
+    "1730070106877363",
+    0
+   ]
+  },
+  "class_type": "FluxKontextImageScale",
+  "_meta": {
+   "title": "FluxKontextImageScale"
+  }
+ },
+ "2396475012886312": {
+  "inputs": {
+   "value": false
+  },
+  "class_type": "PrimitiveBoolean",
+  "_meta": {
+   "title": "in:use_reference_1"
+  }
+ },
+ "845774021634665": {
+  "inputs": {
+   "switch": [
+    "2396475012886312",
+    0
+   ],
+   "on_true": [
+    "1289942661659731",
+    0
+   ]
+  },
+  "class_type": "ComfySwitchNode",
+  "_meta": {
+   "title": "If/Else Switch"
+  }
+ },
+ "2554415554357821": {
+  "inputs": {
+   "image": "example.png"
+  },
+  "class_type": "LoadImage",
+  "_meta": {
+   "title": "in:reference_2"
+  }
+ },
+ "4096562155716343": {
+  "inputs": {
+   "image": [
+    "2554415554357821",
+    0
+   ]
+  },
+  "class_type": "FluxKontextImageScale",
+  "_meta": {
+   "title": "FluxKontextImageScale"
+  }
+ },
+ "1160564528243327": {
+  "inputs": {
+   "value": false
+  },
+  "class_type": "PrimitiveBoolean",
+  "_meta": {
+   "title": "in:use_reference_2"
+  }
+ },
+ "4494325662186951": {
+  "inputs": {
+   "switch": [
+    "1160564528243327",
+    0
+   ],
+   "on_true": [
+    "4096562155716343",
+    0
+   ]
+  },
+  "class_type": "ComfySwitchNode",
+  "_meta": {
+   "title": "If/Else Switch"
+  }
+ },
+ "1373703213611071": {
+  "inputs": {
+   "image": "example.png"
+  },
+  "class_type": "LoadImage",
+  "_meta": {
+   "title": "in:reference_3"
+  }
+ },
+ "2781062923741842": {
+  "inputs": {
+   "image": [
+    "1373703213611071",
+    0
+   ]
+  },
+  "class_type": "FluxKontextImageScale",
+  "_meta": {
+   "title": "FluxKontextImageScale"
+  }
+ },
+ "3025572564378599": {
+  "inputs": {
+   "value": false
+  },
+  "class_type": "PrimitiveBoolean",
+  "_meta": {
+   "title": "in:use_reference_3"
+  }
+ },
+ "3330815039554844": {
+  "inputs": {
+   "switch": [
+    "3025572564378599",
+    0
+   ],
+   "on_true": [
+    "2781062923741842",
+    0
+   ]
+  },
+  "class_type": "ComfySwitchNode",
+  "_meta": {
+   "title": "If/Else Switch"
+  }
+ },
+ "3229355790224181": {
+  "inputs": {
+   "reference_latents_method": "index_timestep_zero",
+   "conditioning": [
+    "1703277577573753",
+    0
+   ]
+  },
+  "class_type": "FluxKontextMultiReferenceLatentMethod",
+  "_meta": {
+   "title": "Edit Model Reference Method"
+  }
+ },
+ "3862706594486214": {
+  "inputs": {
+   "reference_latents_method": "index_timestep_zero",
+   "conditioning": [
+    "254409487333357",
+    0
+   ]
+  },
+  "class_type": "FluxKontextMultiReferenceLatentMethod",
+  "_meta": {
+   "title": "Edit Model Reference Method"
+  }
+ },
+ "3260142636979967": {
+  "inputs": {
+   "width": 1024,
+   "height": 1024,
+   "batch_size": 1
+  },
+  "class_type": "EmptySD3LatentImage",
+  "_meta": {
+   "title": "EmptySD3LatentImage"
+  }
+ },
+ "1012708692268379": {
+  "inputs": {
+   "seed": 0,
+   "steps": 4,
+   "cfg": 1,
+   "sampler_name": "euler",
+   "scheduler": "simple",
+   "denoise": 1,
+   "model": [
+    "28438227033620",
+    0
+   ],
+   "positive": [
+    "3229355790224181",
+    0
+   ],
+   "negative": [
+    "3862706594486214",
+    0
+   ],
+   "latent_image": [
+    "3260142636979967",
+    0
+   ]
+  },
+  "class_type": "KSampler",
+  "_meta": {
+   "title": "in:seed"
+  }
+ },
+ "2332598988490693": {
+  "inputs": {
+   "samples": [
+    "1012708692268379",
+    0
+   ],
+   "vae": [
+    "435108457559644",
+    0
+   ]
+  },
+  "class_type": "VAEDecode",
+  "_meta": {
+   "title": "VAE Decode"
+  }
+ },
+ "4063345663043645": {
+  "inputs": {
+   "filename_prefix": "slopoly/hero-qwen",
+   "images": [
+    "2332598988490693",
+    0
+   ]
+  },
+  "class_type": "SaveImage",
+  "_meta": {
+   "title": "out:image"
+  }
+ }
+}

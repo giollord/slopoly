@@ -42,7 +42,9 @@ public sealed class Asset
     public DateTimeOffset CreatedAt { get; set; } = DateTimeOffset.UtcNow;
 }
 
-public enum ConceptKind { Anchor, Turnaround }
+/// <summary>Anchor: a scene that sets the pack's style. Hero: one asset, three-quarter front view. View: an
+/// orthographic front, side, top or back image rendered from a hero's splat.</summary>
+public enum ConceptKind { Anchor, Hero, View }
 
 public enum Selection { None, Picked, Rejected }
 
@@ -62,14 +64,25 @@ public sealed class ConceptImage
     public long? Seed { get; set; }
     public int Width { get; set; }
     public int Height { get; set; }
-    /// <summary>Turnaround view regions by view name (front, side, top).</summary>
-    public Dictionary<string, Rect> Views { get; set; } = [];
+    /// <summary>A view's name: front, side, top or back.</summary>
+    public string? View { get; set; }
+    /// <summary>A view's hero.</summary>
+    public Guid? SourceConceptId { get; set; }
+    /// <summary>A view's object silhouette (white = object), from the render.</summary>
+    public Guid? MaskFileId { get; set; }
+    /// <summary>A hero's front direction in degrees on the splat turntable, set by its views job.</summary>
+    public double? FrontYaw { get; set; }
+    /// <summary>How a hero's front was found: detected (symmetry), assumed (no symmetry, so the hero's own direction)
+    /// or given (by the user).</summary>
+    public string? Front { get; set; }
+    /// <summary>The seed of a hero's views job; the same seed rebuilds the same splat.</summary>
+    public long? ViewsSeed { get; set; }
     public DateTimeOffset CreatedAt { get; set; } = DateTimeOffset.UtcNow;
 }
 
 public sealed record MeasuredColor(string Hex, double Coverage);
 
-/// <summary>One part's mask in one view of a turnaround, with its measured colours.</summary>
+/// <summary>One part's mask in one view image, with its measured colours. Part "object" is the view's silhouette.</summary>
 public sealed class PartMask
 {
     public Guid Id { get; set; } = Guid.CreateVersion7();
@@ -78,10 +91,21 @@ public sealed class PartMask
     public string Part { get; set; } = "";
     public string View { get; set; } = "";
     public Guid FileId { get; set; }
-    /// <summary>Bounding box in turnaround image pixels.</summary>
+    /// <summary>Bounding box in view image pixels.</summary>
     public Rect Bounds { get; set; } = new(0, 0, 0, 0);
     public int Area { get; set; }
     public List<MeasuredColor> Colors { get; set; } = [];
+}
+
+public static class ViewNames
+{
+    public static readonly string[] All = ["front", "side", "top", "back"];
+}
+
+public static class PartMasks
+{
+    /// <summary>The part name of a view's whole-object silhouette.</summary>
+    public const string Object = "object";
 }
 
 public enum PaletteKind { Solid, Gradient }

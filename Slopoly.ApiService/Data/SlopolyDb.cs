@@ -37,7 +37,7 @@ public sealed class SlopolyDb(DbContextOptions<SlopolyDb> options) : DbContext(o
         b.Entity<Pack>().HasIndex(p => p.Name);
         b.Entity<StyleReference>().HasIndex(r => r.PackId);
         b.Entity<Asset>().HasIndex(a => a.PackId);
-        b.Entity<ConceptImage>(e => { e.HasIndex(c => c.PackId); e.HasIndex(c => c.AssetId); e.Json(c => c.Views); });
+        b.Entity<ConceptImage>(e => { e.HasIndex(c => c.PackId); e.HasIndex(c => c.AssetId); e.HasIndex(c => c.SourceConceptId); });
         b.Entity<PartMask>(e => { e.HasIndex(m => m.ConceptImageId); e.Json(m => m.Bounds); e.Json(m => m.Colors); });
         b.Entity<PaletteEntry>().HasIndex(p => new { p.PackId, p.Role }).IsUnique();
         b.Entity<PaletteVariant>().HasIndex(p => new { p.PackId, p.Name }).IsUnique();

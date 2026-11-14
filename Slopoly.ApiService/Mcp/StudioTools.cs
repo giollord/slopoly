@@ -28,8 +28,9 @@ public sealed class StudioTools(StudioService studio, GenerationService generati
 
     public sealed record MaskInfo(Guid Id, string Part, string View, Guid FileId, Rect Bounds, int Area);
 
-    public sealed record Segmentation(Guid ConceptImageId, int Width, int Height, Dictionary<string, Rect> Views,
-        List<MaskInfo> Masks, JsonNode? Missing);
+    public sealed record ViewSegmentation(Guid ConceptImageId, string? View, int Width, int Height, Rect? Silhouette, List<MaskInfo> Masks);
+
+    public sealed record Segmentation(Guid HeroId, double? FrontYaw, string? Front, List<ViewSegmentation> Views, JsonNode? Missing);
 
     public sealed record PartColors(string Part, string View, List<MeasuredColor> Colors);
 
@@ -68,18 +69,22 @@ public sealed class StudioTools(StudioService studio, GenerationService generati
     [McpServerTool(Name = "start_job"), Description("""
         Starts a generation job and returns it (poll get_job). operation:
         - "style-anchor": packId, description = scene description; uses the pack style text and style references.
-        - "turnaround": assetId (needs a picked style anchor), optional description of the object.
-        - "segment-parts": conceptImageId (a picked turnaround) and parts = part names from the manifest.
+        - "hero": assetId (needs a picked style anchor), optional description of the object. A hero is one image of
+          the asset alone, a three-quarter front view in the pack's style; the user picks one.
+        - "views": conceptImageId = a picked hero. Builds a 3D splat from it and stores front, side, top and back view
+          images with silhouettes (about a minute). frontYaw (degrees) remakes them from the same splat with that front.
+        - "segment-parts": conceptImageId = a hero with views, parts = part names from the manifest.
         count (1-4) images per run; seed optional.
         """)]
     public Task<Job> StartJob(string operation, Guid? packId = null, Guid? assetId = null, string? description = null,
-        Guid? conceptImageId = null, List<string>? parts = null, int count = 1, long? seed = null) => operation switch
+        Guid? conceptImageId = null, List<string>? parts = null, int count = 1, long? seed = null, double? frontYaw = null) => operation switch
     {
         Workflows.StyleAnchor => generation.StyleAnchorAsync(packId ?? throw new StudioException("style-anchor needs packId."), description ?? "", count, seed),
-        Workflows.Turnaround => generation.TurnaroundAsync(assetId ?? throw new StudioException("turnaround needs assetId."), description, count, seed),
+        Workflows.Hero => generation.HeroAsync(assetId ?? throw new StudioException("hero needs assetId."), description, count, seed),
+        Workflows.Views => generation.ViewsAsync(conceptImageId ?? throw new StudioException("views needs conceptImageId (the hero)."), frontYaw),
         Workflows.SegmentParts => generation.SegmentAsync(conceptImageId ?? throw new StudioException("segment-parts needs conceptImageId."),
             parts ?? throw new StudioException("segment-parts needs parts.")),
-        _ => throw new StudioException($"Unknown operation \"{operation}\" (style-anchor, turnaround, segment-parts)."),
+        _ => throw new StudioException($"Unknown operation \"{operation}\" (style-anchor, hero, views, segment-parts)."),
     };
 
     [McpServerTool(Name = "get_job", ReadOnly = true), Description("A job's state, progress, error and outputs.")]
@@ -91,7 +96,7 @@ public sealed class StudioTools(StudioService studio, GenerationService generati
     [McpServerTool(Name = "retry_job"), Description("Queues a failed or cancelled job again.")]
     public Task<Job> RetryJob(Guid jobId) => jobs.RetryAsync(jobId);
 
-    [McpServerTool(Name = "list_concepts", ReadOnly = true), Description("Concept images the user has not rejected (style anchors and turnarounds), with selection (Picked/None), size and view rectangles. Optionally for one asset.")]
+    [McpServerTool(Name = "list_concepts", ReadOnly = true), Description("Concept images the user has not rejected, with kind (Anchor, Hero, View), selection (Picked/None) and size. Views name their view and their hero (sourceConceptId); heroes carry frontYaw and front (detected, assumed or given). Optionally for one asset.")]
     public Task<List<ConceptImage>> ListConcepts(Guid packId, Guid? assetId = null) => studio.ListConceptsAsync(packId, assetId);
 
     [McpServerTool(Name = "revise_concept"), Description("""
@@ -101,20 +106,21 @@ public sealed class StudioTools(StudioService studio, GenerationService generati
         """)]
     public Task<Job> ReviseConcept(Guid conceptImageId, string? change = null, int count = 2) => generation.ReviseAsync(conceptImageId, change, count);
 
-    [McpServerTool(Name = "get_segmentation", ReadOnly = true), Description("Part masks of a turnaround: per part and view the mask file id, bounds in image pixels and area, plus parts that were not found.")]
+    [McpServerTool(Name = "get_segmentation", ReadOnly = true), Description("A hero's views and part masks: per view the image size, the object silhouette bounds and each part's mask file id, bounds in view pixels and area (part \"object\" is the silhouette), plus parts that were not found. Also the hero's front and how it was found.")]
     public async Task<Segmentation> GetSegmentation(Guid conceptImageId)
     {
-        var concept = await db.ConceptImages.FindAsync(conceptImageId) ?? throw StudioException.NotFound("Concept image");
-        var masks = await db.PartMasks.Where(m => m.ConceptImageId == conceptImageId).OrderBy(m => m.Part).ThenBy(m => m.View).ToListAsync();
-        var job = masks.Count > 0 ? await db.Jobs.FindAsync(masks[0].JobId) : null;
-        var missing = job?.Outputs?["missing"]?.DeepClone();
-        return new(concept.Id, concept.Width, concept.Height, concept.Views,
-            masks.Select(m => new MaskInfo(m.Id, m.Part, m.View, m.FileId, m.Bounds, m.Area)).ToList(), missing);
+        var hero = await generation.HeroOfAsync(conceptImageId);
+        var masks = (await generation.MasksOfAsync(hero.Id)).ToLookup(m => m.ConceptImageId);
+        var job = masks.SelectMany(g => g).FirstOrDefault() is { } first ? await db.Jobs.FindAsync(first.JobId) : null;
+        var views = (await generation.ViewsOfAsync(hero.Id)).Select(v => new ViewSegmentation(v.Id, v.View, v.Width, v.Height,
+            masks[v.Id].FirstOrDefault(m => m.Part == PartMasks.Object)?.Bounds,
+            masks[v.Id].Select(m => new MaskInfo(m.Id, m.Part, m.View, m.FileId, m.Bounds, m.Area)).ToList())).ToList();
+        return new(hero.Id, hero.FrontYaw, hero.Front, views, job?.Outputs?["missing"]?.DeepClone());
     }
 
-    [McpServerTool(Name = "get_part_colors", ReadOnly = true), Description("Measured dominant colours (hex, coverage) per part and view of a segmented turnaround: starting points for palette entries.")]
+    [McpServerTool(Name = "get_part_colors", ReadOnly = true), Description("Measured dominant colours (hex, coverage) per part and view of a segmented hero: starting points for palette entries.")]
     public async Task<List<PartColors>> GetPartColors(Guid conceptImageId) =>
-        (await db.PartMasks.Where(m => m.ConceptImageId == conceptImageId).OrderBy(m => m.Part).ThenBy(m => m.View).ToListAsync())
+        (await generation.MasksOfAsync((await generation.HeroOfAsync(conceptImageId)).Id))
         .Select(m => new PartColors(m.Part, m.View, m.Colors)).ToList();
 
     [McpServerTool(Name = "get_palette", ReadOnly = true), Description("The pack's main palette entries (role, kind, slot, colours) and its variants. Model only with main-palette roles.")]

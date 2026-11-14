@@ -1,0 +1,494 @@
+{
+ "recipe": "qwen-image-edit-references",
+ "description": "Qwen-Image-Edit-2511 (fp8mixed, Lightning 4-step LoRA) generating a new image at a set size with up to 3 reference images; wiring after the image_qwen_image_edit_2511 template.",
+ "params": {
+  "width": {
+   "type": "int"
+  },
+  "height": {
+   "type": "int"
+  },
+  "prefix": {
+   "type": "string"
+  }
+ },
+ "ops": [
+  {
+   "op": "add_node",
+   "class_type": "UNETLoader",
+   "as": "unet"
+  },
+  {
+   "op": "set_widget",
+   "node": "unet",
+   "widget": "unet_name",
+   "value": "qwen_image_edit_2511_fp8mixed.safetensors"
+  },
+  {
+   "op": "add_node",
+   "class_type": "ModelSamplingAuraFlow",
+   "as": "shift"
+  },
+  {
+   "op": "set_widget",
+   "node": "shift",
+   "widget": "shift",
+   "value": 3.1
+  },
+  {
+   "op": "connect",
+   "from": "unet.MODEL",
+   "to": "shift.model"
+  },
+  {
+   "op": "add_node",
+   "class_type": "CFGNorm",
+   "as": "norm"
+  },
+  {
+   "op": "set_widget",
+   "node": "norm",
+   "widget": "strength",
+   "value": 1
+  },
+  {
+   "op": "connect",
+   "from": "shift.MODEL",
+   "to": "norm.model"
+  },
+  {
+   "op": "add_node",
+   "class_type": "LoraLoaderModelOnly",
+   "as": "lightning"
+  },
+  {
+   "op": "set_widget",
+   "node": "lightning",
+   "widget": "lora_name",
+   "value": "Qwen-Image-Edit-2511-Lightning-4steps-V1.0-bf16.safetensors"
+  },
+  {
+   "op": "set_widget",
+   "node": "lightning",
+   "widget": "strength_model",
+   "value": 1
+  },
+  {
+   "op": "connect",
+   "from": "norm.MODEL",
+   "to": "lightning.model"
+  },
+  {
+   "op": "add_node",
+   "class_type": "CLIPLoader",
+   "as": "clip"
+  },
+  {
+   "op": "set_widget",
+   "node": "clip",
+   "widget": "clip_name",
+   "value": "qwen_2.5_vl_7b_fp8_scaled.safetensors"
+  },
+  {
+   "op": "set_widget",
+   "node": "clip",
+   "widget": "type",
+   "value": "qwen_image"
+  },
+  {
+   "op": "add_node",
+   "class_type": "VAELoader",
+   "as": "vae"
+  },
+  {
+   "op": "set_widget",
+   "node": "vae",
+   "widget": "vae_name",
+   "value": "qwen_image_vae.safetensors"
+  },
+  {
+   "op": "add_node",
+   "class_type": "TextEncodeQwenImageEditPlus",
+   "as": "prompt"
+  },
+  {
+   "op": "add_node",
+   "class_type": "TextEncodeQwenImageEditPlus",
+   "as": "negative"
+  },
+  {
+   "op": "set_widget",
+   "node": "negative",
+   "widget": "prompt",
+   "value": ""
+  },
+  {
+   "op": "connect",
+   "from": "clip.CLIP",
+   "to": "prompt.clip"
+  },
+  {
+   "op": "connect",
+   "from": "vae.VAE",
+   "to": "prompt.vae"
+  },
+  {
+   "op": "connect",
+   "from": "clip.CLIP",
+   "to": "negative.clip"
+  },
+  {
+   "op": "connect",
+   "from": "vae.VAE",
+   "to": "negative.vae"
+  },
+  {
+   "op": "set_node_field",
+   "node": "prompt",
+   "field": "title",
+   "value": "in:prompt"
+  },
+  {
+   "op": "add_node",
+   "class_type": "LoadImage",
+   "as": "ref1"
+  },
+  {
+   "op": "set_node_field",
+   "node": "ref1",
+   "field": "title",
+   "value": "in:reference_1"
+  },
+  {
+   "op": "add_node",
+   "class_type": "FluxKontextImageScale",
+   "as": "scale1"
+  },
+  {
+   "op": "connect",
+   "from": "ref1.IMAGE",
+   "to": "scale1.image"
+  },
+  {
+   "op": "add_node",
+   "class_type": "PrimitiveBoolean",
+   "as": "use1"
+  },
+  {
+   "op": "set_widget",
+   "node": "use1",
+   "widget": "value",
+   "value": false
+  },
+  {
+   "op": "set_node_field",
+   "node": "use1",
+   "field": "title",
+   "value": "in:use_reference_1"
+  },
+  {
+   "op": "add_node",
+   "class_type": "ComfySwitchNode",
+   "as": "sw1"
+  },
+  {
+   "op": "connect",
+   "from": "use1.BOOLEAN",
+   "to": "sw1.switch"
+  },
+  {
+   "op": "connect",
+   "from": "scale1.IMAGE",
+   "to": "sw1.on_true"
+  },
+  {
+   "op": "connect",
+   "from": "sw1.output",
+   "to": "prompt.image1"
+  },
+  {
+   "op": "connect",
+   "from": "sw1.output",
+   "to": "negative.image1"
+  },
+  {
+   "op": "add_node",
+   "class_type": "LoadImage",
+   "as": "ref2"
+  },
+  {
+   "op": "set_node_field",
+   "node": "ref2",
+   "field": "title",
+   "value": "in:reference_2"
+  },
+  {
+   "op": "add_node",
+   "class_type": "FluxKontextImageScale",
+   "as": "scale2"
+  },
+  {
+   "op": "connect",
+   "from": "ref2.IMAGE",
+   "to": "scale2.image"
+  },
+  {
+   "op": "add_node",
+   "class_type": "PrimitiveBoolean",
+   "as": "use2"
+  },
+  {
+   "op": "set_widget",
+   "node": "use2",
+   "widget": "value",
+   "value": false
+  },
+  {
+   "op": "set_node_field",
+   "node": "use2",
+   "field": "title",
+   "value": "in:use_reference_2"
+  },
+  {
+   "op": "add_node",
+   "class_type": "ComfySwitchNode",
+   "as": "sw2"
+  },
+  {
+   "op": "connect",
+   "from": "use2.BOOLEAN",
+   "to": "sw2.switch"
+  },
+  {
+   "op": "connect",
+   "from": "scale2.IMAGE",
+   "to": "sw2.on_true"
+  },
+  {
+   "op": "connect",
+   "from": "sw2.output",
+   "to": "prompt.image2"
+  },
+  {
+   "op": "connect",
+   "from": "sw2.output",
+   "to": "negative.image2"
+  },
+  {
+   "op": "add_node",
+   "class_type": "LoadImage",
+   "as": "ref3"
+  },
+  {
+   "op": "set_node_field",
+   "node": "ref3",
+   "field": "title",
+   "value": "in:reference_3"
+  },
+  {
+   "op": "add_node",
+   "class_type": "FluxKontextImageScale",
+   "as": "scale3"
+  },
+  {
+   "op": "connect",
+   "from": "ref3.IMAGE",
+   "to": "scale3.image"
+  },
+  {
+   "op": "add_node",
+   "class_type": "PrimitiveBoolean",
+   "as": "use3"
+  },
+  {
+   "op": "set_widget",
+   "node": "use3",
+   "widget": "value",
+   "value": false
+  },
+  {
+   "op": "set_node_field",
+   "node": "use3",
+   "field": "title",
+   "value": "in:use_reference_3"
+  },
+  {
+   "op": "add_node",
+   "class_type": "ComfySwitchNode",
+   "as": "sw3"
+  },
+  {
+   "op": "connect",
+   "from": "use3.BOOLEAN",
+   "to": "sw3.switch"
+  },
+  {
+   "op": "connect",
+   "from": "scale3.IMAGE",
+   "to": "sw3.on_true"
+  },
+  {
+   "op": "connect",
+   "from": "sw3.output",
+   "to": "prompt.image3"
+  },
+  {
+   "op": "connect",
+   "from": "sw3.output",
+   "to": "negative.image3"
+  },
+  {
+   "op": "add_node",
+   "class_type": "FluxKontextMultiReferenceLatentMethod",
+   "as": "method_pos"
+  },
+  {
+   "op": "set_widget",
+   "node": "method_pos",
+   "widget": "reference_latents_method",
+   "value": "index_timestep_zero"
+  },
+  {
+   "op": "connect",
+   "from": "prompt.CONDITIONING",
+   "to": "method_pos.conditioning"
+  },
+  {
+   "op": "add_node",
+   "class_type": "FluxKontextMultiReferenceLatentMethod",
+   "as": "method_neg"
+  },
+  {
+   "op": "set_widget",
+   "node": "method_neg",
+   "widget": "reference_latents_method",
+   "value": "index_timestep_zero"
+  },
+  {
+   "op": "connect",
+   "from": "negative.CONDITIONING",
+   "to": "method_neg.conditioning"
+  },
+  {
+   "op": "add_node",
+   "class_type": "EmptySD3LatentImage",
+   "as": "latent"
+  },
+  {
+   "op": "set_widget",
+   "node": "latent",
+   "widget": "width",
+   "value": "${width}"
+  },
+  {
+   "op": "set_widget",
+   "node": "latent",
+   "widget": "height",
+   "value": "${height}"
+  },
+  {
+   "op": "set_widget",
+   "node": "latent",
+   "widget": "batch_size",
+   "value": 1
+  },
+  {
+   "op": "add_node",
+   "class_type": "KSampler",
+   "as": "sampler"
+  },
+  {
+   "op": "set_widget",
+   "node": "sampler",
+   "widget": "steps",
+   "value": 4
+  },
+  {
+   "op": "set_widget",
+   "node": "sampler",
+   "widget": "cfg",
+   "value": 1
+  },
+  {
+   "op": "set_widget",
+   "node": "sampler",
+   "widget": "sampler_name",
+   "value": "euler"
+  },
+  {
+   "op": "set_widget",
+   "node": "sampler",
+   "widget": "scheduler",
+   "value": "simple"
+  },
+  {
+   "op": "set_widget",
+   "node": "sampler",
+   "widget": "denoise",
+   "value": 1
+  },
+  {
+   "op": "connect",
+   "from": "lightning.MODEL",
+   "to": "sampler.model"
+  },
+  {
+   "op": "connect",
+   "from": "method_pos.CONDITIONING",
+   "to": "sampler.positive"
+  },
+  {
+   "op": "connect",
+   "from": "method_neg.CONDITIONING",
+   "to": "sampler.negative"
+  },
+  {
+   "op": "connect",
+   "from": "latent.LATENT",
+   "to": "sampler.latent_image"
+  },
+  {
+   "op": "set_node_field",
+   "node": "sampler",
+   "field": "title",
+   "value": "in:seed"
+  },
+  {
+   "op": "add_node",
+   "class_type": "VAEDecode",
+   "as": "decode"
+  },
+  {
+   "op": "connect",
+   "from": "sampler.LATENT",
+   "to": "decode.samples"
+  },
+  {
+   "op": "connect",
+   "from": "vae.VAE",
+   "to": "decode.vae"
+  },
+  {
+   "op": "add_node",
+   "class_type": "SaveImage",
+   "as": "save"
+  },
+  {
+   "op": "set_widget",
+   "node": "save",
+   "widget": "filename_prefix",
+   "value": "${prefix}"
+  },
+  {
+   "op": "connect",
+   "from": "decode.IMAGE",
+   "to": "save.images"
+  },
+  {
+   "op": "set_node_field",
+   "node": "save",
+   "field": "title",
+   "value": "out:image"
+  }
+ ]
+}

@@ -76,16 +76,18 @@ public sealed partial class McpToolsTests
     public async Task ResultsCarryIdsAndNumbersAndOnlyViewImageReturnsImages()
     {
         var pack = await CreatePackAsync();
-        var image = await UploadAsync([.. Enumerable.Range(0, 3000).Select(i => (byte)i)], "turnaround.png");
+        var image = await UploadAsync([.. Enumerable.Range(0, 3000).Select(i => (byte)i)], "view.png");
         Guid assetId, conceptId;
         await using (var scope = Services.CreateAsyncScope())
         {
             var db = scope.ServiceProvider.GetRequiredService<SlopolyDb>();
             var asset = new Asset { PackId = pack.Id, Name = "cart" };
-            var concept = new ConceptImage { PackId = pack.Id, AssetId = asset.Id, FileId = image, Kind = ConceptKind.Turnaround,
-                Selection = Selection.Picked, Width = 1536, Height = 512, Views = { ["front"] = new Rect(0, 0, 512, 512) } };
+            var hero = new ConceptImage { PackId = pack.Id, AssetId = asset.Id, FileId = image, Kind = ConceptKind.Hero,
+                Selection = Selection.Picked, Width = 1024, Height = 1024, FrontYaw = 175, Front = "detected" };
+            var concept = new ConceptImage { PackId = pack.Id, AssetId = asset.Id, FileId = image, Kind = ConceptKind.View, View = "front",
+                SourceConceptId = hero.Id, MaskFileId = image, Width = 768, Height = 768 };
             var version = new ProgramVersion { AssetId = asset.Id, Number = 1, Source = "part('bed', box(1, 1, 1))" };
-            db.AddRange(asset, concept, version,
+            db.AddRange(asset, hero, concept, version,
                 new PartMask { ConceptImageId = concept.Id, Part = "wheel", View = "front", FileId = image, Bounds = new(10, 300, 80, 200), Area = 9000,
                     Colors = [new MeasuredColor("#6e4524", 0.8)] },
                 new Build { AssetId = asset.Id, ProgramVersionId = version.Id, GlbFileId = image, Validated = true,
@@ -109,7 +111,9 @@ public sealed partial class McpToolsTests
         var report = await CallAsync(client, "get_build_report", new() { ["assetId"] = assetId });
         Assert.That(report.GetProperty("report").GetProperty("silhouette").GetProperty("views")[0].GetProperty("parts")[0].GetProperty("width_error").GetDouble(), Is.EqualTo(-0.04));
         var segmentation = await CallAsync(client, "get_segmentation", new() { ["conceptImageId"] = conceptId });
-        Assert.That(segmentation.GetProperty("masks")[0].GetProperty("fileId").GetGuid(), Is.EqualTo(image));
+        var front = segmentation.GetProperty("views")[0];
+        Assert.That(front.GetProperty("masks")[0].GetProperty("fileId").GetGuid(), Is.EqualTo(image));
+        Assert.That((front.GetProperty("view").GetString(), segmentation.GetProperty("frontYaw").GetDouble()), Is.EqualTo(("front", 175.0)));
 
         var view = await client.CallToolAsync("view_image", new Dictionary<string, object?> { ["fileId"] = image });
         var block = view.Content.OfType<ImageContentBlock>().Single();

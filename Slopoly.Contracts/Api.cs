@@ -13,6 +13,9 @@ public sealed record GenerateRequest(string Operation, Guid? AssetId, string? De
 
 public sealed record SegmentRequest(List<string> Parts);
 
+/// <summary>Make a picked hero's views; with a front yaw, remake them from the same splat with that front.</summary>
+public sealed record ViewsRequest(double? FrontYaw = null);
+
 public sealed record ProgramSubmit(string Source, string? Note);
 
 public sealed record CurrentVersionEdit(Guid VersionId);

@@ -10,17 +10,14 @@ namespace Slopoly.ApiService.Studio;
 /// <summary>Builds job inputs from the pack's current state, so every job carries a complete snapshot.</summary>
 public sealed class GenerationService(SlopolyDb db, StudioService studio, JobService jobs, PaletteService palette, Infrastructure.Notifier notifier)
 {
-    /// <summary>The most references a FLUX.2 klein workflow takes.</summary>
+    /// <summary>The most references the image workflows take (Qwen-Image-Edit's image 1-3).</summary>
     public const int MaxReferences = 3;
 
-    /// <summary>
-    /// Asks for the 3:1 sheet the comfy worker splits into equal thirds (design section 6). Tuned on FLUX.2 klein 4B:
-    /// "model sheet" + per-panel wording gives three views; "copy only the style" keeps scene objects out of the sheet.
-    /// </summary>
-    public const string TurnaroundSheet =
-        "Orthographic model sheet of ONE object only: {0}. The object is drawn three times in a row with the same size: " +
-        "left panel front elevation, middle panel side elevation, right panel plan view looking straight down from above. " +
-        "No perspective, no shadows, white background. Copy only the colours, materials and style of image 1, not its objects.";
+    /// <summary>The hero prompt (design section 1): one whole object, a three-quarter front view, the references' style.</summary>
+    public const string HeroImage =
+        "ONE object only, whole and centred: {0}. Three-quarter front view from the front-left, slightly from above. " +
+        "Plain light grey background, nothing else in the image. Copy only the colours, materials and style of the " +
+        "reference images, not their objects.";
 
     /// <summary>Scene images for the pack's style anchor, referencing the user's style images.</summary>
     public async Task<Job> StyleAnchorAsync(Guid packId, string sceneDescription, int count = 1, long? seed = null)
@@ -37,19 +34,19 @@ public sealed class GenerationService(SlopolyDb db, StudioService studio, JobSer
         });
     }
 
-    /// <summary>A front/side/top sheet of one asset, referencing the pack's picked anchor images.</summary>
-    public async Task<Job> TurnaroundAsync(Guid assetId, string? objectDescription = null, int count = 1, long? seed = null)
+    /// <summary>Hero images of one asset, referencing the pack's picked anchor images.</summary>
+    public async Task<Job> HeroAsync(Guid assetId, string? objectDescription = null, int count = 1, long? seed = null)
     {
         var asset = await studio.GetAssetAsync(assetId);
         var pack = await studio.GetPackAsync(asset.PackId);
         var anchors = await db.ConceptImages
             .Where(c => c.PackId == pack.Id && c.Kind == ConceptKind.Anchor && c.Selection == Selection.Picked)
             .OrderByDescending(c => c.CreatedAt).Select(c => c.FileId).Take(MaxReferences).ToListAsync();
-        if (anchors.Count == 0) throw new StudioException("Pick at least one style anchor image of the pack before making turnarounds.");
-        return await jobs.SubmitAsync(JobKinds.Comfy, Workflows.Turnaround, pack.Id, assetId, new JsonObject
+        if (anchors.Count == 0) throw new StudioException("Pick at least one style anchor image of the pack before making heroes.");
+        return await jobs.SubmitAsync(JobKinds.Comfy, Workflows.Hero, pack.Id, assetId, new JsonObject
         {
-            // Plain style text ("3D render, studio light") pulls the model back to one perspective view; framed as notes it doesn't.
-            ["prompt"] = string.Format(TurnaroundSheet, objectDescription ?? $"{asset.Name}, {asset.Description}")
+            // Plain style text ("3D render, studio light") can override the view; framed as notes it doesn't.
+            ["prompt"] = string.Format(HeroImage, objectDescription ?? $"{asset.Name}, {asset.Description}")
                          + (string.IsNullOrWhiteSpace(pack.StyleText) ? "" : $" Style notes for colours and materials only: {pack.StyleText.Trim()}"),
             ["references"] = Ids(anchors),
             ["count"] = Math.Clamp(count, 1, 4),
@@ -58,8 +55,27 @@ public sealed class GenerationService(SlopolyDb db, StudioService studio, JobSer
     }
 
     /// <summary>
+    /// Front, side, top and back views of a picked hero, rendered from its splat (design sections 2-3). With a front
+    /// yaw the hero's last views seed is reused, so the splat is the same and only the front changes.
+    /// </summary>
+    public async Task<Job> ViewsAsync(Guid heroId, double? frontYaw = null)
+    {
+        var hero = await db.ConceptImages.FindAsync(heroId) ?? throw StudioException.NotFound("Concept image");
+        if (hero.Kind != ConceptKind.Hero) throw new StudioException("Views are made from hero images only.");
+        if (hero.Selection != Selection.Picked) throw new StudioException("Pick the hero image before making its views.");
+        var seed = frontYaw is not null && hero.ViewsSeed is { } same ? same : Random.Shared.NextInt64(1, 1L << 48);
+        return await jobs.SubmitAsync(JobKinds.Comfy, Workflows.Views, hero.PackId, hero.AssetId, new JsonObject
+        {
+            ["heroId"] = hero.Id,
+            ["image"] = hero.FileId,
+            ["seed"] = seed,
+            ["frontYaw"] = frontYaw is { } yaw ? ((yaw % 360) + 360) % 360 : null,
+        });
+    }
+
+    /// <summary>
     /// New images from a concept's generation with a fresh seed. With a change, the concept itself becomes the first
-    /// reference and the change is added to the prompt (FLUX.2 klein edits the reference). New images start undecided.
+    /// reference and the change is added to the prompt (Qwen-Image-Edit edits image 1). New images start undecided.
     /// </summary>
     public async Task<Job> ReviseAsync(Guid conceptImageId, string? change, int count)
     {
@@ -78,23 +94,47 @@ public sealed class GenerationService(SlopolyDb db, StudioService studio, JobSer
         return await jobs.SubmitAsync(source.Kind, source.Operation, source.PackId, source.AssetId, inputs);
     }
 
-    /// <summary>Part masks (and their colours) in each view of a turnaround.</summary>
+    /// <summary>Part masks (and their colours) in each view image of a hero (or of a view's hero).</summary>
     public async Task<Job> SegmentAsync(Guid conceptImageId, IReadOnlyCollection<string> parts)
     {
-        var concept = await db.ConceptImages.FindAsync(conceptImageId) ?? throw StudioException.NotFound("Concept image");
-        if (concept.Kind != ConceptKind.Turnaround) throw new StudioException("Only turnaround images can be segmented.");
-        if (concept.Selection == Selection.Rejected) throw new StudioException("This turnaround was rejected by the user.");
-        var names = parts.Select(p => p.Trim()).Where(p => p.Length > 0).Distinct().ToList();
+        var hero = await HeroOfAsync(conceptImageId);
+        if (hero.Selection == Selection.Rejected) throw new StudioException("This hero was rejected by the user.");
+        var views = await ViewsOfAsync(hero.Id);
+        if (views.Count == 0) throw new StudioException("Make the hero's views before segmenting it.");
+        var names = parts.Select(p => p.Trim()).Where(p => p.Length > 0 && p != PartMasks.Object).Distinct().ToList();
         if (names.Count == 0) throw new StudioException("Name at least one part to segment.");
-        return await jobs.SubmitAsync(JobKinds.Comfy, Workflows.SegmentParts, concept.PackId, concept.AssetId, new JsonObject
+        return await jobs.SubmitAsync(JobKinds.Comfy, Workflows.SegmentParts, hero.PackId, hero.AssetId, new JsonObject
         {
-            ["conceptImageId"] = concept.Id,
-            ["image"] = concept.FileId,
-            ["views"] = JsonSerializer.SerializeToNode(concept.Views, Broker.Json),
+            ["heroId"] = hero.Id,
+            ["views"] = new JsonArray(views.Select(v => (JsonNode)new JsonObject
+            {
+                ["conceptImageId"] = v.Id, ["view"] = v.View, ["image"] = v.FileId, ["mask"] = v.MaskFileId,
+            }).ToArray()),
             ["parts"] = new JsonArray(names.Select(n => (JsonNode)n!).ToArray()),
-            ["object"] = concept.AssetId is { } assetId && await db.Assets.FindAsync(assetId) is { } asset ? asset.Name : "object",
         });
     }
+
+    /// <summary>The hero itself, or a view's hero.</summary>
+    public async Task<ConceptImage> HeroOfAsync(Guid conceptImageId)
+    {
+        var concept = await db.ConceptImages.FindAsync(conceptImageId) ?? throw StudioException.NotFound("Concept image");
+        if (concept.Kind == ConceptKind.View && concept.SourceConceptId is { } heroId)
+            concept = await db.ConceptImages.FindAsync(heroId) ?? throw StudioException.NotFound("Hero image");
+        return concept.Kind == ConceptKind.Hero ? concept : throw new StudioException("Only hero images and their views can be segmented.");
+    }
+
+    /// <summary>Part masks of one view, or of all views of a hero.</summary>
+    public async Task<List<PartMask>> MasksOfAsync(Guid conceptImageId)
+    {
+        var concept = await db.ConceptImages.FindAsync(conceptImageId) ?? throw StudioException.NotFound("Concept image");
+        var ids = concept.Kind == ConceptKind.Hero ? (await ViewsOfAsync(concept.Id)).Select(v => v.Id).ToList() : [concept.Id];
+        return await db.PartMasks.Where(m => ids.Contains(m.ConceptImageId)).OrderBy(m => m.Part).ThenBy(m => m.View).ToListAsync();
+    }
+
+    /// <summary>A hero's view images, in the order front, side, top, back.</summary>
+    public async Task<List<ConceptImage>> ViewsOfAsync(Guid heroId) =>
+        (await db.ConceptImages.Where(c => c.SourceConceptId == heroId && c.Kind == ConceptKind.View).ToListAsync())
+        .OrderBy(v => Array.IndexOf(ViewNames.All, v.View)).ToList();
 
     /// <summary>Stores a new immutable program version, makes it current and queues its build.</summary>
     public async Task<(ProgramVersion Version, Job Job)> SubmitProgramAsync(Guid assetId, string source, string note)
@@ -114,21 +154,23 @@ public sealed class GenerationService(SlopolyDb db, StudioService studio, JobSer
     public async Task<Job> BuildAsync(Asset asset, ProgramVersion version) =>
         await jobs.SubmitAsync(JobKinds.Build, null, asset.PackId, asset.Id, await BuildInputsAsync(asset, version));
 
-    /// <summary>Build inputs: program source, budget, main palette and the picked turnaround with its masks.</summary>
+    /// <summary>Build inputs: program source, budget, main palette and the views of the picked hero with their masks.</summary>
     public async Task<JsonObject> BuildInputsAsync(Asset asset, ProgramVersion version)
     {
         var pack = await studio.GetPackAsync(asset.PackId);
-        var turnaround = await db.ConceptImages
-            .Where(c => c.AssetId == asset.Id && c.Kind == ConceptKind.Turnaround && c.Selection == Selection.Picked)
+        var hero = await db.ConceptImages
+            .Where(c => c.AssetId == asset.Id && c.Kind == ConceptKind.Hero && c.Selection == Selection.Picked)
             .OrderByDescending(c => c.CreatedAt).FirstOrDefaultAsync();
-        var masks = turnaround is null ? [] : await db.PartMasks.Where(m => m.ConceptImageId == turnaround.Id).ToListAsync();
+        var views = hero is null ? [] : await ViewsOfAsync(hero.Id);
+        var viewIds = views.Select(v => v.Id).ToList();
+        var masks = await db.PartMasks.Where(m => viewIds.Contains(m.ConceptImageId)).ToListAsync();
         return new JsonObject
         {
             ["programVersionId"] = version.Id,
             ["source"] = version.Source,
             ["polyBudget"] = asset.PolyBudget ?? pack.PolyBudget,
             ["palette"] = JsonSerializer.SerializeToNode(await palette.MainEntriesAsync(pack.Id), Broker.Json),
-            ["turnaround"] = turnaround is null ? null : JsonSerializer.SerializeToNode(new { turnaround.Id, turnaround.FileId, turnaround.Width, turnaround.Height, turnaround.Views }, Broker.Json),
+            ["views"] = JsonSerializer.SerializeToNode(views.Select(v => new { v.Id, v.View, v.FileId, v.Width, v.Height }), Broker.Json),
             ["masks"] = JsonSerializer.SerializeToNode(masks, Broker.Json),
         };
     }

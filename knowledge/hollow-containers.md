@@ -19,4 +19,4 @@ part("bed", bevel(bed, 0.01, faces="wood"), at=(0, 0.49, 0), color="wood")
   in a flat-shaded palette.
 - Round containers: the same on `prism(n, ...)` with `"top"`; for a barrel, inset the top a second time for the rim.
 - Keep the floor thickness above 0 — extruding through the bottom face breaks the mesh.
-- If the turnaround shows cargo (sacks, hay), add it as separate parts inside the cavity with `overlaps` to the bed.
+- If the hero shows cargo (sacks, hay), add it as separate parts inside the cavity with `overlaps` to the bed.

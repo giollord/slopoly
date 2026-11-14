@@ -49,7 +49,7 @@ def test_budget_is_checked():
 def masks_of(model, view, size=(400, 300), margin=20):
     """Synthetic masks: each part's projection fitted into an image, like a perfect segmentation."""
     project = silhouette.VIEWS[view]
-    tris = {p.name: silhouette._projected(p, project, (1, 1)) for p in model.parts.values()}
+    tris = {p.name: silhouette._projected(p, project) for p in model.parts.values()}
     every = np.concatenate([t.reshape(-1, 2) for t in tris.values()])
     lo, hi = every.min(0), every.max(0)
     scale = min((size[0] - 2 * margin) / (hi - lo)[0], (size[1] - 2 * margin) / (hi - lo)[1])
@@ -83,17 +83,55 @@ def test_narrow_wheel_gives_negative_width_error(cart_source):
     assert wheel["iou"] < 0.9
 
 
-def test_mirrored_sheet_is_matched_by_flipping(cart_source):
-    masks = merged(masks_of(runner.run_program(cart_source), "side"))
+def with_object(masks):
+    """Adds each view's silhouette (the union of its part masks), as the views job renders it."""
+    views = {}
+    for m in masks:
+        views[m["view"]] = views[m["view"]] | m["mask"] if m["view"] in views else m["mask"]
+    return masks + [{"part": "object", "view": v, "mask": mask} for v, mask in views.items()]
+
+
+def test_matching_silhouette_scores_high_in_every_view(cart_source):
+    model = runner.run_program(cart_source)
+    masks = with_object(merged([m for view in silhouette.VIEWS for m in masks_of(model, view)]))
+    result = silhouette.score(runner.run_program(cart_source), masks)
+    assert result["mean_object_iou"] > 0.9
+    assert {v["view"] for v in result["views"]} == {"front", "side", "top", "back"}
+    assert all(v["object"]["iou"] > 0.9 for v in result["views"])
+
+
+def test_misplaced_small_part_lowers_only_its_part_score(cart_source):
+    masks = with_object(merged(masks_of(runner.run_program(cart_source), "top")))
+    good = silhouette.score(runner.run_program(cart_source), masks)["views"][0]
+    moved = cart_source.replace("at=(0.3, 0.55, -0.35)", "at=(0.2, 0.55, -0.35)")  # handles 10 cm further in
+    assert moved != cart_source
+    bad = silhouette.score(runner.run_program(moved), masks)["views"][0]
+    part = lambda r, name: next(p for p in r["parts"] if p["mask"] == name)["iou"]
+    assert part(bad, "handle") < part(good, "handle") - 0.3
+    assert part(bad, "bed") == part(good, "bed")  # the other parts keep their scores
+    assert good["object"]["iou"] - bad["object"]["iou"] < (part(good, "handle") - part(bad, "handle")) / 2
+
+
+def test_mirrored_view_scores_low(cart_source):
+    masks = with_object(merged(masks_of(runner.run_program(cart_source), "side")))
     for m in masks:
         m["mask"] = m["mask"][:, ::-1]
     side = silhouette.score(runner.run_program(cart_source), masks)["views"][0]
-    assert side["flip"] == [-1, 1] and side["mean_iou"] > 0.95
+    assert side["mean_iou"] < 0.9
+
+
+def test_mask_matches_every_part_named_after_it():
+    sm.part("bed", sm.box(1, 0.2, 1))
+    for name in ("wheel_front_L", "wheel_back_R"):
+        sm.part(name, sm.prism(8, r=0.3, length=0.08, axis="x"), parent="bed", at=(0.5, 0, 0))
+    sm.part("wheelbarrow", sm.box(0.1, 0.1, 0.1), parent="bed")
+    names = [p.name for p in silhouette.parts_for(assembly.current, "wheel")]
+    assert names == ["wheel_front_L", "wheel_back_R"]
 
 
 def test_empty_model_is_not_scored():
     mask = {"part": "wheel", "view": "front", "mask": np.ones((10, 10), dtype=bool)}
-    assert silhouette.score(assembly.current, [mask]) == {"views": [], "mean_iou": None}
+    assert silhouette.score(assembly.current, [mask]) == {"views": [], "mean_iou": None, "mean_object_iou": None}
 
 
 # --- runner and export ---

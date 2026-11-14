@@ -1,6 +1,7 @@
 """Geometry worker: builds part programs into validated, scored GLB files.
 
-build: inputs {programVersionId, source, polyBudget, palette: [entries], turnaround, masks: [{part, view, fileId}]};
+build: inputs {programVersionId, source, polyBudget, palette: [entries], views, masks: [{part, view, fileId}]} (masks
+  of the picked hero's view images; part "object" is a view's silhouette);
   outputs {glbFileId, validated, report, paletteEntryIds}. The program runs in a subprocess (slopoly_model.runner)
   with a timeout, so a runaway or crashing program can't take the worker down.
 palette-render: inputs {main: [entries], variants: [{id, name, entries}], builds: [{buildId, glbFileId}]};

@@ -1,5 +1,5 @@
 @* Breadcrumbs from a detail page back to its pack tab: Packs › pack › tab › current. *@
-<MudBreadcrumbs Items="_items" Class="px-0 pt-0 pb-2" />
+<MudBreadcrumbs Items="_items" Class="px-0 pt-0 pb-2" Style="position: relative; z-index: 1" />
 
 @code {
     [Parameter, EditorRequired] public Guid PackId { get; set; }

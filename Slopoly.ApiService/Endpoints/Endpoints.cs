@@ -41,12 +41,14 @@ public static class ApiEndpoints
         api.MapPost("/packs/{id:guid}/generate", (Guid id, GenerateRequest request, GenerationService g) => request.Operation switch
         {
             Workflows.StyleAnchor => g.StyleAnchorAsync(id, request.Description ?? "", request.Count, request.Seed),
-            Workflows.Turnaround when request.AssetId is { } assetId => g.TurnaroundAsync(assetId, request.Description, request.Count, request.Seed),
-            _ => throw new StudioException($"Unknown generation \"{request.Operation}\" (style-anchor, or turnaround with an assetId)."),
+            Workflows.Hero when request.AssetId is { } assetId => g.HeroAsync(assetId, request.Description, request.Count, request.Seed),
+            _ => throw new StudioException($"Unknown generation \"{request.Operation}\" (style-anchor, or hero with an assetId)."),
         });
         api.MapPost("/concepts/{id:guid}/revise", (Guid id, ReviseRequest request, GenerationService g) => g.ReviseAsync(id, request.Change, request.Count));
+        api.MapPost("/concepts/{id:guid}/views", (Guid id, ViewsRequest request, GenerationService g) => g.ViewsAsync(id, request.FrontYaw));
+        api.MapGet("/concepts/{id:guid}/views", async (Guid id, GenerationService g) => await g.ViewsOfAsync(id));
         api.MapPost("/concepts/{id:guid}/segment", (Guid id, SegmentRequest request, GenerationService g) => g.SegmentAsync(id, request.Parts));
-        api.MapGet("/concepts/{id:guid}/masks", (Guid id, SlopolyDb db) => db.PartMasks.Where(m => m.ConceptImageId == id).OrderBy(m => m.Part).ThenBy(m => m.View).ToListAsync());
+        api.MapGet("/concepts/{id:guid}/masks", (Guid id, GenerationService g) => g.MasksOfAsync(id));
 
         // Manifest, programs, builds
         api.MapGet("/assets/{id:guid}/manifest", async (Guid id, SlopolyDb db) => await db.Manifests.FindAsync(id) is { } m ? Results.Ok(m) : Results.NoContent());

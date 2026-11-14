@@ -2,10 +2,11 @@
 @inject IDialogService Dialogs
 
 <MudStack Row="true" AlignItems="AlignItems.Center" Wrap="Wrap.Wrap" Class="mb-3">
-    <MudToggleGroup T="string" @bind-Value="_kind" Size="Size.Small" Color="Color.Primary" Outlined="true" Style="width: 26rem; flex: none">
+    <MudToggleGroup T="string" @bind-Value="_kind" Size="Size.Small" Color="Color.Primary" Outlined="true" Style="width: 34rem; flex: none">
         <MudToggleItem Value="@("all")" Text="All" />
         <MudToggleItem Value="@(nameof(ConceptKind.Anchor))" Text="Style anchors" />
-        <MudToggleItem Value="@(nameof(ConceptKind.Turnaround))" Text="Turnarounds" />
+        <MudToggleItem Value="@(nameof(ConceptKind.Hero))" Text="Heroes" />
+        <MudToggleItem Value="@(nameof(ConceptKind.View))" Text="Views" />
     </MudToggleGroup>
     <div class="filter-field"><MudSelect T="Guid?" @bind-Value="_assetFilter" Label="Asset" Clearable="true" Variant="Variant.Outlined" Margin="Margin.Dense">
         @foreach (var a in _assets)
@@ -29,19 +30,32 @@
 {
     <MudAlert Severity="Severity.Info">No concept images match.</MudAlert>
 }
-@foreach (var group in shown.GroupBy(c => c.Kind).OrderBy(g => g.Key))
+@* With all kinds shown, views sit in their hero's card instead of a group of their own. *@
+@foreach (var group in shown.Where(c => _kind != "all" || c.Kind != ConceptKind.View).GroupBy(c => c.Kind).OrderBy(g => g.Key))
 {
-    <MudText Typo="Typo.subtitle1" Class="mt-2 mb-1">@(group.Key == ConceptKind.Anchor ? "Style anchors (scenes)" : "Turnarounds (single objects)") · @group.Count()</MudText>
+    <MudText Typo="Typo.subtitle1" Class="mt-2 mb-1">@GroupTitle(group.Key) · @group.Count()</MudText>
     <MudGrid Spacing="2" Class="mb-4">
         @foreach (var concept in group)
         {
-            var turnaround = concept.Kind == ConceptKind.Turnaround;
-            <MudItem xs="12" sm="@(turnaround ? 12 : 6)" md="@(turnaround ? 6 : 4)" lg="@(turnaround ? 6 : 3)">
+            <MudItem xs="12" sm="6" md="4" lg="3">
                 <MudCard Outlined="true" Style="@(concept.Selection == Selection.Picked ? "border: 2px solid var(--mud-palette-success)" : "")">
                     <a href="/concepts/@concept.Id" title="Open">
                         <img class="concept-image" src="/files/@concept.FileId" alt="@concept.Kind" loading="lazy"
                              style="@(concept.Selection == Selection.Rejected ? "opacity: .35" : "")" />
                     </a>
+                    @if (concept.Kind == ConceptKind.View)
+                    {
+                        <MudText Typo="Typo.caption" Class="px-2">@concept.View</MudText>
+                    }
+                    @if (_kind == "all" && ViewsOf(concept).ToList() is { Count: > 0 } views)
+                    {
+                        <MudStack Row="true" Spacing="1" Class="px-2 pt-1">
+                            @foreach (var v in views)
+                            {
+                                <a href="/concepts/@v.Id" title="@v.View view"><img src="/files/@v.FileId" alt="@v.View" loading="lazy" style="width: 100%; max-width: 64px; border-radius: 3px; background: var(--mud-palette-background-gray)" /></a>
+                            }
+                        </MudStack>
+                    }
                     <MudCardActions Class="py-0">
                         @if (concept.AssetId is { } assetId && _assets.FirstOrDefault(a => a.Id == assetId) is { } asset)
                         {
@@ -74,6 +88,16 @@
         (_kind == "all" || c.Kind.ToString() == _kind)
         && (_assetFilter is null || c.AssetId == _assetFilter)
         && (_selection is "visible" or "all" || c.Selection.ToString() == _selection));
+
+    private static string GroupTitle(ConceptKind kind) => kind switch
+    {
+        ConceptKind.Anchor => "Style anchors (scenes)",
+        ConceptKind.Hero => "Heroes (one asset each)",
+        _ => "Views (rendered from heroes)",
+    };
+
+    private IEnumerable<ConceptImage> ViewsOf(ConceptImage hero) => _concepts
+        .Where(c => c.Kind == ConceptKind.View && c.SourceConceptId == hero.Id).OrderBy(c => Array.IndexOf(ViewNames.All, c.View));
 
     protected override bool Concerns(Guid? packId, Guid? assetId) => packId == PackId;
 

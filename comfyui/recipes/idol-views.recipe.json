@@ -1,0 +1,512 @@
+{
+ "recipe": "idol-views",
+ "description": "Hero image -> Gaussian splat (Idol, a TripoSplat fine-tune) -> two orthographic turntables (eye level and from above) with silhouettes. Wired after the 3d_idol_image_to_gaussian_splat template (BiRefNet background removal, DINOv3 conditioning, flux2-vae encode, Idol decoder).",
+ "params": {
+  "frames": {
+   "type": "int",
+   "default": 72
+  },
+  "size": {
+   "type": "int",
+   "default": 768
+  },
+  "distance": {
+   "type": "float",
+   "default": 4.0
+  },
+  "above_pitch": {
+   "type": "float",
+   "default": 89.0
+  },
+  "prefix": {
+   "type": "string",
+   "default": "slopoly/views"
+  },
+  "zoom": {
+   "type": "float",
+   "default": 2.5
+  }
+ },
+ "ops": [
+  {
+   "op": "add_node",
+   "class_type": "LoadImage",
+   "as": "image"
+  },
+  {
+   "op": "add_node",
+   "class_type": "LoadBackgroundRemovalModel",
+   "as": "bg_model"
+  },
+  {
+   "op": "set_widget",
+   "node": "bg_model",
+   "widget": "bg_removal_name",
+   "value": "birefnet.safetensors"
+  },
+  {
+   "op": "add_node",
+   "class_type": "RemoveBackground",
+   "as": "bg"
+  },
+  {
+   "op": "connect",
+   "from": "bg_model.bg_model",
+   "to": "bg.bg_removal_model"
+  },
+  {
+   "op": "connect",
+   "from": "image.IMAGE",
+   "to": "bg.image"
+  },
+  {
+   "op": "add_node",
+   "class_type": "TripoSplatPreprocessImage",
+   "as": "pre"
+  },
+  {
+   "op": "connect",
+   "from": "image.IMAGE",
+   "to": "pre.image"
+  },
+  {
+   "op": "connect",
+   "from": "bg.mask",
+   "to": "pre.mask"
+  },
+  {
+   "op": "add_node",
+   "class_type": "CLIPVisionLoader",
+   "as": "dino"
+  },
+  {
+   "op": "set_widget",
+   "node": "dino",
+   "widget": "clip_name",
+   "value": "dino_v3_vit_h_bf16.safetensors"
+  },
+  {
+   "op": "add_node",
+   "class_type": "VAELoader",
+   "as": "encoder"
+  },
+  {
+   "op": "set_widget",
+   "node": "encoder",
+   "widget": "vae_name",
+   "value": "flux2-vae.safetensors"
+  },
+  {
+   "op": "add_node",
+   "class_type": "VAELoader",
+   "as": "decoder"
+  },
+  {
+   "op": "set_widget",
+   "node": "decoder",
+   "widget": "vae_name",
+   "value": "idol_decoder_fp16.safetensors"
+  },
+  {
+   "op": "add_node",
+   "class_type": "UNETLoader",
+   "as": "unet"
+  },
+  {
+   "op": "set_widget",
+   "node": "unet",
+   "widget": "unet_name",
+   "value": "idol_fp16.safetensors"
+  },
+  {
+   "op": "add_node",
+   "class_type": "TripoSplatConditioning",
+   "as": "cond"
+  },
+  {
+   "op": "connect",
+   "from": "dino.CLIP_VISION",
+   "to": "cond.clip_vision"
+  },
+  {
+   "op": "connect",
+   "from": "encoder.VAE",
+   "to": "cond.vae"
+  },
+  {
+   "op": "connect",
+   "from": "pre.image",
+   "to": "cond.image"
+  },
+  {
+   "op": "add_node",
+   "class_type": "KSampler",
+   "as": "sampler"
+  },
+  {
+   "op": "connect",
+   "from": "unet.MODEL",
+   "to": "sampler.model"
+  },
+  {
+   "op": "connect",
+   "from": "cond.positive",
+   "to": "sampler.positive"
+  },
+  {
+   "op": "connect",
+   "from": "cond.negative",
+   "to": "sampler.negative"
+  },
+  {
+   "op": "connect",
+   "from": "cond.latent",
+   "to": "sampler.latent_image"
+  },
+  {
+   "op": "set_widget",
+   "node": "sampler",
+   "widget": "steps",
+   "value": 20
+  },
+  {
+   "op": "set_widget",
+   "node": "sampler",
+   "widget": "cfg",
+   "value": 3
+  },
+  {
+   "op": "set_widget",
+   "node": "sampler",
+   "widget": "sampler_name",
+   "value": "dpmpp_2m"
+  },
+  {
+   "op": "set_widget",
+   "node": "sampler",
+   "widget": "scheduler",
+   "value": "simple"
+  },
+  {
+   "op": "add_node",
+   "class_type": "VAEDecodeTripoSplat",
+   "as": "decode"
+  },
+  {
+   "op": "connect",
+   "from": "sampler.LATENT",
+   "to": "decode.samples"
+  },
+  {
+   "op": "connect",
+   "from": "decoder.VAE",
+   "to": "decode.vae"
+  },
+  {
+   "op": "set_widget",
+   "node": "decode",
+   "widget": "num_gaussians",
+   "value": 262144
+  },
+  {
+   "op": "add_node",
+   "class_type": "CreateCameraInfo",
+   "as": "ring_camera"
+  },
+  {
+   "op": "set_widget",
+   "node": "ring_camera",
+   "widget": "mode.distance",
+   "value": "${distance}"
+  },
+  {
+   "op": "set_widget",
+   "node": "ring_camera",
+   "widget": "mode.pitch",
+   "value": 0
+  },
+  {
+   "op": "set_widget",
+   "node": "ring_camera",
+   "widget": "mode.yaw",
+   "value": 0
+  },
+  {
+   "op": "set_widget",
+   "node": "ring_camera",
+   "widget": "camera_type",
+   "value": "orthographic"
+  },
+  {
+   "op": "set_widget",
+   "node": "ring_camera",
+   "widget": "zoom",
+   "value": "${zoom}"
+  },
+  {
+   "op": "add_node",
+   "class_type": "RenderSplat",
+   "as": "ring"
+  },
+  {
+   "op": "connect",
+   "from": "decode.splat",
+   "to": "ring.splat"
+  },
+  {
+   "op": "connect",
+   "from": "ring_camera.camera_info",
+   "to": "ring.camera_info"
+  },
+  {
+   "op": "set_widget",
+   "node": "ring",
+   "widget": "width",
+   "value": "${size}"
+  },
+  {
+   "op": "set_widget",
+   "node": "ring",
+   "widget": "height",
+   "value": "${size}"
+  },
+  {
+   "op": "set_widget",
+   "node": "ring",
+   "widget": "frames",
+   "value": "${frames}"
+  },
+  {
+   "op": "set_widget",
+   "node": "ring",
+   "widget": "background",
+   "value": "#ffffff"
+  },
+  {
+   "op": "add_node",
+   "class_type": "CreateCameraInfo",
+   "as": "above_camera"
+  },
+  {
+   "op": "set_widget",
+   "node": "above_camera",
+   "widget": "mode.distance",
+   "value": "${distance}"
+  },
+  {
+   "op": "set_widget",
+   "node": "above_camera",
+   "widget": "mode.pitch",
+   "value": "${above_pitch}"
+  },
+  {
+   "op": "set_widget",
+   "node": "above_camera",
+   "widget": "mode.yaw",
+   "value": 0
+  },
+  {
+   "op": "set_widget",
+   "node": "above_camera",
+   "widget": "camera_type",
+   "value": "orthographic"
+  },
+  {
+   "op": "set_widget",
+   "node": "above_camera",
+   "widget": "zoom",
+   "value": "${zoom}"
+  },
+  {
+   "op": "add_node",
+   "class_type": "RenderSplat",
+   "as": "above"
+  },
+  {
+   "op": "connect",
+   "from": "decode.splat",
+   "to": "above.splat"
+  },
+  {
+   "op": "connect",
+   "from": "above_camera.camera_info",
+   "to": "above.camera_info"
+  },
+  {
+   "op": "set_widget",
+   "node": "above",
+   "widget": "width",
+   "value": "${size}"
+  },
+  {
+   "op": "set_widget",
+   "node": "above",
+   "widget": "height",
+   "value": "${size}"
+  },
+  {
+   "op": "set_widget",
+   "node": "above",
+   "widget": "frames",
+   "value": "${frames}"
+  },
+  {
+   "op": "set_widget",
+   "node": "above",
+   "widget": "background",
+   "value": "#ffffff"
+  },
+  {
+   "op": "add_node",
+   "class_type": "SaveImage",
+   "as": "out_ring"
+  },
+  {
+   "op": "connect",
+   "from": "ring.image",
+   "to": "out_ring.images"
+  },
+  {
+   "op": "set_widget",
+   "node": "out_ring",
+   "widget": "filename_prefix",
+   "value": "${prefix}_ring"
+  },
+  {
+   "op": "add_node",
+   "class_type": "MaskToImage",
+   "as": "ring_mask_image"
+  },
+  {
+   "op": "connect",
+   "from": "ring.mask",
+   "to": "ring_mask_image.mask"
+  },
+  {
+   "op": "add_node",
+   "class_type": "SaveImage",
+   "as": "out_ring_mask"
+  },
+  {
+   "op": "connect",
+   "from": "ring_mask_image.IMAGE",
+   "to": "out_ring_mask.images"
+  },
+  {
+   "op": "set_widget",
+   "node": "out_ring_mask",
+   "widget": "filename_prefix",
+   "value": "${prefix}_ring_mask"
+  },
+  {
+   "op": "add_node",
+   "class_type": "SaveImage",
+   "as": "out_above"
+  },
+  {
+   "op": "connect",
+   "from": "above.image",
+   "to": "out_above.images"
+  },
+  {
+   "op": "set_widget",
+   "node": "out_above",
+   "widget": "filename_prefix",
+   "value": "${prefix}_above"
+  },
+  {
+   "op": "add_node",
+   "class_type": "MaskToImage",
+   "as": "above_mask_image"
+  },
+  {
+   "op": "connect",
+   "from": "above.mask",
+   "to": "above_mask_image.mask"
+  },
+  {
+   "op": "add_node",
+   "class_type": "SaveImage",
+   "as": "out_above_mask"
+  },
+  {
+   "op": "connect",
+   "from": "above_mask_image.IMAGE",
+   "to": "out_above_mask.images"
+  },
+  {
+   "op": "set_widget",
+   "node": "out_above_mask",
+   "widget": "filename_prefix",
+   "value": "${prefix}_above_mask"
+  },
+  {
+   "op": "add_node",
+   "class_type": "MaskToImage",
+   "as": "hero_mask_image"
+  },
+  {
+   "op": "connect",
+   "from": "bg.mask",
+   "to": "hero_mask_image.mask"
+  },
+  {
+   "op": "add_node",
+   "class_type": "SaveImage",
+   "as": "out_hero_mask"
+  },
+  {
+   "op": "connect",
+   "from": "hero_mask_image.IMAGE",
+   "to": "out_hero_mask.images"
+  },
+  {
+   "op": "set_widget",
+   "node": "out_hero_mask",
+   "widget": "filename_prefix",
+   "value": "${prefix}_hero_mask"
+  },
+  {
+   "op": "set_node_field",
+   "node": "image",
+   "field": "title",
+   "value": "in:image"
+  },
+  {
+   "op": "set_node_field",
+   "node": "sampler",
+   "field": "title",
+   "value": "in:seed"
+  },
+  {
+   "op": "set_node_field",
+   "node": "out_ring",
+   "field": "title",
+   "value": "out:ring"
+  },
+  {
+   "op": "set_node_field",
+   "node": "out_ring_mask",
+   "field": "title",
+   "value": "out:ring_mask"
+  },
+  {
+   "op": "set_node_field",
+   "node": "out_above",
+   "field": "title",
+   "value": "out:above"
+  },
+  {
+   "op": "set_node_field",
+   "node": "out_above_mask",
+   "field": "title",
+   "value": "out:above_mask"
+  },
+  {
+   "op": "set_node_field",
+   "node": "out_hero_mask",
+   "field": "title",
+   "value": "out:hero_mask"
+  }
+ ]
+}

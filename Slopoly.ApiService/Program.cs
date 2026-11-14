@@ -37,6 +37,7 @@ builder.Services.AddScoped<GenerationService>();
 builder.Services.AddScoped<PaletteService>();
 builder.Services.AddScoped<JobEventApplier>();
 builder.Services.AddScoped<IJobResultHandler, ConceptImageResults>();
+builder.Services.AddScoped<IJobResultHandler, ViewsResults>();
 builder.Services.AddScoped<IJobResultHandler, SegmentationResults>();
 builder.Services.AddScoped<IJobResultHandler, BuildResults>();
 builder.Services.AddScoped<IJobResultHandler, AgentTurnResults>();
