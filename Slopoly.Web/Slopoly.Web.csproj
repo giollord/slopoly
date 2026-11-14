@@ -8,6 +8,12 @@
 
   <ItemGroup>
     <ProjectReference Include="..\Slopoly.ServiceDefaults\Slopoly.ServiceDefaults.csproj" />
+    <ProjectReference Include="..\Slopoly.Contracts\Slopoly.Contracts.csproj" />
+  </ItemGroup>
+
+  <ItemGroup>
+    <PackageReference Include="Microsoft.AspNetCore.SignalR.Client" Version="11.0.0" />
+    <PackageReference Include="MudBlazor" Version="9.13.0" />
   </ItemGroup>
 
 </Project>

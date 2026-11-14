@@ -423,3 +423,11 @@ FodyWeavers.xsd
 
 # Official VS Code C# Dev Kit Extension exclusion
 #*.lscache
+
+# Slopoly local data
+.data/
+
+# comfy CLI project scratch (development)
+comfyui/outputs/
+comfyui/assets/
+comfyui/.comfy/

@@ -1,0 +1,303 @@
+{
+  "nodes": [
+    {
+      "id": 1373750031100757,
+      "type": "LoadImage",
+      "pos": [
+        40.0,
+        60.0
+      ],
+      "size": [
+        270.0,
+        328.0
+      ],
+      "flags": {},
+      "order": 0,
+      "mode": 0,
+      "inputs": [],
+      "outputs": [
+        {
+          "name": "IMAGE",
+          "type": "IMAGE",
+          "links": [
+            399157717050032
+          ]
+        },
+        {
+          "name": "MASK",
+          "type": "MASK",
+          "links": []
+        }
+      ],
+      "properties": {},
+      "widgets_values": [
+        "example.png"
+      ],
+      "title": "in:image"
+    },
+    {
+      "id": 3706686181713409,
+      "type": "CheckpointLoaderSimple",
+      "pos": [
+        40.0,
+        458.0
+      ],
+      "size": [
+        270.0,
+        134.0
+      ],
+      "flags": {},
+      "order": 0,
+      "mode": 0,
+      "inputs": [],
+      "outputs": [
+        {
+          "name": "MODEL",
+          "type": "MODEL",
+          "links": [
+            733865649350649
+          ]
+        },
+        {
+          "name": "CLIP",
+          "type": "CLIP",
+          "links": [
+            3423514609081960
+          ]
+        },
+        {
+          "name": "VAE",
+          "type": "VAE",
+          "links": []
+        }
+      ],
+      "properties": {},
+      "widgets_values": [
+        "sam3.1_multiplex_fp16.safetensors"
+      ]
+    },
+    {
+      "id": 1952643512938258,
+      "type": "CLIPTextEncode",
+      "pos": [
+        390.0,
+        407.0
+      ],
+      "size": [
+        400.0,
+        236.0
+      ],
+      "flags": {},
+      "order": 0,
+      "mode": 0,
+      "inputs": [
+        {
+          "name": "clip",
+          "type": "CLIP",
+          "link": 3423514609081960
+        }
+      ],
+      "outputs": [
+        {
+          "name": "CONDITIONING",
+          "type": "CONDITIONING",
+          "links": [
+            3994680392676501
+          ]
+        }
+      ],
+      "properties": {},
+      "widgets_values": [
+        null
+      ],
+      "title": "in:prompt"
+    },
+    {
+      "id": 4146356929139551,
+      "type": "SAM3_Detect",
+      "pos": [
+        870.0,
+        303.6666666666667
+      ],
+      "size": [
+        270.0,
+        242.0
+      ],
+      "flags": {},
+      "order": 0,
+      "mode": 0,
+      "inputs": [
+        {
+          "name": "model",
+          "type": "MODEL",
+          "link": 733865649350649
+        },
+        {
+          "name": "image",
+          "type": "IMAGE",
+          "link": 399157717050032
+        },
+        {
+          "name": "conditioning",
+          "type": "CONDITIONING",
+          "link": 3994680392676501
+        },
+        {
+          "name": "bboxes",
+          "type": "BOUNDING_BOX",
+          "link": null
+        },
+        {
+          "name": "positive_coords",
+          "type": "STRING",
+          "link": null
+        },
+        {
+          "name": "negative_coords",
+          "type": "STRING",
+          "link": null
+        }
+      ],
+      "outputs": [
+        {
+          "name": "masks",
+          "type": "MASK",
+          "links": [
+            4311947113257203
+          ]
+        },
+        {
+          "name": "bboxes",
+          "type": "BOUNDING_BOX",
+          "links": []
+        }
+      ],
+      "properties": {},
+      "widgets_values": [
+        0.5,
+        2,
+        false
+      ]
+    },
+    {
+      "id": 1907825365631943,
+      "type": "MaskToImage",
+      "pos": [
+        1220.0,
+        393.6666666666667
+      ],
+      "size": [
+        216.3,
+        62.0
+      ],
+      "flags": {},
+      "order": 0,
+      "mode": 0,
+      "inputs": [
+        {
+          "name": "mask",
+          "type": "MASK",
+          "link": 4311947113257203
+        }
+      ],
+      "outputs": [
+        {
+          "name": "IMAGE",
+          "type": "IMAGE",
+          "links": [
+            2352023364698795
+          ]
+        }
+      ],
+      "properties": {},
+      "widgets_values": []
+    },
+    {
+      "id": 742690316565554,
+      "type": "SaveImage",
+      "pos": [
+        1516.3,
+        377.6666666666667
+      ],
+      "size": [
+        270.0,
+        94.0
+      ],
+      "flags": {},
+      "order": 0,
+      "mode": 0,
+      "inputs": [
+        {
+          "name": "images",
+          "type": "IMAGE",
+          "link": 2352023364698795
+        }
+      ],
+      "outputs": [
+        {
+          "name": "images",
+          "type": "IMAGE",
+          "links": []
+        }
+      ],
+      "properties": {},
+      "widgets_values": [
+        "slopoly/segment"
+      ],
+      "title": "out:mask"
+    }
+  ],
+  "links": [
+    [
+      3423514609081960,
+      3706686181713409,
+      1,
+      1952643512938258,
+      0,
+      "CLIP"
+    ],
+    [
+      733865649350649,
+      3706686181713409,
+      0,
+      4146356929139551,
+      0,
+      "MODEL"
+    ],
+    [
+      399157717050032,
+      1373750031100757,
+      0,
+      4146356929139551,
+      1,
+      "IMAGE"
+    ],
+    [
+      3994680392676501,
+      1952643512938258,
+      0,
+      4146356929139551,
+      2,
+      "CONDITIONING"
+    ],
+    [
+      4311947113257203,
+      4146356929139551,
+      0,
+      1907825365631943,
+      0,
+      "MASK"
+    ],
+    [
+      2352023364698795,
+      1907825365631943,
+      0,
+      742690316565554,
+      0,
+      "IMAGE"
+    ]
+  ],
+  "last_node_id": 4146356929139551,
+  "last_link_id": 0,
+  "version": 0.4
+}

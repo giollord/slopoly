@@ -1,0 +1,30 @@
+# Python tests in containers: docker compose -f workers/compose.test.yaml run --rm tests
+services:
+  rabbitmq:
+    image: rabbitmq:4-management
+    healthcheck:
+      test: ["CMD", "rabbitmq-diagnostics", "-q", "ping"]
+      interval: 3s
+      retries: 30
+  tests:
+    build: { context: ., dockerfile: Dockerfile.test }
+    volumes: [".:/src:ro", "../containers/comfyui:/repo/containers/comfyui:ro", "../comfyui:/repo/comfyui:ro"]
+    environment:
+      SLOPOLY_TEST_AMQP_URL: amqp://guest:guest@rabbitmq:5672/
+      PYTHONPATH: /src:/repo/containers/comfyui
+    command: ["pytest", "-q", "-p", "no:cacheprovider", "-c", "/src/pyproject.toml", "--rootdir", "/src", "tests", "/repo/containers/comfyui/tests"]
+    depends_on:
+      rabbitmq: { condition: service_healthy }
+  # Geometry (bpy) tests run in the geometry worker image: docker compose -f workers/compose.test.yaml run --rm geometry-tests
+  geometry-tests:
+    build: { context: .., dockerfile: containers/geometry/Dockerfile }
+    volumes: ["../geometry:/opt/slopoly/geometry:ro", "../containers/geometry/geometry_worker.py:/opt/slopoly/geometry_worker.py:ro", "../agent:/opt/slopoly/agent:ro"]
+    working_dir: /opt/slopoly/geometry
+    command: ["pytest", "-q", "-p", "no:cacheprovider", "-W", "ignore::DeprecationWarning", "tests"]
+  # Agent worker tests (stubbed SDK): docker compose -f workers/compose.test.yaml run --rm agent-tests
+  agent-tests:
+    build: { context: .., dockerfile: containers/agent/Dockerfile }
+    volumes: ["../containers/agent:/opt/slopoly/agent-src:ro"]
+    working_dir: /opt/slopoly/agent-src
+    environment: { PYTHONPATH: /opt/slopoly/agent-src }
+    command: ["pytest", "-q", "-p", "no:cacheprovider", "tests"]

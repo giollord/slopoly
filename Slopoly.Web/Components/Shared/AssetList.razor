@@ -1,0 +1,63 @@
+@inherits LiveComponent
+
+<MudStack Row="true" AlignItems="AlignItems.Center" Class="mb-3">
+    <MudTextField @bind-Value="_name" Label="Asset name" Variant="Variant.Outlined" Margin="Margin.Dense" />
+    <MudTextField @bind-Value="_description" Label="Description" Variant="Variant.Outlined" Margin="Margin.Dense" />
+    <MudButton Variant="Variant.Filled" Color="Color.Primary" Disabled="string.IsNullOrWhiteSpace(_name)" OnClick="CreateAsync">Add asset</MudButton>
+</MudStack>
+
+<MudSimpleTable Dense="true" Hover="true">
+    <thead><tr><th>Asset</th><th>Status</th><th>Description</th><th style="width: 22rem">Turnaround</th></tr></thead>
+    <tbody>
+        @foreach (var asset in _assets)
+        {
+            <tr>
+                <td><MudLink Href="@($"/assets/{asset.Id}")">@asset.Name</MudLink></td>
+                <td><MudChip T="string" Size="Size.Small" Color="@StatusColor(asset.Status)">@asset.Status</MudChip></td>
+                <td>@asset.Description</td>
+                <td>
+                    <MudStack Row="true" AlignItems="AlignItems.Center" Spacing="1">
+                        <MudNumericField T="int" @bind-Value="_counts[asset.Id]" Min="1" Max="4" Variant="Variant.Outlined" Margin="Margin.Dense" Style="max-width: 5rem" />
+                        <MudButton Variant="Variant.Outlined" Size="Size.Small" OnClick="() => TurnaroundAsync(asset)">Generate</MudButton>
+                    </MudStack>
+                </td>
+            </tr>
+        }
+    </tbody>
+</MudSimpleTable>
+
+@code {
+    [Parameter, EditorRequired] public Guid PackId { get; set; }
+    private List<Asset> _assets = [];
+    private readonly Dictionary<Guid, int> _counts = [];
+    private string _name = "", _description = "";
+
+    protected override async Task LoadAsync()
+    {
+        _assets = await Api.GetAsync<List<Asset>>($"api/packs/{PackId}/assets");
+        foreach (var a in _assets) _counts.TryAdd(a.Id, 2);
+    }
+
+    protected override bool Concerns(Guid? packId, Guid? assetId) => packId == PackId;
+
+    protected override Task OnJobEventAsync(JobEventMessage e) => e.Kind == JobKinds.Build && e.Type is "succeeded" ? LoadAsync() : Task.CompletedTask;
+
+    public static Color StatusColor(AssetStatus status) => status switch
+    {
+        AssetStatus.Validated => Color.Success,
+        AssetStatus.Built => Color.Warning,
+        _ => Color.Default,
+    };
+
+    private Task CreateAsync() => Try(async () =>
+    {
+        await Api.PostAsync<Asset>($"api/packs/{PackId}/assets", new AssetCreate(_name.Trim(), _description.Trim()));
+        _name = _description = "";
+    });
+
+    private Task TurnaroundAsync(Asset asset) => Try(async () =>
+    {
+        await Api.PostAsync<Job>($"api/packs/{PackId}/generate", new GenerateRequest(Workflows.Turnaround, asset.Id, null, _counts[asset.Id]));
+        Snackbar.Add($"Turnaround for {asset.Name} queued.", Severity.Info);
+    });
+}

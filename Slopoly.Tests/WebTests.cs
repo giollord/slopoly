@@ -6,7 +6,7 @@ public class WebTests
 {
     private static readonly TimeSpan DefaultTimeout = TimeSpan.FromSeconds(30);
 
-    [Test]
+    [Test, Explicit("Starts the whole stack, including the GPU containers.")]
     public async Task GetWebResourceRootReturnsOkStatusCode()
     {
         // Arrange

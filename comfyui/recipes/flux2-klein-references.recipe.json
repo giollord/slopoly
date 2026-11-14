@@ -1,0 +1,624 @@
+{
+ "recipe": "flux2-klein-references",
+ "description": "FLUX.2 [klein] 4B distilled: text + up to 3 reference images (ReferenceLatent on positive and zeroed negative, each behind a use_reference switch), wired after the image_flux2_klein_image_edit_4b_distilled template.",
+ "params": {
+  "width": {
+   "type": "int"
+  },
+  "height": {
+   "type": "int"
+  },
+  "prefix": {
+   "type": "string"
+  }
+ },
+ "ops": [
+  {
+   "op": "add_node",
+   "class_type": "UNETLoader",
+   "as": "unet"
+  },
+  {
+   "op": "set_widget",
+   "node": "unet",
+   "widget": "unet_name",
+   "value": "flux-2-klein-4b-fp8.safetensors"
+  },
+  {
+   "op": "add_node",
+   "class_type": "CLIPLoader",
+   "as": "clip"
+  },
+  {
+   "op": "set_widget",
+   "node": "clip",
+   "widget": "clip_name",
+   "value": "qwen_3_4b.safetensors"
+  },
+  {
+   "op": "set_widget",
+   "node": "clip",
+   "widget": "type",
+   "value": "flux2"
+  },
+  {
+   "op": "add_node",
+   "class_type": "VAELoader",
+   "as": "vae"
+  },
+  {
+   "op": "set_widget",
+   "node": "vae",
+   "widget": "vae_name",
+   "value": "flux2-vae.safetensors"
+  },
+  {
+   "op": "add_node",
+   "class_type": "CLIPTextEncode",
+   "as": "prompt"
+  },
+  {
+   "op": "connect",
+   "from": "clip.CLIP",
+   "to": "prompt.clip"
+  },
+  {
+   "op": "set_node_field",
+   "node": "prompt",
+   "field": "title",
+   "value": "in:prompt"
+  },
+  {
+   "op": "add_node",
+   "class_type": "ConditioningZeroOut",
+   "as": "neg0"
+  },
+  {
+   "op": "connect",
+   "from": "prompt.CONDITIONING",
+   "to": "neg0.conditioning"
+  },
+  {
+   "op": "add_node",
+   "class_type": "LoadImage",
+   "as": "ref1"
+  },
+  {
+   "op": "set_node_field",
+   "node": "ref1",
+   "field": "title",
+   "value": "in:reference_1"
+  },
+  {
+   "op": "add_node",
+   "class_type": "ImageScaleToTotalPixels",
+   "as": "scale1"
+  },
+  {
+   "op": "connect",
+   "from": "ref1.IMAGE",
+   "to": "scale1.image"
+  },
+  {
+   "op": "set_widget",
+   "node": "scale1",
+   "widget": "megapixels",
+   "value": 1.0
+  },
+  {
+   "op": "add_node",
+   "class_type": "VAEEncode",
+   "as": "enc1"
+  },
+  {
+   "op": "connect",
+   "from": "scale1.IMAGE",
+   "to": "enc1.pixels"
+  },
+  {
+   "op": "connect",
+   "from": "vae.VAE",
+   "to": "enc1.vae"
+  },
+  {
+   "op": "add_node",
+   "class_type": "PrimitiveBoolean",
+   "as": "use1"
+  },
+  {
+   "op": "set_widget",
+   "node": "use1",
+   "widget": "value",
+   "value": false
+  },
+  {
+   "op": "set_node_field",
+   "node": "use1",
+   "field": "title",
+   "value": "in:use_reference_1"
+  },
+  {
+   "op": "add_node",
+   "class_type": "ReferenceLatent",
+   "as": "rlp1"
+  },
+  {
+   "op": "connect",
+   "from": "prompt.CONDITIONING",
+   "to": "rlp1.conditioning"
+  },
+  {
+   "op": "connect",
+   "from": "enc1.LATENT",
+   "to": "rlp1.latent"
+  },
+  {
+   "op": "add_node",
+   "class_type": "ComfySwitchNode",
+   "as": "swp1"
+  },
+  {
+   "op": "connect",
+   "from": "use1.BOOLEAN",
+   "to": "swp1.switch"
+  },
+  {
+   "op": "connect",
+   "from": "prompt.CONDITIONING",
+   "to": "swp1.on_false"
+  },
+  {
+   "op": "connect",
+   "from": "rlp1.CONDITIONING",
+   "to": "swp1.on_true"
+  },
+  {
+   "op": "add_node",
+   "class_type": "ReferenceLatent",
+   "as": "rln1"
+  },
+  {
+   "op": "connect",
+   "from": "neg0.CONDITIONING",
+   "to": "rln1.conditioning"
+  },
+  {
+   "op": "connect",
+   "from": "enc1.LATENT",
+   "to": "rln1.latent"
+  },
+  {
+   "op": "add_node",
+   "class_type": "ComfySwitchNode",
+   "as": "swn1"
+  },
+  {
+   "op": "connect",
+   "from": "use1.BOOLEAN",
+   "to": "swn1.switch"
+  },
+  {
+   "op": "connect",
+   "from": "neg0.CONDITIONING",
+   "to": "swn1.on_false"
+  },
+  {
+   "op": "connect",
+   "from": "rln1.CONDITIONING",
+   "to": "swn1.on_true"
+  },
+  {
+   "op": "add_node",
+   "class_type": "LoadImage",
+   "as": "ref2"
+  },
+  {
+   "op": "set_node_field",
+   "node": "ref2",
+   "field": "title",
+   "value": "in:reference_2"
+  },
+  {
+   "op": "add_node",
+   "class_type": "ImageScaleToTotalPixels",
+   "as": "scale2"
+  },
+  {
+   "op": "connect",
+   "from": "ref2.IMAGE",
+   "to": "scale2.image"
+  },
+  {
+   "op": "set_widget",
+   "node": "scale2",
+   "widget": "megapixels",
+   "value": 1.0
+  },
+  {
+   "op": "add_node",
+   "class_type": "VAEEncode",
+   "as": "enc2"
+  },
+  {
+   "op": "connect",
+   "from": "scale2.IMAGE",
+   "to": "enc2.pixels"
+  },
+  {
+   "op": "connect",
+   "from": "vae.VAE",
+   "to": "enc2.vae"
+  },
+  {
+   "op": "add_node",
+   "class_type": "PrimitiveBoolean",
+   "as": "use2"
+  },
+  {
+   "op": "set_widget",
+   "node": "use2",
+   "widget": "value",
+   "value": false
+  },
+  {
+   "op": "set_node_field",
+   "node": "use2",
+   "field": "title",
+   "value": "in:use_reference_2"
+  },
+  {
+   "op": "add_node",
+   "class_type": "ReferenceLatent",
+   "as": "rlp2"
+  },
+  {
+   "op": "connect",
+   "from": "swp1.output",
+   "to": "rlp2.conditioning"
+  },
+  {
+   "op": "connect",
+   "from": "enc2.LATENT",
+   "to": "rlp2.latent"
+  },
+  {
+   "op": "add_node",
+   "class_type": "ComfySwitchNode",
+   "as": "swp2"
+  },
+  {
+   "op": "connect",
+   "from": "use2.BOOLEAN",
+   "to": "swp2.switch"
+  },
+  {
+   "op": "connect",
+   "from": "swp1.output",
+   "to": "swp2.on_false"
+  },
+  {
+   "op": "connect",
+   "from": "rlp2.CONDITIONING",
+   "to": "swp2.on_true"
+  },
+  {
+   "op": "add_node",
+   "class_type": "ReferenceLatent",
+   "as": "rln2"
+  },
+  {
+   "op": "connect",
+   "from": "swn1.output",
+   "to": "rln2.conditioning"
+  },
+  {
+   "op": "connect",
+   "from": "enc2.LATENT",
+   "to": "rln2.latent"
+  },
+  {
+   "op": "add_node",
+   "class_type": "ComfySwitchNode",
+   "as": "swn2"
+  },
+  {
+   "op": "connect",
+   "from": "use2.BOOLEAN",
+   "to": "swn2.switch"
+  },
+  {
+   "op": "connect",
+   "from": "swn1.output",
+   "to": "swn2.on_false"
+  },
+  {
+   "op": "connect",
+   "from": "rln2.CONDITIONING",
+   "to": "swn2.on_true"
+  },
+  {
+   "op": "add_node",
+   "class_type": "LoadImage",
+   "as": "ref3"
+  },
+  {
+   "op": "set_node_field",
+   "node": "ref3",
+   "field": "title",
+   "value": "in:reference_3"
+  },
+  {
+   "op": "add_node",
+   "class_type": "ImageScaleToTotalPixels",
+   "as": "scale3"
+  },
+  {
+   "op": "connect",
+   "from": "ref3.IMAGE",
+   "to": "scale3.image"
+  },
+  {
+   "op": "set_widget",
+   "node": "scale3",
+   "widget": "megapixels",
+   "value": 1.0
+  },
+  {
+   "op": "add_node",
+   "class_type": "VAEEncode",
+   "as": "enc3"
+  },
+  {
+   "op": "connect",
+   "from": "scale3.IMAGE",
+   "to": "enc3.pixels"
+  },
+  {
+   "op": "connect",
+   "from": "vae.VAE",
+   "to": "enc3.vae"
+  },
+  {
+   "op": "add_node",
+   "class_type": "PrimitiveBoolean",
+   "as": "use3"
+  },
+  {
+   "op": "set_widget",
+   "node": "use3",
+   "widget": "value",
+   "value": false
+  },
+  {
+   "op": "set_node_field",
+   "node": "use3",
+   "field": "title",
+   "value": "in:use_reference_3"
+  },
+  {
+   "op": "add_node",
+   "class_type": "ReferenceLatent",
+   "as": "rlp3"
+  },
+  {
+   "op": "connect",
+   "from": "swp2.output",
+   "to": "rlp3.conditioning"
+  },
+  {
+   "op": "connect",
+   "from": "enc3.LATENT",
+   "to": "rlp3.latent"
+  },
+  {
+   "op": "add_node",
+   "class_type": "ComfySwitchNode",
+   "as": "swp3"
+  },
+  {
+   "op": "connect",
+   "from": "use3.BOOLEAN",
+   "to": "swp3.switch"
+  },
+  {
+   "op": "connect",
+   "from": "swp2.output",
+   "to": "swp3.on_false"
+  },
+  {
+   "op": "connect",
+   "from": "rlp3.CONDITIONING",
+   "to": "swp3.on_true"
+  },
+  {
+   "op": "add_node",
+   "class_type": "ReferenceLatent",
+   "as": "rln3"
+  },
+  {
+   "op": "connect",
+   "from": "swn2.output",
+   "to": "rln3.conditioning"
+  },
+  {
+   "op": "connect",
+   "from": "enc3.LATENT",
+   "to": "rln3.latent"
+  },
+  {
+   "op": "add_node",
+   "class_type": "ComfySwitchNode",
+   "as": "swn3"
+  },
+  {
+   "op": "connect",
+   "from": "use3.BOOLEAN",
+   "to": "swn3.switch"
+  },
+  {
+   "op": "connect",
+   "from": "swn2.output",
+   "to": "swn3.on_false"
+  },
+  {
+   "op": "connect",
+   "from": "rln3.CONDITIONING",
+   "to": "swn3.on_true"
+  },
+  {
+   "op": "add_node",
+   "class_type": "CFGGuider",
+   "as": "guider"
+  },
+  {
+   "op": "connect",
+   "from": "unet.MODEL",
+   "to": "guider.model"
+  },
+  {
+   "op": "connect",
+   "from": "swp3.output",
+   "to": "guider.positive"
+  },
+  {
+   "op": "connect",
+   "from": "swn3.output",
+   "to": "guider.negative"
+  },
+  {
+   "op": "set_widget",
+   "node": "guider",
+   "widget": "cfg",
+   "value": 1.0
+  },
+  {
+   "op": "add_node",
+   "class_type": "RandomNoise",
+   "as": "seed"
+  },
+  {
+   "op": "set_node_field",
+   "node": "seed",
+   "field": "title",
+   "value": "in:seed"
+  },
+  {
+   "op": "add_node",
+   "class_type": "KSamplerSelect",
+   "as": "sampler"
+  },
+  {
+   "op": "set_widget",
+   "node": "sampler",
+   "widget": "sampler_name",
+   "value": "euler"
+  },
+  {
+   "op": "add_node",
+   "class_type": "Flux2Scheduler",
+   "as": "sched"
+  },
+  {
+   "op": "set_widget",
+   "node": "sched",
+   "widget": "steps",
+   "value": 4
+  },
+  {
+   "op": "set_widget",
+   "node": "sched",
+   "widget": "width",
+   "value": "${width}"
+  },
+  {
+   "op": "set_widget",
+   "node": "sched",
+   "widget": "height",
+   "value": "${height}"
+  },
+  {
+   "op": "add_node",
+   "class_type": "EmptyFlux2LatentImage",
+   "as": "latent"
+  },
+  {
+   "op": "set_widget",
+   "node": "latent",
+   "widget": "width",
+   "value": "${width}"
+  },
+  {
+   "op": "set_widget",
+   "node": "latent",
+   "widget": "height",
+   "value": "${height}"
+  },
+  {
+   "op": "add_node",
+   "class_type": "SamplerCustomAdvanced",
+   "as": "sample"
+  },
+  {
+   "op": "connect",
+   "from": "seed.NOISE",
+   "to": "sample.noise"
+  },
+  {
+   "op": "connect",
+   "from": "guider.GUIDER",
+   "to": "sample.guider"
+  },
+  {
+   "op": "connect",
+   "from": "sampler.SAMPLER",
+   "to": "sample.sampler"
+  },
+  {
+   "op": "connect",
+   "from": "sched.SIGMAS",
+   "to": "sample.sigmas"
+  },
+  {
+   "op": "connect",
+   "from": "latent.LATENT",
+   "to": "sample.latent_image"
+  },
+  {
+   "op": "add_node",
+   "class_type": "VAEDecode",
+   "as": "decode"
+  },
+  {
+   "op": "connect",
+   "from": "sample.output",
+   "to": "decode.samples"
+  },
+  {
+   "op": "connect",
+   "from": "vae.VAE",
+   "to": "decode.vae"
+  },
+  {
+   "op": "add_node",
+   "class_type": "SaveImage",
+   "as": "save"
+  },
+  {
+   "op": "connect",
+   "from": "decode.IMAGE",
+   "to": "save.images"
+  },
+  {
+   "op": "set_widget",
+   "node": "save",
+   "widget": "filename_prefix",
+   "value": "${prefix}"
+  },
+  {
+   "op": "set_node_field",
+   "node": "save",
+   "field": "title",
+   "value": "out:image"
+  }
+ ]
+}

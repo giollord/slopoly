@@ -1,0 +1,538 @@
+{
+ "751738944633922": {
+  "inputs": {
+   "unet_name": "flux-2-klein-4b-fp8.safetensors",
+   "weight_dtype": "default"
+  },
+  "class_type": "UNETLoader",
+  "_meta": {
+   "title": "Load Diffusion Model"
+  }
+ },
+ "2616655784006348": {
+  "inputs": {
+   "clip_name": "qwen_3_4b.safetensors",
+   "type": "flux2",
+   "device": "default"
+  },
+  "class_type": "CLIPLoader",
+  "_meta": {
+   "title": "Load CLIP"
+  }
+ },
+ "3834991264643176": {
+  "inputs": {
+   "vae_name": "flux2-vae.safetensors"
+  },
+  "class_type": "VAELoader",
+  "_meta": {
+   "title": "Load VAE"
+  }
+ },
+ "3211817417555891": {
+  "inputs": {
+   "text": null,
+   "clip": [
+    "2616655784006348",
+    0
+   ]
+  },
+  "class_type": "CLIPTextEncode",
+  "_meta": {
+   "title": "in:prompt"
+  }
+ },
+ "1177713166992087": {
+  "inputs": {
+   "conditioning": [
+    "3211817417555891",
+    0
+   ]
+  },
+  "class_type": "ConditioningZeroOut",
+  "_meta": {
+   "title": "Conditioning Zero Out"
+  }
+ },
+ "1576660353519889": {
+  "inputs": {
+   "image": "example.png"
+  },
+  "class_type": "LoadImage",
+  "_meta": {
+   "title": "in:reference_1"
+  }
+ },
+ "1870283821313651": {
+  "inputs": {
+   "upscale_method": "nearest-exact",
+   "megapixels": 1.0,
+   "resolution_steps": 1,
+   "image": [
+    "1576660353519889",
+    0
+   ]
+  },
+  "class_type": "ImageScaleToTotalPixels",
+  "_meta": {
+   "title": "Scale Image to Total Pixels"
+  }
+ },
+ "1400592615744810": {
+  "inputs": {
+   "pixels": [
+    "1870283821313651",
+    0
+   ],
+   "vae": [
+    "3834991264643176",
+    0
+   ]
+  },
+  "class_type": "VAEEncode",
+  "_meta": {
+   "title": "VAE Encode"
+  }
+ },
+ "965086197732736": {
+  "inputs": {
+   "value": false
+  },
+  "class_type": "PrimitiveBoolean",
+  "_meta": {
+   "title": "in:use_reference_1"
+  }
+ },
+ "4487668132023450": {
+  "inputs": {
+   "conditioning": [
+    "3211817417555891",
+    0
+   ],
+   "latent": [
+    "1400592615744810",
+    0
+   ]
+  },
+  "class_type": "ReferenceLatent",
+  "_meta": {
+   "title": "Set Reference Latent"
+  }
+ },
+ "3033769242657464": {
+  "inputs": {
+   "switch": [
+    "965086197732736",
+    0
+   ],
+   "on_false": [
+    "3211817417555891",
+    0
+   ],
+   "on_true": [
+    "4487668132023450",
+    0
+   ]
+  },
+  "class_type": "ComfySwitchNode",
+  "_meta": {
+   "title": "If/Else Switch"
+  }
+ },
+ "1215696041179965": {
+  "inputs": {
+   "conditioning": [
+    "1177713166992087",
+    0
+   ],
+   "latent": [
+    "1400592615744810",
+    0
+   ]
+  },
+  "class_type": "ReferenceLatent",
+  "_meta": {
+   "title": "Set Reference Latent"
+  }
+ },
+ "192959719685990": {
+  "inputs": {
+   "switch": [
+    "965086197732736",
+    0
+   ],
+   "on_false": [
+    "1177713166992087",
+    0
+   ],
+   "on_true": [
+    "1215696041179965",
+    0
+   ]
+  },
+  "class_type": "ComfySwitchNode",
+  "_meta": {
+   "title": "If/Else Switch"
+  }
+ },
+ "782200587427195": {
+  "inputs": {
+   "image": "example.png"
+  },
+  "class_type": "LoadImage",
+  "_meta": {
+   "title": "in:reference_2"
+  }
+ },
+ "4452923463186385": {
+  "inputs": {
+   "upscale_method": "nearest-exact",
+   "megapixels": 1.0,
+   "resolution_steps": 1,
+   "image": [
+    "782200587427195",
+    0
+   ]
+  },
+  "class_type": "ImageScaleToTotalPixels",
+  "_meta": {
+   "title": "Scale Image to Total Pixels"
+  }
+ },
+ "2913497336237263": {
+  "inputs": {
+   "pixels": [
+    "4452923463186385",
+    0
+   ],
+   "vae": [
+    "3834991264643176",
+    0
+   ]
+  },
+  "class_type": "VAEEncode",
+  "_meta": {
+   "title": "VAE Encode"
+  }
+ },
+ "3651584023993335": {
+  "inputs": {
+   "value": false
+  },
+  "class_type": "PrimitiveBoolean",
+  "_meta": {
+   "title": "in:use_reference_2"
+  }
+ },
+ "423459428397395": {
+  "inputs": {
+   "conditioning": [
+    "3033769242657464",
+    0
+   ],
+   "latent": [
+    "2913497336237263",
+    0
+   ]
+  },
+  "class_type": "ReferenceLatent",
+  "_meta": {
+   "title": "Set Reference Latent"
+  }
+ },
+ "72447362614550": {
+  "inputs": {
+   "switch": [
+    "3651584023993335",
+    0
+   ],
+   "on_false": [
+    "3033769242657464",
+    0
+   ],
+   "on_true": [
+    "423459428397395",
+    0
+   ]
+  },
+  "class_type": "ComfySwitchNode",
+  "_meta": {
+   "title": "If/Else Switch"
+  }
+ },
+ "761990413983921": {
+  "inputs": {
+   "conditioning": [
+    "192959719685990",
+    0
+   ],
+   "latent": [
+    "2913497336237263",
+    0
+   ]
+  },
+  "class_type": "ReferenceLatent",
+  "_meta": {
+   "title": "Set Reference Latent"
+  }
+ },
+ "1936900673961366": {
+  "inputs": {
+   "switch": [
+    "3651584023993335",
+    0
+   ],
+   "on_false": [
+    "192959719685990",
+    0
+   ],
+   "on_true": [
+    "761990413983921",
+    0
+   ]
+  },
+  "class_type": "ComfySwitchNode",
+  "_meta": {
+   "title": "If/Else Switch"
+  }
+ },
+ "78530470852346": {
+  "inputs": {
+   "image": "example.png"
+  },
+  "class_type": "LoadImage",
+  "_meta": {
+   "title": "in:reference_3"
+  }
+ },
+ "1818472675199912": {
+  "inputs": {
+   "upscale_method": "nearest-exact",
+   "megapixels": 1.0,
+   "resolution_steps": 1,
+   "image": [
+    "78530470852346",
+    0
+   ]
+  },
+  "class_type": "ImageScaleToTotalPixels",
+  "_meta": {
+   "title": "Scale Image to Total Pixels"
+  }
+ },
+ "4120545137694573": {
+  "inputs": {
+   "pixels": [
+    "1818472675199912",
+    0
+   ],
+   "vae": [
+    "3834991264643176",
+    0
+   ]
+  },
+  "class_type": "VAEEncode",
+  "_meta": {
+   "title": "VAE Encode"
+  }
+ },
+ "2156287648119297": {
+  "inputs": {
+   "value": false
+  },
+  "class_type": "PrimitiveBoolean",
+  "_meta": {
+   "title": "in:use_reference_3"
+  }
+ },
+ "413228759141837": {
+  "inputs": {
+   "conditioning": [
+    "72447362614550",
+    0
+   ],
+   "latent": [
+    "4120545137694573",
+    0
+   ]
+  },
+  "class_type": "ReferenceLatent",
+  "_meta": {
+   "title": "Set Reference Latent"
+  }
+ },
+ "1549770968310906": {
+  "inputs": {
+   "switch": [
+    "2156287648119297",
+    0
+   ],
+   "on_false": [
+    "72447362614550",
+    0
+   ],
+   "on_true": [
+    "413228759141837",
+    0
+   ]
+  },
+  "class_type": "ComfySwitchNode",
+  "_meta": {
+   "title": "If/Else Switch"
+  }
+ },
+ "622051488220418": {
+  "inputs": {
+   "conditioning": [
+    "1936900673961366",
+    0
+   ],
+   "latent": [
+    "4120545137694573",
+    0
+   ]
+  },
+  "class_type": "ReferenceLatent",
+  "_meta": {
+   "title": "Set Reference Latent"
+  }
+ },
+ "335435745725031": {
+  "inputs": {
+   "switch": [
+    "2156287648119297",
+    0
+   ],
+   "on_false": [
+    "1936900673961366",
+    0
+   ],
+   "on_true": [
+    "622051488220418",
+    0
+   ]
+  },
+  "class_type": "ComfySwitchNode",
+  "_meta": {
+   "title": "If/Else Switch"
+  }
+ },
+ "1789905489825796": {
+  "inputs": {
+   "cfg": 1.0,
+   "model": [
+    "751738944633922",
+    0
+   ],
+   "positive": [
+    "1549770968310906",
+    0
+   ],
+   "negative": [
+    "335435745725031",
+    0
+   ]
+  },
+  "class_type": "CFGGuider",
+  "_meta": {
+   "title": "CFG Guider"
+  }
+ },
+ "2528707039688579": {
+  "inputs": {
+   "noise_seed": 0
+  },
+  "class_type": "RandomNoise",
+  "_meta": {
+   "title": "in:seed"
+  }
+ },
+ "1382288332823763": {
+  "inputs": {
+   "sampler_name": "euler"
+  },
+  "class_type": "KSamplerSelect",
+  "_meta": {
+   "title": "KSamplerSelect"
+  }
+ },
+ "4109207078000924": {
+  "inputs": {
+   "steps": 4,
+   "width": 1344,
+   "height": 768
+  },
+  "class_type": "Flux2Scheduler",
+  "_meta": {
+   "title": "Flux2Scheduler"
+  }
+ },
+ "830538514499598": {
+  "inputs": {
+   "width": 1344,
+   "height": 768,
+   "batch_size": 1
+  },
+  "class_type": "EmptyFlux2LatentImage",
+  "_meta": {
+   "title": "Empty Flux 2 Latent"
+  }
+ },
+ "1859940509364465": {
+  "inputs": {
+   "noise": [
+    "2528707039688579",
+    0
+   ],
+   "guider": [
+    "1789905489825796",
+    0
+   ],
+   "sampler": [
+    "1382288332823763",
+    0
+   ],
+   "sigmas": [
+    "4109207078000924",
+    0
+   ],
+   "latent_image": [
+    "830538514499598",
+    0
+   ]
+  },
+  "class_type": "SamplerCustomAdvanced",
+  "_meta": {
+   "title": "SamplerCustomAdvanced"
+  }
+ },
+ "3849703442765392": {
+  "inputs": {
+   "samples": [
+    "1859940509364465",
+    0
+   ],
+   "vae": [
+    "3834991264643176",
+    0
+   ]
+  },
+  "class_type": "VAEDecode",
+  "_meta": {
+   "title": "VAE Decode"
+  }
+ },
+ "2391683757898607": {
+  "inputs": {
+   "filename_prefix": "slopoly/style-anchor",
+   "images": [
+    "3849703442765392",
+    0
+   ]
+  },
+  "class_type": "SaveImage",
+  "_meta": {
+   "title": "out:image"
+  }
+ }
+}

@@ -1,0 +1,45 @@
+@page "/packs/{PackId:guid}"
+@inherits LiveComponent
+
+<PageTitle>@(_pack?.Name ?? "Pack") · Slopoly</PageTitle>
+
+@if (_pack is null)
+{
+    <MudProgressLinear Indeterminate="true" />
+}
+else
+{
+    <MudStack Row="true" AlignItems="AlignItems.Center" Class="mb-2">
+        <MudText Typo="Typo.h5">@_pack.Name</MudText>
+        <MudSpacer />
+        <MudButton Variant="Variant.Filled" Color="Color.Secondary" StartIcon="@Icons.Material.Filled.Chat" OnClick="() => _chatOpen = true">Agent</MudButton>
+    </MudStack>
+
+    <MudTabs Outlined="true" Rounded="true" TabPanelsClass="pa-4" KeepPanelsAlive="true">
+        <MudTabPanel Text="Style"><PackStyle Pack="_pack" /></MudTabPanel>
+        <MudTabPanel Text="Concepts"><ConceptGallery PackId="PackId" /></MudTabPanel>
+        <MudTabPanel Text="Assets"><AssetList PackId="PackId" /></MudTabPanel>
+        <MudTabPanel Text="Palette"><PaletteEditor PackId="PackId" /></MudTabPanel>
+        <MudTabPanel Text="Jobs"><JobList PackId="PackId" /></MudTabPanel>
+    </MudTabs>
+
+    <MudDrawer @bind-Open="_chatOpen" Anchor="Anchor.End" Variant="DrawerVariant.Temporary" Width="520px" Elevation="2">
+        <MudDrawerHeader><MudText Typo="Typo.h6">Agent · @_pack.Name</MudText></MudDrawerHeader>
+        @if (_chatOpen)
+        {
+            <ChatPanel PackId="PackId" />
+        }
+    </MudDrawer>
+}
+
+@code {
+    [Parameter] public Guid PackId { get; set; }
+    private Pack? _pack;
+    private bool _chatOpen;
+
+    protected override async Task LoadAsync() => _pack = await Api.GetAsync<Pack>($"api/packs/{PackId}");
+
+    protected override bool Concerns(Guid? packId, Guid? assetId) => packId == PackId && assetId is null;
+
+    protected override Task OnJobEventAsync(JobEventMessage e) => Task.CompletedTask; // the tabs follow their own jobs
+}

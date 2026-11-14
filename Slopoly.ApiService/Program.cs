@@ -1,47 +1,73 @@
+using System.Text.Json.Serialization;
+using Microsoft.EntityFrameworkCore;
+using ModelContextProtocol.Protocol;
+using Slopoly.ApiService.Data;
+using Slopoly.ApiService.Endpoints;
+using Slopoly.ApiService.Infrastructure;
+using Slopoly.ApiService.Jobs;
+using Slopoly.ApiService.Mcp;
+using Slopoly.ApiService.Studio;
+using Slopoly.Contracts;
+
 var builder = WebApplication.CreateBuilder(args);
 
-// Add service defaults & Aspire client integrations.
 builder.AddServiceDefaults();
 
-// Add services to the container.
-builder.Services.AddProblemDetails();
+var options = builder.Configuration.GetSection("Slopoly").Get<SlopolyOptions>() ?? new SlopolyOptions();
+options.DataDir = Path.GetFullPath(options.DataDir);
+Directory.CreateDirectory(options.DataDir);
+builder.Services.AddSingleton(options);
 
-// Learn more about configuring OpenAPI at https://aka.ms/aspnet/openapi
+builder.Services.AddDbContext<SlopolyDb>(db => db.UseSqlite($"Data Source={Path.Combine(options.DataDir, "slopoly.db")}"));
+builder.AddRabbitMQClient("rabbitmq");
+
+builder.Services.AddProblemDetails();
 builder.Services.AddOpenApi();
+builder.Services.AddSignalR().AddJsonProtocol(o => o.PayloadSerializerOptions.Converters.Add(new JsonStringEnumConverter()));
+builder.Services.ConfigureHttpJsonOptions(o => o.SerializerOptions.Converters.Add(new JsonStringEnumConverter()));
+Broker.Json.Converters.Add(new JsonStringEnumConverter());
+
+builder.Services.AddSingleton<Broker>();
+builder.Services.AddSingleton<Notifier>();
+builder.Services.AddSingleton<PaletteRenderScheduler>();
+builder.Services.AddScoped<FileStore>();
+builder.Services.AddScoped<JobService>();
+builder.Services.AddScoped<StudioService>();
+builder.Services.AddScoped<GenerationService>();
+builder.Services.AddScoped<PaletteService>();
+builder.Services.AddScoped<JobEventApplier>();
+builder.Services.AddScoped<IJobResultHandler, ConceptImageResults>();
+builder.Services.AddScoped<IJobResultHandler, SegmentationResults>();
+builder.Services.AddScoped<IJobResultHandler, BuildResults>();
+builder.Services.AddScoped<IJobResultHandler, AgentTurnResults>();
+builder.Services.AddScoped<IJobResultHandler, PaletteRenderResults>();
+builder.Services.AddHostedService<JobEventConsumer>();
+builder.Services.AddMcpServer()
+    .WithHttpTransport(o => o.Stateless = true)
+    .WithTools<StudioTools>(new System.Text.Json.JsonSerializerOptions(Broker.Json) { TypeInfoResolver = new System.Text.Json.Serialization.Metadata.DefaultJsonTypeInfoResolver() })
+    .WithRequestFilters(f => f.AddCallToolFilter(next => async (request, ct) =>
+    {
+        try { return await next(request, ct); }
+        catch (StudioException ex) { return new() { IsError = true, Content = [new TextContentBlock { Text = ex.Message }] }; }
+    }));
 
 var app = builder.Build();
 
-// Configure the HTTP request pipeline.
+await using (var scope = app.Services.CreateAsyncScope())
+    await scope.ServiceProvider.GetRequiredService<SlopolyDb>().Database.MigrateAsync();
+await using (var channel = await app.Services.GetRequiredService<RabbitMQ.Client.IConnection>().CreateChannelAsync())
+    await Broker.DeclareTopologyAsync(channel);
+
 app.UseExceptionHandler();
+app.UseStudioErrors();
+app.UseWorkerKey();
+if (app.Environment.IsDevelopment()) app.MapOpenApi();
 
-if (app.Environment.IsDevelopment())
-{
-    app.MapOpenApi();
-}
-
-string[] summaries = ["Freezing", "Bracing", "Chilly", "Cool", "Mild", "Warm", "Balmy", "Hot", "Sweltering", "Scorching"];
-
-app.MapGet("/", () => "API service is running. Navigate to /weatherforecast to see sample data.");
-
-app.MapGet("/weatherforecast", () =>
-{
-    var forecast = Enumerable.Range(1, 5).Select(index =>
-        new WeatherForecast
-        (
-            DateOnly.FromDateTime(DateTime.Now.AddDays(index)),
-            Random.Shared.Next(-20, 55),
-            summaries[Random.Shared.Next(summaries.Length)]
-        ))
-        .ToArray();
-    return forecast;
-})
-.WithName("GetWeatherForecast");
-
+app.MapGet("/", () => "Slopoly API");
+app.MapStudioApi();
+app.MapHub<EventsHub>(Realtime.Path);
+app.MapMcp("/mcp");
 app.MapDefaultEndpoints();
 
 app.Run();
 
-record WeatherForecast(DateOnly Date, int TemperatureC, string? Summary)
-{
-    public int TemperatureF => 32 + (int)(TemperatureC / 0.5556);
-}

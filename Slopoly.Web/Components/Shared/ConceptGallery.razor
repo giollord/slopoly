@@ -1,0 +1,87 @@
+@inherits LiveComponent
+
+<MudStack Row="true" AlignItems="AlignItems.Center" Class="mb-3">
+    <MudText Typo="Typo.body2">Pick the images the agent may use; rejected ones are hidden from it.</MudText>
+    <MudSpacer />
+    <MudSwitch T="bool" Value="_showRejected" ValueChanged="ToggleRejectedAsync" Label="Show rejected" Color="Color.Primary" />
+</MudStack>
+
+@if (_concepts.Count == 0)
+{
+    <MudAlert Severity="Severity.Info">No concept images yet.</MudAlert>
+}
+<MudGrid>
+    @foreach (var concept in _concepts)
+    {
+        <MudItem xs="12" sm="@(concept.Kind == ConceptKind.Turnaround ? 12 : 6)" md="@(concept.Kind == ConceptKind.Turnaround ? 8 : 4)">
+            <MudCard Outlined="true" Style="@(concept.Selection == Selection.Picked ? "border: 2px solid var(--mud-palette-success)" : "")">
+                <img class="concept-image" src="/files/@concept.FileId" alt="@concept.Kind" loading="lazy"
+                     style="@(concept.Selection == Selection.Rejected ? "opacity: .35" : "")" />
+                <MudCardActions>
+                    <MudChip T="string" Size="Size.Small">@concept.Kind</MudChip>
+                    @if (concept.AssetId is { } assetId && _assets.TryGetValue(assetId, out var assetName))
+                    {
+                        <MudChip T="string" Size="Size.Small" Href="@($"/assets/{assetId}")">@assetName</MudChip>
+                    }
+                    <MudSpacer />
+                    <MudTooltip Text="Pick"><MudIconButton Icon="@Icons.Material.Filled.CheckCircle" Color="@(concept.Selection == Selection.Picked ? Color.Success : Color.Default)" OnClick="() => SelectAsync(concept, Selection.Picked)" /></MudTooltip>
+                    <MudTooltip Text="Reject"><MudIconButton Icon="@Icons.Material.Filled.Cancel" Color="@(concept.Selection == Selection.Rejected ? Color.Error : Color.Default)" OnClick="() => SelectAsync(concept, Selection.Rejected)" /></MudTooltip>
+                    <MudTooltip Text="Undecided"><MudIconButton Icon="@Icons.Material.Filled.RadioButtonUnchecked" OnClick="() => SelectAsync(concept, Selection.None)" /></MudTooltip>
+                    <MudTooltip Text="More variants (2 new images)"><MudIconButton Icon="@Icons.Material.Filled.AutoAwesome" OnClick="() => MoreAsync(concept)" /></MudTooltip>
+                </MudCardActions>
+                @if (concept.Kind == ConceptKind.Turnaround && concept.Selection == Selection.Picked)
+                {
+                    <MudCardContent>
+                        <MudStack Row="true" AlignItems="AlignItems.Center">
+                            <MudTextField T="string" @bind-Value="_parts[concept.Id]" Label="Parts to segment (comma separated)" Variant="Variant.Outlined" Margin="Margin.Dense"
+                                          Placeholder="bed, wheel, handle, axle" />
+                            <MudButton Variant="Variant.Outlined" OnClick="() => SegmentAsync(concept)">Segment</MudButton>
+                        </MudStack>
+                    </MudCardContent>
+                }
+            </MudCard>
+        </MudItem>
+    }
+</MudGrid>
+
+@code {
+    [Parameter, EditorRequired] public Guid PackId { get; set; }
+    [Parameter] public Guid? AssetId { get; set; }
+    private List<ConceptImage> _concepts = [];
+    private Dictionary<Guid, string> _assets = [];
+    private readonly Dictionary<Guid, string> _parts = [];
+    private bool _showRejected;
+
+    protected override async Task LoadAsync()
+    {
+        var query = $"api/packs/{PackId}/concepts?includeRejected={_showRejected}" + (AssetId is { } id ? $"&assetId={id}" : "");
+        _concepts = (await Api.GetAsync<List<ConceptImage>>(query)).OrderByDescending(c => c.CreatedAt).ToList();
+        _assets = (await Api.GetAsync<List<Asset>>($"api/packs/{PackId}/assets")).ToDictionary(a => a.Id, a => a.Name);
+        foreach (var c in _concepts) _parts.TryAdd(c.Id, "");
+    }
+
+    protected override bool Concerns(Guid? packId, Guid? assetId) => packId == PackId && (AssetId is null || assetId == AssetId);
+
+    private Task ToggleRejectedAsync(bool value)
+    {
+        _showRejected = value;
+        return Try(LoadAsync);
+    }
+
+    private Task SelectAsync(ConceptImage concept, Selection selection) =>
+        Try(() => Api.PutAsync<ConceptImage>($"api/concepts/{concept.Id}/selection", new SelectionEdit(selection)));
+
+    private Task MoreAsync(ConceptImage concept) => Try(async () =>
+    {
+        await Api.PostAsync<Job>($"api/concepts/{concept.Id}/more?count=2");
+        Snackbar.Add("Two more variants queued.", Severity.Info);
+    });
+
+    private Task SegmentAsync(ConceptImage concept) => Try(async () =>
+    {
+        var parts = _parts[concept.Id].Split(',', StringSplitOptions.RemoveEmptyEntries | StringSplitOptions.TrimEntries).ToList();
+        if (parts.Count == 0) { Snackbar.Add("Name the parts first.", Severity.Warning); return; }
+        await Api.PostAsync<Job>($"api/concepts/{concept.Id}/segment", new SegmentRequest(parts));
+        Snackbar.Add("Segmentation queued; masks appear on the asset page.", Severity.Info);
+    });
+}

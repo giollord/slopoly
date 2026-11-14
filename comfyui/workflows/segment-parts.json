@@ -1,0 +1,81 @@
+{
+ "1373750031100757": {
+  "inputs": {
+   "image": "example.png"
+  },
+  "class_type": "LoadImage",
+  "_meta": {
+   "title": "in:image"
+  }
+ },
+ "3706686181713409": {
+  "inputs": {
+   "ckpt_name": "sam3.1_multiplex_fp16.safetensors"
+  },
+  "class_type": "CheckpointLoaderSimple",
+  "_meta": {
+   "title": "Load Checkpoint"
+  }
+ },
+ "1952643512938258": {
+  "inputs": {
+   "text": null,
+   "clip": [
+    "3706686181713409",
+    1
+   ]
+  },
+  "class_type": "CLIPTextEncode",
+  "_meta": {
+   "title": "in:prompt"
+  }
+ },
+ "4146356929139551": {
+  "inputs": {
+   "threshold": 0.5,
+   "refine_iterations": 2,
+   "individual_masks": false,
+   "model": [
+    "3706686181713409",
+    0
+   ],
+   "image": [
+    "1373750031100757",
+    0
+   ],
+   "conditioning": [
+    "1952643512938258",
+    0
+   ]
+  },
+  "class_type": "SAM3_Detect",
+  "_meta": {
+   "title": "SAM3 Detect"
+  }
+ },
+ "1907825365631943": {
+  "inputs": {
+   "mask": [
+    "4146356929139551",
+    0
+   ]
+  },
+  "class_type": "MaskToImage",
+  "_meta": {
+   "title": "Convert Mask to Image"
+  }
+ },
+ "742690316565554": {
+  "inputs": {
+   "filename_prefix": "slopoly/segment",
+   "images": [
+    "1907825365631943",
+    0
+   ]
+  },
+  "class_type": "SaveImage",
+  "_meta": {
+   "title": "out:mask"
+  }
+ }
+}

@@ -1,0 +1,151 @@
+@page "/assets/{AssetId:guid}"
+@inherits LiveComponent
+@inject IJSRuntime JS
+
+<PageTitle>@(_asset?.Name ?? "Asset") · Slopoly</PageTitle>
+
+@if (_asset is null)
+{
+    <MudProgressLinear Indeterminate="true" />
+    return;
+}
+
+<MudStack Row="true" AlignItems="AlignItems.Center" Class="mb-2">
+    <MudLink Href="@($"/packs/{_asset.PackId}")">Pack</MudLink>
+    <MudText Typo="Typo.h5">@_asset.Name</MudText>
+    <MudChip T="string" Size="Size.Small" Color="@AssetList.StatusColor(_asset.Status)">@_asset.Status</MudChip>
+    <MudText Typo="Typo.body2">@_asset.Description</MudText>
+</MudStack>
+
+<MudGrid>
+    <MudItem xs="12" lg="6">
+        @if (_build?.GlbFileId is { } glb)
+        {
+            <model-viewer @ref="_viewer" src="/files/@glb" camera-controls auto-rotate shadow-intensity="0.6" exposure="1"
+                          style="width: 100%; height: 480px; background: var(--mud-palette-background-gray)"></model-viewer>
+            <MudStack Row="true" AlignItems="AlignItems.Center" Class="mt-2">
+                <MudSelect T="Guid?" Value="_variantId" ValueChanged="SetVariantAsync" Label="Palette" Variant="Variant.Outlined" Margin="Margin.Dense"
+                           Clearable="true" Placeholder="main" Style="max-width: 14rem">
+                    @foreach (var v in _variants.Where(v => v.TextureFileId is not null))
+                    {
+                        <MudSelectItem T="Guid?" Value="v.Id">@v.Name</MudSelectItem>
+                    }
+                </MudSelect>
+                <MudSpacer />
+                <MudButton Href="@($"/builds/{_build.Id}/export")" Variant="Variant.Outlined" StartIcon="@Icons.Material.Filled.Download">Export</MudButton>
+            </MudStack>
+        }
+        else
+        {
+            <MudAlert Severity="Severity.Info">No build with a model yet.</MudAlert>
+        }
+
+        <MudText Typo="Typo.subtitle1" Class="mt-4">Manifest</MudText>
+        @if (_manifest is null)
+        {
+            <MudText Typo="Typo.body2">No manifest yet.</MudText>
+        }
+        else
+        {
+            <pre class="code">@_manifest.Content.ToJsonString(Indented)</pre>
+        }
+    </MudItem>
+
+    <MudItem xs="12" lg="6">
+        <MudText Typo="Typo.subtitle1">Builds</MudText>
+        <MudSimpleTable Dense="true" Hover="true">
+            <thead><tr><th>Created</th><th>Program</th><th>Validated</th><th>Mean IoU</th></tr></thead>
+            <tbody>
+                @foreach (var b in _builds)
+                {
+                    <tr @onclick="() => SelectBuild(b)" style="cursor: pointer; @(b == _build ? "font-weight: bold" : "")">
+                        <td>@b.CreatedAt.ToLocalTime().ToString("g")</td>
+                        <td>v@(_programs.FirstOrDefault(p => p.Id == b.ProgramVersionId)?.Number)</td>
+                        <td><MudChip T="string" Size="Size.Small" Color="@(b.Validated ? Color.Success : Color.Warning)">@(b.Validated ? "yes" : "no")</MudChip></td>
+                        <td>@b.Report?["silhouette"]?["mean_iou"]</td>
+                    </tr>
+                }
+            </tbody>
+        </MudSimpleTable>
+
+        @if (_build?.Report is { } report)
+        {
+            @if (report["error"] is not null)
+            {
+                <MudAlert Severity="Severity.Error" Class="mt-2">Line @report["line"]: @report["error"]</MudAlert>
+            }
+            var validation = report["validation"];
+            <JsonTable Title="Parts" Rows="@(report["parts"] as JsonArray)" Columns="@(["name", "parent", "mesh", "triangles", "joint", "line"])" />
+            <JsonTable Title="Issues" Rows="@(validation?["issues"] as JsonArray)" Columns="@(["issue", "part", "parts", "message"])" />
+            <JsonTable Title="Intersections" Rows="@(validation?["intersections"] as JsonArray)" Columns="@(["a", "b", "fraction", "allowed", "ok"])" />
+            <JsonTable Title="Contacts" Rows="@(validation?["contacts"] as JsonArray)" Columns="@(["part", "parent", "gap", "ok"])" />
+            @if (validation?["triangles"] is JsonObject tri)
+            {
+                <MudText Typo="Typo.body2" Class="mt-2">Triangles: @tri["count"] / @tri["budget"]@(validation["disconnected"] is JsonArray { Count: > 0 } d ? $" · disconnected: {Text(d)}" : "")</MudText>
+            }
+            @foreach (var view in (report["silhouette"]?["views"] as JsonArray ?? []).OfType<JsonObject>())
+            {
+                <JsonTable Title="@($"Silhouette · {view["view"]}{(view["skipped"] is { } s ? $" (skipped: {s})" : "")}")"
+                           Rows="@(view["parts"] as JsonArray)" Columns="@(["mask", "parts", "iou", "width_error", "height_error", "centre_offset"])" />
+            }
+            <JsonTable Title="Colours" Rows="@(report["colors"] as JsonArray)" Columns="@(["mask", "view", "role", "role_color", "mask_color", "delta_e", "ok"])" />
+        }
+
+        <MudText Typo="Typo.subtitle1" Class="mt-4">Program versions</MudText>
+        <MudExpansionPanels Dense="true">
+            @foreach (var p in _programs)
+            {
+                <MudExpansionPanel Text="@($"v{p.Number} · {p.CreatedAt.ToLocalTime():g} · {p.Note}{(p.Id == _asset.CurrentProgramVersionId ? " (current)" : "")}")">
+                    @if (p.Id != _asset.CurrentProgramVersionId)
+                    {
+                        <MudButton Size="Size.Small" Variant="Variant.Outlined" OnClick="() => SetCurrentAsync(p)" Class="mb-2">Set current</MudButton>
+                    }
+                    <pre class="code">@p.Source</pre>
+                </MudExpansionPanel>
+            }
+        </MudExpansionPanels>
+    </MudItem>
+</MudGrid>
+
+@code {
+    private static readonly System.Text.Json.JsonSerializerOptions Indented = new() { WriteIndented = true };
+    [Parameter] public Guid AssetId { get; set; }
+    private Asset? _asset;
+    private Manifest? _manifest;
+    private List<ProgramVersion> _programs = [];
+    private List<Build> _builds = [];
+    private List<VariantView> _variants = [];
+    private Build? _build;
+    private Guid? _variantId;
+    private ElementReference _viewer;
+
+    protected override async Task LoadAsync()
+    {
+        _asset = await Api.GetAsync<Asset>($"api/assets/{AssetId}");
+        _manifest = await Api.FindAsync<Manifest>($"api/assets/{AssetId}/manifest");
+        _programs = await Api.GetAsync<List<ProgramVersion>>($"api/assets/{AssetId}/programs");
+        _builds = await Api.GetAsync<List<Build>>($"api/assets/{AssetId}/builds");
+        _variants = (await Api.GetAsync<PaletteView>($"api/packs/{_asset.PackId}/palette")).Variants;
+        _build = _builds.FirstOrDefault(b => b.Id == _build?.Id) ?? _builds.FirstOrDefault();
+    }
+
+    // Palette edits of the pack (asset-less changes) re-render textures, so they concern this page too.
+    protected override bool Concerns(Guid? packId, Guid? assetId) => assetId == AssetId || (assetId is null && packId == _asset?.PackId);
+
+    private void SelectBuild(Build b) { _build = b; _variantId = null; }
+
+    private async Task SetVariantAsync(Guid? id)
+    {
+        _variantId = id;
+        var texture = _variants.FirstOrDefault(v => v.Id == id)?.TextureFileId
+                      ?? (await Api.GetAsync<PaletteView>($"api/packs/{_asset!.PackId}/palette")).TextureFileId;
+        if (texture is null) return;
+        try { await JS.InvokeVoidAsync("slopolyViewer.setPalette", _viewer, $"/files/{texture}"); }
+        catch (JSException ex) { Snackbar.Add($"The viewer could not swap the palette: {ex.Message}", Severity.Error); }
+    }
+
+    private Task SetCurrentAsync(ProgramVersion p) =>
+        Try(() => Api.PutAsync<Asset>($"api/assets/{AssetId}/current-version", new CurrentVersionEdit(p.Id)));
+
+    private static string Text(JsonArray a) => string.Join(", ", a.Select(x => x?.ToString()));
+}

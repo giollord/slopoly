@@ -1,0 +1,84 @@
+@inherits LiveComponent
+@inject IJSRuntime JS
+
+<div class="chat">
+    <div class="chat-history" @ref="_history">
+        @foreach (var turn in _turns)
+        {
+            <MudPaper Class="pa-2 mb-2" Elevation="0" Style="background: var(--mud-palette-primary-hover)">
+                <MudText Typo="Typo.body2" Class="pre-wrap">@(turn.Job.Inputs["message"]?.GetValue<string>())</MudText>
+            </MudPaper>
+            @foreach (var e in turn.Events.Where(e => e.Type is "stream" or "failed"))
+            {
+                var data = e.Data ?? [];
+                @switch (e.Type == "failed" ? "failed" : data["kind"]?.GetValue<string>())
+                {
+                    case "text":
+                        <MudText Typo="Typo.body2" Class="pre-wrap mb-2">@(data["text"]?.GetValue<string>())</MudText>
+                        break;
+                    case "tool_use":
+                        <MudChip T="string" Size="Size.Small" Icon="@Icons.Material.Filled.Build" Variant="Variant.Outlined">@(data["name"]?.GetValue<string>())</MudChip>
+                        break;
+                    case "tool_result" when data["isError"]?.GetValue<bool>() == true:
+                        <MudText Typo="Typo.caption" Color="Color.Error" Class="pre-wrap d-block">@(data["text"]?.GetValue<string>())</MudText>
+                        break;
+                    case "result":
+                        <MudText Typo="Typo.caption" Class="d-block mb-3">@data["turns"] turns · $@(data["costUsd"]?.GetValue<double?>()?.ToString("0.00") ?? "?")</MudText>
+                        break;
+                    case "failed":
+                        <MudAlert Severity="@(data["code"]?.GetValue<string>() == "auth" ? Severity.Warning : Severity.Error)" Dense="true" Class="mb-2">
+                            @(data["code"]?.GetValue<string>() == "auth" ? "The agent is not authorised. " : "")@(data["error"]?.GetValue<string>())
+                        </MudAlert>
+                        break;
+                }
+            }
+            @if (turn.Job.State is JobState.Queued or JobState.Running)
+            {
+                <MudProgressLinear Indeterminate="true" Class="mb-2" />
+            }
+        }
+    </div>
+    <div class="chat-composer">
+        <MudTextField @bind-Value="_message" Label="Message the agent" Lines="3" Variant="Variant.Outlined" Immediate="true" />
+        <MudButton Variant="Variant.Filled" Color="Color.Primary" Disabled="string.IsNullOrWhiteSpace(_message)" OnClick="SendAsync">Send</MudButton>
+    </div>
+</div>
+
+@code {
+    [Parameter, EditorRequired] public Guid PackId { get; set; }
+    private List<ChatTurn> _turns = [];
+    private string _message = "";
+    private ElementReference _history;
+    private int _shown;
+
+    // Keep the newest message in view when turns or stream events arrive.
+    protected override async Task OnAfterRenderAsync(bool firstRender)
+    {
+        var count = _turns.Sum(t => t.Events.Count + 1);
+        if (count == _shown) return;
+        _shown = count;
+        try { await JS.InvokeVoidAsync("slopolyViewer.scrollToEnd", _history); } catch (JSException) { } catch (JSDisconnectedException) { }
+    }
+
+    protected override async Task LoadAsync() => _turns = await Api.GetAsync<List<ChatTurn>>($"api/packs/{PackId}/chat");
+
+    protected override bool Concerns(Guid? packId, Guid? assetId) => packId == PackId;
+
+    protected override Task OnJobEventAsync(JobEventMessage e)
+    {
+        if (e.Kind != JobKinds.AgentTurn || e.Type == "progress") return Task.CompletedTask;
+        if (e.Type == "stream" && _turns.FirstOrDefault(t => t.Job.Id == e.JobId) is { } turn)
+        {
+            turn.Events.Add(new JobEvent { JobId = e.JobId, Type = e.Type, Data = e.Data });
+            return Task.CompletedTask;
+        }
+        return LoadAsync();
+    }
+
+    private Task SendAsync() => Try(async () =>
+    {
+        await Api.PostAsync<Job>($"api/packs/{PackId}/chat", new ChatMessage(_message.Trim()));
+        _message = "";
+        await LoadAsync();
+    });
+}

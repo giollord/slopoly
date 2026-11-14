@@ -1,0 +1,64 @@
+@inherits LiveComponent
+
+<MudSimpleTable Dense="true" Hover="true">
+    <thead><tr><th>Created</th><th>Job</th><th>State</th><th style="width: 12rem">Progress</th><th>Error</th><th></th></tr></thead>
+    <tbody>
+        @foreach (var job in _jobs)
+        {
+            <tr>
+                <td>@job.CreatedAt.ToLocalTime().ToString("g")</td>
+                <td>@job.Kind @job.Operation</td>
+                <td><MudChip T="string" Size="Size.Small" Color="@StateColor(job.State)">@job.State</MudChip>@(job.Attempt > 1 ? $" (attempt {job.Attempt})" : "")</td>
+                <td>
+                    @if (job.State == JobState.Running)
+                    {
+                        <MudProgressLinear Value="@((job.Progress ?? 0) * 100)" Indeterminate="@(job.Progress is null)" Color="Color.Primary" />
+                    }
+                </td>
+                <td class="pre-wrap" style="max-width: 36rem">@job.Error</td>
+                <td>
+                    @if (job.State is JobState.Queued or JobState.Running)
+                    {
+                        <MudButton Size="Size.Small" OnClick='() => Act(job, "cancel")'>Cancel</MudButton>
+                    }
+                    else if (job.State is JobState.Failed or JobState.Cancelled)
+                    {
+                        <MudButton Size="Size.Small" OnClick='() => Act(job, "retry")'>Retry</MudButton>
+                    }
+                </td>
+            </tr>
+        }
+    </tbody>
+</MudSimpleTable>
+
+@code {
+    [Parameter, EditorRequired] public Guid PackId { get; set; }
+    private List<Job> _jobs = [];
+
+    protected override async Task LoadAsync() => _jobs = await Api.GetAsync<List<Job>>($"api/jobs?packId={PackId}");
+
+    protected override bool Concerns(Guid? packId, Guid? assetId) => packId == PackId;
+
+    protected override Task OnJobEventAsync(JobEventMessage e)
+    {
+        if (e.Type == "stream") return Task.CompletedTask;
+        if (e.Type == "progress" && _jobs.FirstOrDefault(j => j.Id == e.JobId) is { } job)
+        {
+            job.Progress = e.Data?["progress"]?.GetValue<double?>();
+            job.State = e.State;
+            return Task.CompletedTask;
+        }
+        return LoadAsync();
+    }
+
+    public static Color StateColor(JobState state) => state switch
+    {
+        JobState.Succeeded => Color.Success,
+        JobState.Failed => Color.Error,
+        JobState.Running => Color.Info,
+        JobState.Cancelled => Color.Dark,
+        _ => Color.Default,
+    };
+
+    private Task Act(Job job, string action) => Try(() => Api.PostAsync<Job>($"api/jobs/{job.Id}/{action}"));
+}

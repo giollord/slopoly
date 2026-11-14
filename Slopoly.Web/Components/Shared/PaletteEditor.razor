@@ -1,0 +1,160 @@
+@using MudBlazor.Utilities
+@inherits LiveComponent
+
+@if (_palette is null)
+{
+    <MudProgressLinear Indeterminate="true" />
+    return;
+}
+
+<MudGrid>
+    <MudItem xs="12" lg="7">
+        <MudText Typo="Typo.subtitle1">Main palette</MudText>
+        <MudText Typo="Typo.body2" Class="mb-2">
+            Models are coloured and scored with these colours only. Name roles by usage ("wall base", "wall accent", "leaf 1") so
+            they can be recoloured freely; use a colour name ("leaf green") only for a colour that stays the same in every palette.
+        </MudText>
+        <MudSimpleTable Dense="true">
+            <thead><tr><th>Role</th><th>Kind</th><th>Colour</th><th>End colour</th><th></th></tr></thead>
+            <tbody>
+                @foreach (var entry in _palette.Entries)
+                {
+                    <tr>
+                        <td>@entry.Role</td>
+                        <td>@entry.Kind (slot @entry.Slot)</td>
+                        <td><ColorField Value="@entry.Color" ValueChanged="c => SaveEntryAsync(entry, c, entry.Color2)" /></td>
+                        <td>
+                            @if (entry.Kind == PaletteKind.Gradient)
+                            {
+                                <ColorField Value="@(entry.Color2!)" ValueChanged="c => SaveEntryAsync(entry, entry.Color, c)" />
+                            }
+                        </td>
+                        <td>
+                            <MudTooltip Text="@(_usedBy.GetValueOrDefault(entry.Id) ?? "Show which assets use it")">
+                                <MudIconButton Icon="@Icons.Material.Filled.Info" Size="Size.Small" OnClick="() => UsedByAsync(entry)" />
+                            </MudTooltip>
+                            <MudIconButton Icon="@Icons.Material.Filled.Delete" Size="Size.Small" OnClick="() => DeleteEntryAsync(entry)" />
+                        </td>
+                    </tr>
+                }
+            </tbody>
+        </MudSimpleTable>
+        <MudStack Row="true" AlignItems="AlignItems.Center" Class="mt-3">
+            <MudTextField @bind-Value="_newRole" Label="New role" Placeholder="usage, e.g. roof accent" Variant="Variant.Outlined" Margin="Margin.Dense" />
+            <MudSelect @bind-Value="_newKind" Label="Kind" Variant="Variant.Outlined" Margin="Margin.Dense" Style="max-width: 9rem">
+                <MudSelectItem Value="PaletteKind.Solid">Solid</MudSelectItem>
+                <MudSelectItem Value="PaletteKind.Gradient">Gradient</MudSelectItem>
+            </MudSelect>
+            <ColorField @bind-Value="_newColor" />
+            @if (_newKind == PaletteKind.Gradient)
+            {
+                <ColorField @bind-Value="_newColor2" />
+            }
+            <MudButton Variant="Variant.Filled" Color="Color.Primary" Disabled="string.IsNullOrWhiteSpace(_newRole)" OnClick="AddEntryAsync">Add</MudButton>
+        </MudStack>
+    </MudItem>
+
+    <MudItem xs="12" lg="5">
+        <MudText Typo="Typo.subtitle1">Variants</MudText>
+        <MudText Typo="Typo.body2" Class="mb-2">Alternative colours for in-game style changes. Roles a variant doesn't set use the main colour.</MudText>
+        <MudStack Row="true" AlignItems="AlignItems.Center">
+            <MudSelect T="Guid?" @bind-Value="_variantId" Label="Variant" Variant="Variant.Outlined" Margin="Margin.Dense" Clearable="true">
+                @foreach (var v in _palette.Variants)
+                {
+                    <MudSelectItem T="Guid?" Value="v.Id">@v.Name</MudSelectItem>
+                }
+            </MudSelect>
+            <MudTextField @bind-Value="_newVariant" Label="New variant" Variant="Variant.Outlined" Margin="Margin.Dense" />
+            <MudButton Variant="Variant.Outlined" Disabled="string.IsNullOrWhiteSpace(_newVariant)" OnClick="AddVariantAsync">Create</MudButton>
+        </MudStack>
+        @if (_palette.Variants.FirstOrDefault(v => v.Id == _variantId) is { } variant)
+        {
+            <MudSimpleTable Dense="true" Class="mt-2">
+                <thead><tr><th>Role</th><th>Colour</th><th>End colour</th></tr></thead>
+                <tbody>
+                    @foreach (var slot in variant.Entries)
+                    {
+                        <tr>
+                            <td>@slot.Role</td>
+                            <td><ColorField Value="@slot.Color" ValueChanged="c => SaveVariantAsync(variant, slot, c, slot.Color2)" /></td>
+                            <td>
+                                @if (slot.Kind == PaletteKind.Gradient)
+                                {
+                                    <ColorField Value="@(slot.Color2!)" ValueChanged="c => SaveVariantAsync(variant, slot, slot.Color, c)" />
+                                }
+                            </td>
+                        </tr>
+                    }
+                </tbody>
+            </MudSimpleTable>
+            <MudStack Row="true" Class="mt-2">
+                <MudButton Variant="Variant.Text" Color="Color.Error" OnClick="() => DeleteVariantAsync(variant)">Delete variant</MudButton>
+            </MudStack>
+        }
+
+        <MudText Typo="Typo.subtitle2" Class="mt-4">Textures</MudText>
+        <MudStack Row="true" Wrap="Wrap.Wrap">
+            @if (_palette.TextureFileId is { } main)
+            {
+                <figure><img src="/files/@main" width="128" height="128" style="image-rendering: pixelated" alt="main palette" /><figcaption>main</figcaption></figure>
+            }
+            @foreach (var v in _palette.Variants.Where(v => v.TextureFileId is not null))
+            {
+                <figure><img src="/files/@v.TextureFileId" width="128" height="128" style="image-rendering: pixelated" alt="@v.Name" /><figcaption>@v.Name</figcaption></figure>
+            }
+        </MudStack>
+    </MudItem>
+</MudGrid>
+
+@code {
+    [Parameter, EditorRequired] public Guid PackId { get; set; }
+    private PaletteView? _palette;
+    private readonly Dictionary<Guid, string> _usedBy = [];
+    private Guid? _variantId;
+    private string _newRole = "", _newVariant = "", _newColor = "#808080", _newColor2 = "#c0c0c0";
+    private PaletteKind _newKind = PaletteKind.Solid;
+
+    protected override async Task LoadAsync() => _palette = await Api.GetAsync<PaletteView>($"api/packs/{PackId}/palette");
+
+    protected override bool Concerns(Guid? packId, Guid? assetId) => packId == PackId && assetId is null;
+
+    protected override Task OnJobEventAsync(JobEventMessage e) =>
+        e.Kind == JobKinds.PaletteRender && e.Type == "succeeded" ? LoadAsync() : Task.CompletedTask;
+
+    private Task SaveEntryAsync(PaletteEntry entry, string color, string? color2) =>
+        Try(() => Api.PutAsync<List<PaletteEntry>>($"api/packs/{PackId}/palette/entries", new[] { new PaletteEntryEdit(entry.Role, entry.Kind, color, color2) }));
+
+    private Task AddEntryAsync() => Try(async () =>
+    {
+        await Api.PostAsync<PaletteEntry>($"api/packs/{PackId}/palette/entries",
+            new PaletteEntryEdit(_newRole.Trim(), _newKind, _newColor, _newKind == PaletteKind.Gradient ? _newColor2 : null));
+        _newRole = "";
+    });
+
+    private Task UsedByAsync(PaletteEntry entry) => Try(async () =>
+    {
+        var users = await Api.GetAsync<List<string>>($"api/palette/entries/{entry.Id}/used-by");
+        _usedBy[entry.Id] = users.Count == 0 ? "Not used by any build" : "Used by " + string.Join(", ", users);
+        Snackbar.Add($"{entry.Role}: {_usedBy[entry.Id]}", Severity.Info);
+    });
+
+    private Task DeleteEntryAsync(PaletteEntry entry) => Try(() => Api.DeleteAsync($"api/palette/entries/{entry.Id}"));
+
+    private Task AddVariantAsync() => Try(async () =>
+    {
+        var created = await Api.PutAsync<VariantView>($"api/packs/{PackId}/palette/variants", new VariantEdit(_newVariant.Trim(), []));
+        _newVariant = "";
+        await LoadAsync();
+        _variantId = created.Id;
+    });
+
+    private Task SaveVariantAsync(VariantView variant, PaletteSlot slot, string color, string? color2) =>
+        Try(() => Api.PutAsync<VariantView>($"api/packs/{PackId}/palette/variants",
+            new VariantEdit(variant.Name, [new VariantColorEdit(slot.Role, color, color2)])));
+
+    private Task DeleteVariantAsync(VariantView variant) => Try(async () =>
+    {
+        await Api.DeleteAsync($"api/palette/variants/{variant.Id}");
+        _variantId = null;
+    });
+}
