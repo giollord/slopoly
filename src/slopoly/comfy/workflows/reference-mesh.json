@@ -1,0 +1,662 @@
+{
+ "537873122915656": {
+  "inputs": {
+   "image": "ComfyUI_00070_.png"
+  },
+  "class_type": "LoadImage",
+  "_meta": {
+   "title": "in:image"
+  }
+ },
+ "3675682507554348": {
+  "inputs": {
+   "bg_removal_name": "birefnet.safetensors"
+  },
+  "class_type": "LoadBackgroundRemovalModel",
+  "_meta": {
+   "title": "Load Background Removal Model"
+  }
+ },
+ "1221841759706441": {
+  "inputs": {
+   "bg_removal_model": [
+    "3675682507554348",
+    0
+   ],
+   "image": [
+    "537873122915656",
+    0
+   ]
+  },
+  "class_type": "RemoveBackground",
+  "_meta": {
+   "title": "Remove Background"
+  }
+ },
+ "179575471626445": {
+  "inputs": {
+   "width": 1024,
+   "height": 1024,
+   "pad_factor": 1.1,
+   "grow_mask": 0,
+   "background": "#000000",
+   "images": [
+    "537873122915656",
+    0
+   ],
+   "masks": [
+    "1221841759706441",
+    0
+   ]
+  },
+  "class_type": "ImageCropToMask",
+  "_meta": {
+   "title": "Crop Image to Mask"
+  }
+ },
+ "205917333605882": {
+  "inputs": {
+   "clip_name": "dino_v3_L_naf_fp32.safetensors"
+  },
+  "class_type": "CLIPVisionLoader",
+  "_meta": {
+   "title": "Load CLIP Vision"
+  }
+ },
+ "1336928961549603": {
+  "inputs": {
+   "clip_vision_model": [
+    "205917333605882",
+    0
+   ],
+   "image": [
+    "179575471626445",
+    0
+   ]
+  },
+  "class_type": "Trellis2Conditioning",
+  "_meta": {
+   "title": "Trellis2 Conditioning"
+  }
+ },
+ "3887360521293465": {
+  "inputs": {
+   "model_name": "moge_2_vitl_normal_fp16.safetensors"
+  },
+  "class_type": "LoadMoGeModel",
+  "_meta": {
+   "title": "Load MoGe Model"
+  }
+ },
+ "3189836195454421": {
+  "inputs": {
+   "resolution_level": 9,
+   "fov_x_degrees": 0.0,
+   "batch_size": 4,
+   "force_projection": true,
+   "apply_mask": true,
+   "refine_steps": 3,
+   "moge_model": [
+    "3887360521293465",
+    0
+   ],
+   "image": [
+    "179575471626445",
+    0
+   ]
+  },
+  "class_type": "MoGeInference",
+  "_meta": {
+   "title": "Run MoGe Inference"
+  }
+ },
+ "1145485620310568": {
+  "inputs": {
+   "axis": "horizontal",
+   "unit": "degrees",
+   "moge_geometry": [
+    "3189836195454421",
+    0
+   ]
+  },
+  "class_type": "MoGeGeometryToFOV",
+  "_meta": {
+   "title": "Get FoV from MoGe Geometry"
+  }
+ },
+ "3916421811799264": {
+  "inputs": {
+   "clip_vision_model": [
+    "205917333605882",
+    0
+   ],
+   "image": [
+    "179575471626445",
+    0
+   ],
+   "camera_angle_x": [
+    "1145485620310568",
+    0
+   ]
+  },
+  "class_type": "Pixal3DConditioning",
+  "_meta": {
+   "title": "Pixal3D Conditioning"
+  }
+ },
+ "2668729587839042": {
+  "inputs": {
+   "value": true
+  },
+  "class_type": "PrimitiveBoolean",
+  "_meta": {
+   "title": "in:trellis2"
+  }
+ },
+ "1494815835358541": {
+  "inputs": {
+   "switch": [
+    "2668729587839042",
+    0
+   ],
+   "on_false": [
+    "3916421811799264",
+    0
+   ],
+   "on_true": [
+    "1336928961549603",
+    0
+   ]
+  },
+  "class_type": "ComfySwitchNode",
+  "_meta": {
+   "title": "If/Else Switch"
+  }
+ },
+ "858842332135813": {
+  "inputs": {
+   "switch": [
+    "2668729587839042",
+    0
+   ],
+   "on_false": [
+    "3916421811799264",
+    1
+   ],
+   "on_true": [
+    "1336928961549603",
+    1
+   ]
+  },
+  "class_type": "ComfySwitchNode",
+  "_meta": {
+   "title": "If/Else Switch"
+  }
+ },
+ "1941005726155066": {
+  "inputs": {
+   "unet_name": "trellis_2_int8_convrot.safetensors",
+   "weight_dtype": "default"
+  },
+  "class_type": "UNETLoader",
+  "_meta": {
+   "title": "Load Diffusion Model"
+  }
+ },
+ "1242399721668807": {
+  "inputs": {
+   "unet_name": "pixal3d_int8_convrot.safetensors",
+   "weight_dtype": "default"
+  },
+  "class_type": "UNETLoader",
+  "_meta": {
+   "title": "Load Diffusion Model"
+  }
+ },
+ "503109503580847": {
+  "inputs": {
+   "switch": [
+    "2668729587839042",
+    0
+   ],
+   "on_false": [
+    "1242399721668807",
+    0
+   ],
+   "on_true": [
+    "1941005726155066",
+    0
+   ]
+  },
+  "class_type": "ComfySwitchNode",
+  "_meta": {
+   "title": "If/Else Switch"
+  }
+ },
+ "1496577950908708": {
+  "inputs": {
+   "vae_name": "trellis_2_shape_vae_bf16.safetensors"
+  },
+  "class_type": "VAELoader",
+  "_meta": {
+   "title": "Load VAE"
+  }
+ },
+ "2429273087783155": {
+  "inputs": {
+   "vae_name": "trellis_2_texture_vae_bf16.safetensors"
+  },
+  "class_type": "VAELoader",
+  "_meta": {
+   "title": "Load VAE"
+  }
+ },
+ "1358526044671601": {
+  "inputs": {
+   "cfg": 1,
+   "start_percent": 0.667,
+   "end_percent": 1,
+   "model": [
+    "503109503580847",
+    0
+   ]
+  },
+  "class_type": "CFGOverride",
+  "_meta": {
+   "title": "CFG Override"
+  }
+ },
+ "1105108769860078": {
+  "inputs": {
+   "multiplier": 0.7,
+   "model": [
+    "1358526044671601",
+    0
+   ]
+  },
+  "class_type": "RescaleCFG",
+  "_meta": {
+   "title": "RescaleCFG"
+  }
+ },
+ "3949380059205757": {
+  "inputs": {
+   "shift": 5,
+   "model": [
+    "1105108769860078",
+    0
+   ]
+  },
+  "class_type": "ModelSamplingSD3",
+  "_meta": {
+   "title": "ModelSamplingSD3"
+  }
+ },
+ "56582400045030": {
+  "inputs": {
+   "batch_size": 1
+  },
+  "class_type": "EmptyTrellis2LatentStructure",
+  "_meta": {
+   "title": "Empty Trellis2 Latent Structure"
+  }
+ },
+ "1393564727436899": {
+  "inputs": {
+   "seed": 56,
+   "steps": 12,
+   "cfg": 7.5,
+   "sampler_name": "euler",
+   "scheduler": "normal",
+   "denoise": 1.0,
+   "model": [
+    "3949380059205757",
+    0
+   ],
+   "positive": [
+    "1494815835358541",
+    0
+   ],
+   "negative": [
+    "858842332135813",
+    0
+   ],
+   "latent_image": [
+    "56582400045030",
+    0
+   ]
+  },
+  "class_type": "KSampler",
+  "_meta": {
+   "title": "in:seed"
+  }
+ },
+ "1954608334515831": {
+  "inputs": {
+   "resolution": "32",
+   "samples": [
+    "1393564727436899",
+    0
+   ],
+   "vae": [
+    "1496577950908708",
+    0
+   ]
+  },
+  "class_type": "VaeDecodeStructureTrellis2",
+  "_meta": {
+   "title": "Trellis2 VAE Decode Structure"
+  }
+ },
+ "2576221998991649": {
+  "inputs": {
+   "positive": [
+    "1494815835358541",
+    0
+   ],
+   "negative": [
+    "858842332135813",
+    0
+   ],
+   "voxel": [
+    "1954608334515831",
+    0
+   ]
+  },
+  "class_type": "Trellis2ShapeStage",
+  "_meta": {
+   "title": "Trellis2 Shape Stage"
+  }
+ },
+ "2421057415093829": {
+  "inputs": {
+   "cfg": 1,
+   "start_percent": 0.769,
+   "end_percent": 1,
+   "model": [
+    "503109503580847",
+    0
+   ]
+  },
+  "class_type": "CFGOverride",
+  "_meta": {
+   "title": "CFG Override"
+  }
+ },
+ "1499243992042364": {
+  "inputs": {
+   "multiplier": 0.5,
+   "model": [
+    "2421057415093829",
+    0
+   ]
+  },
+  "class_type": "RescaleCFG",
+  "_meta": {
+   "title": "RescaleCFG"
+  }
+ },
+ "3139749513174711": {
+  "inputs": {
+   "seed": 42,
+   "steps": 20,
+   "cfg": 7.5,
+   "sampler_name": "euler",
+   "scheduler": "normal",
+   "denoise": 1.0,
+   "model": [
+    "1499243992042364",
+    0
+   ],
+   "positive": [
+    "2576221998991649",
+    0
+   ],
+   "negative": [
+    "2576221998991649",
+    1
+   ],
+   "latent_image": [
+    "2576221998991649",
+    2
+   ]
+  },
+  "class_type": "KSampler",
+  "_meta": {
+   "title": "KSampler"
+  }
+ },
+ "718302114959934": {
+  "inputs": {
+   "value": 1024
+  },
+  "class_type": "PrimitiveInt",
+  "_meta": {
+   "title": "in:resolution"
+  }
+ },
+ "1610791377907674": {
+  "inputs": {
+   "positive": [
+    "2576221998991649",
+    0
+   ],
+   "negative": [
+    "2576221998991649",
+    1
+   ],
+   "shape_latent": [
+    "3139749513174711",
+    0
+   ],
+   "vae": [
+    "1496577950908708",
+    0
+   ],
+   "target_resolution": [
+    "718302114959934",
+    0
+   ]
+  },
+  "class_type": "Trellis2UpsampleStage",
+  "_meta": {
+   "title": "Trellis2 Upsample Stage"
+  }
+ },
+ "727156013547174": {
+  "inputs": {
+   "seed": 42,
+   "steps": 12,
+   "cfg": 7.5,
+   "sampler_name": "euler",
+   "scheduler": "simple",
+   "denoise": 1.0,
+   "model": [
+    "1499243992042364",
+    0
+   ],
+   "positive": [
+    "1610791377907674",
+    0
+   ],
+   "negative": [
+    "1610791377907674",
+    1
+   ],
+   "latent_image": [
+    "1610791377907674",
+    2
+   ]
+  },
+  "class_type": "KSampler",
+  "_meta": {
+   "title": "KSampler"
+  }
+ },
+ "1400433200916516": {
+  "inputs": {
+   "samples": [
+    "727156013547174",
+    0
+   ],
+   "vae": [
+    "1496577950908708",
+    0
+   ]
+  },
+  "class_type": "VaeDecodeShapeTrellis",
+  "_meta": {
+   "title": "Trellis2 VAE Decode Shape"
+  }
+ },
+ "516109172798688": {
+  "inputs": {
+   "positive": [
+    "1610791377907674",
+    0
+   ],
+   "negative": [
+    "1610791377907674",
+    1
+   ],
+   "shape_latent": [
+    "727156013547174",
+    0
+   ]
+  },
+  "class_type": "Trellis2TextureStage",
+  "_meta": {
+   "title": "Trellis2 Texture Stage"
+  }
+ },
+ "148461739587619": {
+  "inputs": {
+   "seed": 43,
+   "steps": 12,
+   "cfg": 1,
+   "sampler_name": "euler",
+   "scheduler": "normal",
+   "denoise": 1.0,
+   "model": [
+    "503109503580847",
+    0
+   ],
+   "positive": [
+    "516109172798688",
+    0
+   ],
+   "negative": [
+    "516109172798688",
+    1
+   ],
+   "latent_image": [
+    "516109172798688",
+    2
+   ]
+  },
+  "class_type": "KSampler",
+  "_meta": {
+   "title": "KSampler"
+  }
+ },
+ "148830434738671": {
+  "inputs": {
+   "samples": [
+    "148461739587619",
+    0
+   ],
+   "vae": [
+    "2429273087783155",
+    0
+   ],
+   "shape_subdivides": [
+    "1400433200916516",
+    1
+   ]
+  },
+  "class_type": "VaeDecodeTextureTrellis",
+  "_meta": {
+   "title": "Trellis2 VAE Decode Texture"
+  }
+ },
+ "1830717116669552": {
+  "inputs": {
+   "value": 80000
+  },
+  "class_type": "PrimitiveInt",
+  "_meta": {
+   "title": "in:faces"
+  }
+ },
+ "2979660817229853": {
+  "inputs": {
+   "placement_mode": "midpoint",
+   "mesh": [
+    "1400433200916516",
+    0
+   ],
+   "target_face_count": [
+    "1830717116669552",
+    0
+   ]
+  },
+  "class_type": "DecimateMesh",
+  "_meta": {
+   "title": "Decimate Mesh"
+  }
+ },
+ "1308223010766869": {
+  "inputs": {
+   "mesh": [
+    "2979660817229853",
+    0
+   ],
+   "voxel_colors": [
+    "148830434738671",
+    0
+   ]
+  },
+  "class_type": "PaintMesh",
+  "_meta": {
+   "title": "Paint Mesh"
+  }
+ },
+ "3832830581472536": {
+  "inputs": {
+   "filename_prefix": "slopoly/mesh",
+   "mesh": [
+    "1308223010766869",
+    0
+   ]
+  },
+  "class_type": "SaveGLB",
+  "_meta": {
+   "title": "out:mesh"
+  }
+ },
+ "3746723133970288": {
+  "inputs": {
+   "mask": [
+    "1221841759706441",
+    0
+   ]
+  },
+  "class_type": "MaskToImage",
+  "_meta": {
+   "title": "Convert Mask to Image"
+  }
+ },
+ "4021273180710587": {
+  "inputs": {
+   "filename_prefix": "slopoly/mesh_hero_mask",
+   "images": [
+    "3746723133970288",
+    0
+   ]
+  },
+  "class_type": "SaveImage",
+  "_meta": {
+   "title": "out:hero_mask"
+  }
+ }
+}

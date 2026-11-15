@@ -16,7 +16,8 @@ and modelling-API bugs.
   the user's ComfyUI (TRELLIS.2 or Pixal3D, from the ComfyUI template `3d_pixal3d_trellis2_image_to_model`, cut down
   to shape and vertex colours). The CLI scales the mesh to the asset's real size and renders the views from it in
   Blender. The views are framed to the object's bounds and use a camera handedness the CLI checks against the hero.
-  The default generator is chosen by a recorded benchmark against Idol on the same heroes.
+  The default generator is chosen by a recorded benchmark against Idol on the same heroes; Idol, its splat turned
+  into a mesh (`idol-mesh`), won and is the default.
   **BREAKING**: views made by the Idol splat turntable are replaced, so existing assets need `gen views` again.
 - **Close-ups and measurements.** A new `slopoly look` renders the reference mesh (and optionally the current build)
   from any direction and zoom, so the agent can study a feature's shape. Results give bounds in metres.

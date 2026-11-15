@@ -101,7 +101,7 @@ function render() {
       if (document.activeElement !== input) input.value = state.picked.get(el.dataset.path);
       const name = state.picked.get(el.dataset.path);
       const existing = state.data.references.find(r => r.variant === name);
-      if (existing) hint.textContent = `Replaces the reference of "${name}" (${existing.name}).`;
+      if (existing) hint.textContent = `Replaces the reference of "${name}" (${existing.name}); its program and builds stay.`;
       else if (state.data.variants.includes(name)) hint.textContent = `Becomes the reference of "${name}".`;
       else if (name) hint.textContent = `Creates the variant "${name}".`;
     }

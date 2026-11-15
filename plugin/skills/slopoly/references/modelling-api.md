@@ -8,11 +8,15 @@ then run `slopoly build <pack>/<asset>[:<variant>]` and read its result.
 
 - Units are metres, with Y up.
 - The front of the object faces +Z, and its left/right are on X. Use `_L` for +X and `_R` for −X.
-- The view images (rendered from the hero's splat) map as follows:
-  - **front** looks from +Z;
-  - **side** looks from +X, with the object's front on the image's left;
-  - **top** looks down from +Y, with the front at the bottom;
-  - **back** looks from −Z.
+- The view images (rendered from the reference mesh, at the asset's real size) map as follows:
+  - **front** looks from +Z, image right is +X;
+  - **side** looks from +X, with the object's front on the image's left (image right is −Z);
+  - **top** looks down from +Y, with the front at the bottom (image right is +X);
+  - **back** looks from −Z, image right is −X.
+- The views are metric: they share one scale, given as `m_per_px` with each view, and `ground_row` is the pixel row
+  of y = 0. The views are centred on the object's bounds, so centre the model's bounds on x = 0 and z = 0 (not
+  its root part) and stand it on y = 0. A part 120 px wide in a view with `m_per_px` 0.01 is 1.2 m wide. Model at that size; segmentation
+  `regions` and `slopoly look` give part bounds in metres directly.
 - Shapes are centred on their own origin, and `part(..., at=...)` puts that origin at a world position. Build moving
   parts around their pivot.
 - Every face needs a palette role, set with `color=` on the part or with `tag=`/`paint` on faces. Roles must exist in
@@ -48,7 +52,7 @@ socket("hitch", at=(0, 0.55, -1.2), parent="bed")
 | `prism(n, r, length, axis="y", tag=None)` | A low-poly cylinder: n side quads and two n-gon caps. |
 | `cone(n, r, length, axis="y", r2=0.0, tag=None)` | A cone with radius `r` at the negative end and `r2` at the positive end. `r2=0` makes it pointed. |
 | `ngon(n, r, axis="y", tag=None)` | A flat n-gon facing `axis`. Use it as a `curve` profile, or as a base to `extrude` or thicken with SOLIDIFY. |
-| `curve(points, profile, resolution=4, smooth=True, closed=False, tag=None)` | A tube along a Blender curve through the (x, y, z) `points` (or a `path()`), with cross-section `profile` (an `ngon`, or a list of (u, v) points). `resolution` is the number of segments between two control points; `smooth=False` makes straight segments with sharp corners. Open ends get flat caps; `closed=True` makes a ring. For handles, arches, rims, ropes. |
+| `curve(points, profile, resolution=None, smooth=True, closed=False, tag=None)` | A tube along a Blender curve through the (x, y, z) `points` (or a `path()`), with cross-section `profile` (an `ngon`, or a list of (u, v) points). `resolution` is the number of segments between two control points (default 4 when smooth, 1 when straight); `smooth=False` makes straight segments with sharp corners, each split into `resolution` rings, so a two-point pole with `resolution=8` can be tapered and bent with a `ramp` group. The profile's u lies in the plane of the path's bend and v along its binormal: an arc in XY with a profile of u ±0.05, v ±1 is an arched slab 0.1 thick and 2 deep along Z (a curved roof or sheet). Open ends get flat caps; `closed=True` makes a ring. For handles, arches, rims, ropes, horns. |
 | `path(points, smooth=True, closed=False)` | Control points of a curve, for `curve` or a CURVE modifier's `object` (bending a shape along it). |
 | `outline(points, closed=False, tag=None)` | Connected edges through (x, y) or (x, y, z) points, with no faces. Turn it with SCREW to lathe a round object around Y (x is the radius, y the height): vases, barrels, bottles, columns. |
 
@@ -61,9 +65,10 @@ Primitives return a `Shape`. Operations return a new `Shape` and leave their inp
 | `extrude(shape, faces, distance, tag=None)` | Moves the selected faces along their average normal and adds side quads. A negative distance pushes them in. |
 | `inset(shape, faces, thickness, depth=0.0, tag=None)` | Insets the selected faces as one region and adds a rim of quads. `tag` applies to the inner faces, so follow it with `extrude(..., "<tag>", d)` to make a hub or boss. |
 | `bevel(shape, width, segments=1, faces=None, angle=30)` | Bevels the edges of the selected faces (every edge when `faces` is None) where the faces meet at `angle` degrees or more, so seams and the soft edges of round parts are left alone. Widths are clamped where bevels would overlap, and bent bevel faces are triangulated. Raises an error instead of returning a broken mesh (non-manifold edges, or vertices pushed outside the shape). Bevel last: after inset, extrude and boolean. |
-| `jitter(shape, amount, seed=0, faces=None)` | Moves each vertex of the selected faces by a seeded random offset of up to `amount` metres per axis, for dents, sag and uneven chips. The shape stays closed. Use 1–3 % of the part's size. |
+| `jitter(shape, amount, seed=0, faces=None)` | Moves each vertex of the selected faces by a seeded random offset of up to `amount` metres per axis, for dents, sag and uneven chips. The shape stays closed. Each move is limited to under half the wall behind the vertex, so thin cloth and window pillars don't pass through themselves; a jitter that still makes the shape cut through itself adds a warning to the part's `warnings`. Use 1–3 % of the part's size, and jitter after booleans, not before. |
 | `boolean(a, b, op="difference")` | Combines two closed shapes with `"union"`, `"difference"` or `"intersection"`. Coplanar triangles are merged back, and merged faces that aren't flat are triangulated. Booleans are counted in the report. Use `"union"` to combine overlapping solids into one part. |
-| `join(*shapes)` | One shape made of several shapes. Nothing is merged, so only join shapes that don't overlap or touch (a joined overlap fails validation as `selfIntersecting`). |
+| `join(*shapes)` | One shape made of several shapes. Nothing is merged, so only join shapes that don't overlap or touch (a joined overlap fails validation as `selfIntersecting`). Faces that repeat another face's vertices, or have fewer than 3 distinct vertices (leftovers of booleans), are dropped. |
+| `surface_point(shape, origin, direction=(0, -1, 0))` | Where a ray from `origin` along `direction` first meets `shape`: `(point, normal)` in the shape's own coordinates. Raises an error when the ray misses. Use it to stand studs, spikes and trims on curved surfaces exactly, for example by casting down onto an arched roof, instead of guessing the height. |
 | `paint(shape, tag, faces=None)` | Sets the palette role of the selected faces. |
 | `select(shape, faces)` | Returns the faces a selector matches, for checking a selector. |
 | `shape.move(x, y, z)`, `shape.rotate(x, y, z)`, `shape.scale(x, y=None, z=None)` | Transform a shape around its origin. Rotation is in degrees, applied X, then Y, then Z. |
@@ -191,11 +196,13 @@ The build fails with the message and the program line.
   combine overlapping solids into one part, use `boolean(..., op="union")`, not `join`; or make them separate
   parts, which may overlap.
 
-**parts** lists, for each part: parent, mesh, triangles, booleans, joint, origin, world bounds and program line.
+**parts** lists, for each part: parent, mesh, triangles, booleans, warnings (such as a `jitter` that made the shape
+cut through itself), joint, origin, world bounds and program line.
 
 **validation** contains `intersections` (a, b, volume, fraction, allowed, ok; for information: an unlisted
-overlap over 1 % has ok false, which is worth a look but doesn't fail the build), `contacts` (part, parent, gap, ok),
-`disconnected`, `triangles` and `issues`.
+overlap over 1 % has ok false, which is worth a look but doesn't fail the build), `contacts` (part, parent, gap, ok;
+a contact that isn't ok also gives the `nearest` point on the part and the `parent_nearest` point on its parent, so
+you know which way to move it), `disconnected`, `triangles` and `issues`.
 
 **silhouette** gives, for each view image that has masks:
 
@@ -205,8 +212,11 @@ overlap over 1 % has ok false, which is worth a look but doesn't fail the build)
   in the image; negative means the model is too small) and `centre_offset`;
 - `mean_iou` over the view's part masks.
 
-The model is scaled uniformly to the silhouette's size, so the errors show proportions, not absolute size. Over all
-views, `mean_object_iou` averages the object scores and `mean_iou` the part scores.
+With metric views (`"scaling": "metric"` on each view), the model is placed with the view's own metres-per-pixel and
+ground row, not stretched to fit: a model that is too small or too long scores badly, and `width_error`/
+`height_error` give the size error directly. Old views without a scale are fitted uniformly to the silhouette
+(`"scaling": "fitted"`), so their errors show proportions only. Over all views, `mean_object_iou` averages the object
+scores and `mean_iou` the part scores.
 
 A mask named `wheel` matches the part `wheel`, or else every part whose name starts with `wheel_` (`wheel_L`,
 `wheel_front_R`, ...) and every instance of a mesh called `wheel`. Masks

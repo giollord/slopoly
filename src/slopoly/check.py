@@ -71,8 +71,10 @@ class Checker:
         for hero in [meta.reference] if meta.reference else []:
             for model, path in ((m.Views, asset.views_dir(hero) / "views.yaml"),
                                 (m.Masks, asset.masks_dir(hero) / "masks.yaml")):
-                if path.exists():
-                    self.load(model, path)
+                loaded = self.load(model, path) if path.exists() else None
+                if model is m.Views and loaded is not None and not loaded.mesh:
+                    self.add(path, "mesh", f"the views of {hero} come from the old splat turntable and have no "
+                             f"reference mesh; remake them: slopoly gen views {asset.address}")
 
     def scene(self, pack: Pack, scene) -> None:
         meta = self.load(m.Scene, scene.file)
@@ -143,6 +145,11 @@ def variant_status(variant: Variant) -> dict:
     if meta.reference:
         out["views"] = bool(variant.asset.views(meta.reference))
         out["segmented"] = bool(variant.asset.masks(meta.reference))
+    from .review import load_notes  # review imports meshview; keep it out of every status call's import time
+    notes = load_notes(variant).notes
+    if notes:
+        out["notes"] = {"open": sum(n.status == "open" for n in notes),
+                        "addressed": sum(n.status == "addressed" for n in notes)}
     return out
 
 

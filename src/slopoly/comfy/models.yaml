@@ -7,7 +7,7 @@ models:
     url: https://huggingface.co/Comfy-Org/flux2-dev/resolve/main/split_files/vae/flux2-vae.safetensors
     size_gb: 0.3
     licence: Apache 2.0
-    workflows: [views]
+    workflows: [idol-mesh]
   - file: qwen_image_edit_2511_fp8mixed.safetensors
     subfolder: diffusion_models
     url: https://huggingface.co/Comfy-Org/Qwen-Image-Edit_ComfyUI/resolve/main/split_files/diffusion_models/qwen_image_edit_2511_fp8mixed.safetensors
@@ -37,28 +37,64 @@ models:
     url: https://huggingface.co/Comfy-Org/Idol/resolve/main/diffusion_models/idol_fp16.safetensors
     size_gb: 0.7
     licence: Apache 2.0
-    workflows: [views]
+    workflows: [idol-mesh]
   - file: idol_decoder_fp16.safetensors
     subfolder: vae
     url: https://huggingface.co/Comfy-Org/Idol/resolve/main/vae/idol_decoder_fp16.safetensors
     size_gb: 0.6
     licence: Apache 2.0
-    workflows: [views]
+    workflows: [idol-mesh]
   - file: dino_v3_vit_h_bf16.safetensors
     subfolder: clip_vision
     url: https://huggingface.co/Comfy-Org/Idol/resolve/main/clip_vision/dino_v3_vit_h_bf16.safetensors
     size_gb: 1.7
     licence: DINOv3 License
-    workflows: [views]
+    workflows: [idol-mesh]
   - file: birefnet.safetensors
     subfolder: background_removal
     url: https://huggingface.co/Comfy-Org/BiRefNet/resolve/main/background_removal/birefnet.safetensors
     size_gb: 0.4
     licence: MIT
-    workflows: [views]
+    workflows: [reference-mesh, idol-mesh]
   - file: sam3.1_multiplex_fp16.safetensors
     subfolder: checkpoints
     url: https://huggingface.co/Comfy-Org/sam3.1/resolve/main/checkpoints/sam3.1_multiplex_fp16.safetensors
     size_gb: 1.7
     licence: SAM License
     workflows: [segment-parts]
+  - file: trellis_2_int8_convrot.safetensors
+    subfolder: diffusion_models
+    url: https://huggingface.co/Comfy-Org/TRELLIS.2/resolve/main/diffusion_models/trellis_2_int8_convrot.safetensors
+    size_gb: 5.3
+    licence: MIT
+    workflows: [reference-mesh]
+  - file: trellis_2_shape_vae_bf16.safetensors
+    subfolder: vae
+    url: https://huggingface.co/Comfy-Org/Pixal3D/resolve/main/vae/trellis_2_shape_vae_bf16.safetensors
+    size_gb: 1.1
+    licence: MIT
+    workflows: [reference-mesh]
+  - file: trellis_2_texture_vae_bf16.safetensors
+    subfolder: vae
+    url: https://huggingface.co/Comfy-Org/Pixal3D/resolve/main/vae/trellis_2_texture_vae_bf16.safetensors
+    size_gb: 0.9
+    licence: MIT
+    workflows: [reference-mesh]
+  - file: dino_v3_L_naf_fp32.safetensors
+    subfolder: clip_vision
+    url: https://huggingface.co/Comfy-Org/Pixal3D/resolve/main/clip_vision/dino_v3_L_naf_fp32.safetensors
+    size_gb: 1.2
+    licence: DINOv3 License (NAF upsampler Apache 2.0)
+    workflows: [reference-mesh]
+  - file: pixal3d_int8_convrot.safetensors
+    subfolder: diffusion_models
+    url: https://huggingface.co/Comfy-Org/Pixal3D/resolve/main/diffusion_models/pixal3d_int8_convrot.safetensors
+    size_gb: 5.6
+    licence: MIT
+    workflows: [reference-mesh]
+  - file: moge_2_vitl_normal_fp16.safetensors
+    subfolder: geometry_estimation
+    url: https://huggingface.co/Comfy-Org/MoGe/resolve/main/geometry_estimation/moge_2_vitl_normal_fp16.safetensors
+    size_gb: 0.7
+    licence: MIT
+    workflows: [reference-mesh]

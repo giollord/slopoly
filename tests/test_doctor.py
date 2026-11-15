@@ -46,17 +46,18 @@ def test_all_good_except_libs(comfy):
 
 def test_missing_node_names_workflow(comfy):
     install_all(comfy)
-    cls = next(c for c, w in doctor.required_nodes().items() if "views" in w)
+    cls = next(c for c, w in doctor.required_nodes().items() if "idol-mesh" in w)
     del comfy["nodes"][cls]
     check = by_name(doctor.doctor())["comfyui nodes"]
-    assert not check["ok"] and cls in check["missing"] and "views" in check["detail"] and check["fix"]
+    assert not check["ok"] and cls in check["missing"] and "idol-mesh" in check["detail"] and check["fix"]
 
 
 def test_missing_models_without_folder(comfy):
     result = doctor.doctor()
     check = by_name(result)["comfyui models"]
     assert not check["ok"] and "comfyui.models_dir" in check["fix"]
-    assert {"file": "sam3.1_multiplex_fp16.safetensors", "subfolder": "checkpoints"}.items() <= check["missing"][-1].items()
+    assert any({"file": "sam3.1_multiplex_fp16.safetensors", "subfolder": "checkpoints"}.items() <= missing.items()
+               for missing in check["missing"])
 
 
 def test_fetch_without_folder_downloads_nothing(comfy, monkeypatch):

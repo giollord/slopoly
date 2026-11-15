@@ -1,0 +1,275 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Slopoly review</title>
+<link rel="stylesheet" href="static/style.css">
+<script type="importmap">
+{ "imports": { "three": "./static/three/build/three.module.min.js", "three/addons/": "./static/three/examples/jsm/" } }
+</script>
+<style>
+  body { height: 100vh; display: flex; flex-direction: column; }
+  .layout { flex: 1; display: grid; grid-template-columns: minmax(0, 1fr) 340px; min-height: 0; }
+  .panes { display: grid; grid-template-columns: 1fr 1fr; gap: 6px; padding: 6px; min-height: 0; }
+  @media (max-width: 1000px) { .layout { grid-template-columns: 1fr; } .panes { grid-template-columns: 1fr; } }
+  .pane { position: relative; border: 1px solid var(--line); border-radius: 6px; overflow: hidden; background: var(--panel);
+    min-height: 260px; }
+  .pane .label { position: absolute; top: 6px; left: 8px; z-index: 3; font-size: 12px; color: var(--muted);
+    background: var(--panel); padding: 1px 6px; border-radius: 4px; }
+  .pane .view3d, .pane img, .pane canvas.ink { position: absolute; inset: 0; width: 100%; height: 100%; }
+  .pane img { object-fit: contain; background: #fff; }
+  canvas.ink { z-index: 2; pointer-events: none; }
+  .painting canvas.ink { pointer-events: auto; cursor: crosshair; }
+  .toolbar { padding: 8px 12px; border-top: 1px solid var(--line); background: var(--panel); }
+  aside { overflow: auto; border-left: 1px solid var(--line); background: var(--panel); padding: 12px; display: flex;
+    flex-direction: column; gap: 10px; }
+  aside h2 { font-size: 13px; text-transform: uppercase; letter-spacing: .04em; color: var(--muted); margin: 6px 0 0; }
+  textarea { width: 100%; min-height: 70px; resize: vertical; }
+  .note { border: 1px solid var(--line); border-radius: 6px; padding: 6px 8px; display: flex; flex-direction: column;
+    gap: 4px; }
+  .note .thumbs { display: flex; gap: 4px; }
+  .note .thumbs img { width: 50%; border: 1px solid var(--line); border-radius: 4px; }
+  .note .row { display: flex; gap: 6px; align-items: center; }
+  .note input[type=text] { flex: 1; min-width: 0; }
+  #error { color: var(--bad); }
+</style>
+</head>
+<body>
+<header class="bar"><h1 id="title">Loading...</h1>
+  <span class="muted">Left:</span>
+  <select id="left"><option value="hero">Hero image</option><option value="mesh">Rough 3D</option></select>
+  <button id="lock" title="The reference follows the build's camera (with the hero image: the build turns to the hero's view)">Lock cameras</button>
+</header>
+<div class="layout">
+  <div style="display:flex;flex-direction:column;min-height:0">
+    <div class="panes" id="panes" style="flex:1">
+      <div class="pane" id="leftPane"><span class="label" id="leftLabel">Reference</span>
+        <div class="view3d" id="leftView"></div><img id="heroImage" alt="hero"><canvas class="ink" id="leftInk"></canvas></div>
+      <div class="pane" id="rightPane"><span class="label">Build</span>
+        <div class="view3d" id="rightView"></div><canvas class="ink" id="rightInk"></canvas></div>
+    </div>
+    <div class="toolbar bar">
+      <button id="paint" title="Paint over what is wrong, on either pane; the cameras stay still while there is paint">Paint</button>
+      <button id="erase">Erase</button>
+      <button id="clear">Clear</button>
+      <label class="muted">Brush <input id="brush" type="range" min="1" max="8" value="3"></label>
+      <button id="resetView">Reset view</button>
+      <span id="error"></span>
+    </div>
+  </div>
+  <aside>
+    <h2>New note</h2>
+    <textarea id="comment" placeholder="What is wrong here? e.g. the cowcatcher should be a V in plan, wide at the bottom"></textarea>
+    <div class="bar"><button id="add" class="primary">Add note</button><span class="muted" id="addHint"></span></div>
+    <h2>Notes to send</h2><div id="notes" class="muted">none yet</div>
+    <h2 id="pinsTitle">Earlier notes to check</h2><div id="pins"></div>
+    <h2>Open notes</h2><div id="open" class="muted"></div>
+    <button id="send" class="primary">Send to the agent</button>
+    <p class="muted" id="sent"></p>
+  </aside>
+</div>
+<script type="module">
+import { create } from "./static/viewer3d.js";
+
+const $ = id => document.getElementById(id);
+const esc = s => String(s ?? "").replace(/[&<>"]/g, c => ({ "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;" }[c]));
+const build = create($("rightView"), { preserve: true });
+const reference = create($("leftView"), { preserve: true });
+let state = null, left = "hero", locked = false, painting = false, erasing = false, syncing = false;
+const ink = { left: [], right: [] };  // strokes: {points: [[x, y] as fractions], width: fraction of pane width}
+const pending = [];  // notes added, not sent yet
+const verdicts = new Map();  // pin number -> {fixed, comment}
+
+function deg(v) { return v * Math.PI / 180; }
+function heroCamera(camera) {
+  // the build seen from the hero's direction, keeping its distance and target
+  const t = camera.target, p = camera.position;
+  const d = Math.hypot(p[0] - t[0], p[1] - t[1], p[2] - t[2]);
+  const yaw = deg(state.hero_camera.yaw), pitch = deg(state.hero_camera.pitch);
+  return { ...camera, position: [t[0] + d * Math.sin(yaw) * Math.cos(pitch), t[1] + d * Math.sin(pitch),
+                                 t[2] + d * Math.cos(yaw) * Math.cos(pitch)] };
+}
+function follow() {
+  if (!locked || syncing) return;
+  syncing = true;
+  if (left === "mesh") reference.setCamera(build.getCamera());
+  syncing = false;
+}
+build.onChange(follow);
+reference.onChange(() => { if (locked && left === "mesh" && !syncing) { syncing = true; build.setCamera(reference.getCamera()); syncing = false; } });
+
+function setLeft(value) {
+  left = value === "mesh" && state.mesh ? "mesh" : "hero";
+  $("left").value = left;
+  $("leftView").style.display = left === "mesh" ? "block" : "none";
+  $("heroImage").style.display = left === "hero" ? "block" : "none";
+  $("leftLabel").textContent = left === "mesh" ? "Rough 3D reference" : "Hero image";
+  ink.left = [];
+  draw();
+  applyLock();
+}
+function applyLock() {
+  $("lock").classList.toggle("on", locked);
+  if (!locked) return;
+  if (left === "hero") build.setCamera(heroCamera(build.getCamera()));
+  else reference.setCamera(build.getCamera());
+}
+function frozen() {
+  const still = ink.left.length + ink.right.length > 0 || painting;
+  build.setInteractive(!still && !(locked && left === "hero"));
+  reference.setInteractive(!still);
+  $("addHint").textContent = still ? "cameras stay still while painting or while there is paint" : "";
+}
+
+// --- painting ---
+function canvasOf(side) { return side === "left" ? $("leftInk") : $("rightInk"); }
+function draw() {
+  for (const side of ["left", "right"]) {
+    const c = canvasOf(side), r = c.getBoundingClientRect();
+    c.width = r.width; c.height = r.height;
+    const g = c.getContext("2d");
+    g.clearRect(0, 0, c.width, c.height);
+    g.strokeStyle = "rgba(230, 30, 60, 0.75)"; g.lineCap = g.lineJoin = "round";
+    for (const s of ink[side]) {
+      g.lineWidth = s.width * c.width;
+      g.beginPath();
+      s.points.forEach(([x, y], i) => i ? g.lineTo(x * c.width, y * c.height) : g.moveTo(x * c.width, y * c.height));
+      if (s.points.length === 1) g.lineTo(s.points[0][0] * c.width + 0.1, s.points[0][1] * c.height);
+      g.stroke();
+    }
+  }
+  frozen();
+}
+new ResizeObserver(draw).observe($("panes"));
+for (const side of ["left", "right"]) {
+  const c = canvasOf(side);
+  let current = null;
+  const at = e => { const r = c.getBoundingClientRect(); return [(e.clientX - r.left) / r.width, (e.clientY - r.top) / r.height]; };
+  c.addEventListener("pointerdown", e => {
+    c.setPointerCapture(e.pointerId);
+    if (erasing) { erase(side, at(e)); return; }
+    current = { points: [at(e)], width: Number($("brush").value) / 100 };
+    ink[side].push(current); draw();
+  });
+  c.addEventListener("pointermove", e => {
+    if (erasing && e.buttons) { erase(side, at(e)); return; }
+    if (current) { current.points.push(at(e)); draw(); }
+  });
+  c.addEventListener("pointerup", () => { current = null; });
+}
+function erase(side, [x, y]) {
+  const before = ink[side].length;
+  ink[side] = ink[side].filter(s => !s.points.some(([px, py]) => Math.hypot(px - x, py - y) < s.width));
+  if (ink[side].length !== before) draw();
+}
+function setTool(paint, rubber) {
+  painting = paint; erasing = rubber;
+  $("paint").classList.toggle("on", paint && !rubber);
+  $("erase").classList.toggle("on", rubber);
+  $("panes").classList.toggle("painting", paint || rubber);
+  frozen();
+}
+$("paint").onclick = () => setTool(!(painting && !erasing), false);
+$("erase").onclick = () => setTool(!erasing, !erasing);
+$("clear").onclick = () => { ink.left = []; ink.right = []; draw(); };
+$("lock").onclick = () => { locked = !locked; applyLock(); frozen(); };
+$("left").onchange = e => setLeft(e.target.value);
+$("resetView").onclick = () => { build.resetView(); reference.resetView(); applyLock(); };
+
+// --- notes ---
+function snapshot(side) {
+  const pane = side === "left" ? $("leftPane") : $("rightPane");
+  const r = pane.getBoundingClientRect();
+  const out = document.createElement("canvas");
+  out.width = Math.round(r.width); out.height = Math.round(r.height);
+  const g = out.getContext("2d");
+  g.fillStyle = "#ffffff"; g.fillRect(0, 0, out.width, out.height);
+  if (side === "left" && left === "hero") {
+    const img = $("heroImage"), k = Math.min(out.width / img.naturalWidth, out.height / img.naturalHeight);
+    const w = img.naturalWidth * k, h = img.naturalHeight * k;
+    g.drawImage(img, (out.width - w) / 2, (out.height - h) / 2, w, h);
+  } else {
+    g.drawImage((side === "left" ? reference : build).snapshot(), 0, 0, out.width, out.height);
+  }
+  g.drawImage(canvasOf(side), 0, 0, out.width, out.height);
+  return out.toDataURL("image/png");
+}
+$("add").onclick = () => {
+  const comment = $("comment").value.trim();
+  if (!comment && !ink.left.length && !ink.right.length) { $("error").textContent = "write a comment or paint first"; return; }
+  $("error").textContent = "";
+  const r = $("rightPane").getBoundingClientRect();
+  pending.push({
+    comment, left, aspect: r.width / r.height,
+    camera: build.getCamera(), reference_camera: left === "mesh" ? reference.getCamera() : null,
+    model_strokes: ink.right, reference_strokes: ink.left,
+    images: { reference: snapshot("left"), model: snapshot("right") },
+  });
+  ink.left = []; ink.right = []; $("comment").value = "";
+  draw(); renderNotes();
+};
+function renderNotes() {
+  $("notes").classList.toggle("muted", !pending.length);
+  $("notes").innerHTML = pending.length ? "" : "none yet";
+  pending.forEach((n, i) => {
+    const el = document.createElement("div");
+    el.className = "note";
+    el.innerHTML = `<div class="thumbs"><img src="${n.images.reference}" alt=""><img src="${n.images.model}" alt=""></div>
+      <textarea>${esc(n.comment)}</textarea>
+      <div class="row"><button data-act="look">Show camera</button><button data-act="del">Delete</button></div>`;
+    el.querySelector("textarea").oninput = e => { n.comment = e.target.value; };
+    el.querySelector("[data-act=del]").onclick = () => { pending.splice(i, 1); renderNotes(); };
+    el.querySelector("[data-act=look]").onclick = () => { if (!ink.left.length && !ink.right.length) build.setCamera(n.camera); };
+    $("notes").appendChild(el);
+  });
+}
+function renderPins() {
+  $("pinsTitle").style.display = $("pins").style.display = state.pins.length ? "" : "none";
+  $("pins").innerHTML = "";
+  for (const p of state.pins) {
+    const v = verdicts.get(p.number) || {};
+    const el = document.createElement("div");
+    el.className = "note";
+    el.innerHTML = `<div><b>#${p.number}</b> ${esc(p.comment)}</div>
+      <div class="muted">agent (build ${esc(p.build)}): ${esc(p.reason || "addressed")}</div>
+      <div class="row"><button data-act="look">Show</button>
+        <button data-act="fixed" class="${v.fixed === true ? "on" : ""}">Fixed</button>
+        <button data-act="wrong" class="${v.fixed === false ? "on" : ""}">Still wrong</button></div>
+      <div class="row" style="display:${v.fixed === false ? "flex" : "none"}"><input type="text" placeholder="what is still wrong?" value="${esc(v.comment || "")}"></div>`;
+    el.querySelector("[data-act=look]").onclick = () => { if (p.camera?.position) build.setCamera(p.camera); };
+    el.querySelector("[data-act=fixed]").onclick = () => { verdicts.set(p.number, { fixed: true }); renderPins(); };
+    el.querySelector("[data-act=wrong]").onclick = () => { verdicts.set(p.number, { fixed: false, comment: v.comment || "" }); renderPins(); };
+    el.querySelector("input").oninput = e => { verdicts.get(p.number).comment = e.target.value; };
+    $("pins").appendChild(el);
+  }
+  $("open").innerHTML = state.open.length ? state.open.map(o => `<div>#${o.number} ${esc(o.comment)}</div>`).join("") : "none";
+}
+$("send").onclick = async () => {
+  if (ink.left.length || ink.right.length || $("comment").value.trim()) { $("error").textContent = "add or clear the note you are painting first"; return; }
+  $("send").disabled = true;
+  const confirm = [...verdicts].map(([number, v]) => ({ number, fixed: v.fixed, comment: v.comment }));
+  const response = await fetch("api/choice", { method: "POST", headers: { "Content-Type": "application/json" },
+                                               body: JSON.stringify({ notes: pending, confirm }) });
+  const body = await response.json();
+  if (!response.ok) { $("error").textContent = body.error; $("send").disabled = false; return; }
+  $("sent").textContent = `Sent ${body.notes.length} note(s). You can close this window.`;
+};
+
+try {
+  const response = await fetch("api/state");
+  state = await response.json();
+  if (!response.ok) throw new Error(state.error);
+  $("title").textContent = document.title = state.title;
+  $("heroImage").src = state.hero || "";
+  $("left").querySelector("[value=mesh]").disabled = !state.mesh;
+  if (!state.mesh) $("left").title = state.mesh_reason;
+  await build.load(state.model);
+  if (state.mesh) await reference.load(state.mesh);
+  setLeft(state.mesh ? "mesh" : "hero");
+  renderPins();
+} catch (e) { $("error").textContent = e.message; }
+setInterval(() => fetch("api/prefs").catch(() => {}), 5000);  // keeps a browser tab counted as open
+</script>
+</body>
+</html>

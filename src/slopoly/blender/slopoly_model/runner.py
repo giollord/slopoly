@@ -85,7 +85,8 @@ def build(job: dict, out: Path) -> dict:
     validation["validated"] = validation["validated"] and not untagged and not missing and not broken
     used = sorted({pal.split_tag(t)[0] for p in model.parts.values() for t in p.face_tags() if t})
     masks = load_masks(job.get("masks") or [])
-    silhouette = score(model, masks)
+    fits = {v["view"]: v["fit"] for v in job.get("views") or [] if v.get("fit")}
+    silhouette = score(model, masks, fits)
     objects = {m["view"]: m["mask"] for m in masks if m["part"] == OBJECT}
     views = {v["view"]: Path(v["path"]) for v in job.get("views") or [] if v.get("path")}
     parts_by_view: dict[str, dict] = {}

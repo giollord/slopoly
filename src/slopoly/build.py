@@ -51,7 +51,8 @@ def reference_inputs(variant: Variant) -> tuple[list[dict], list[dict], str | No
     if not views:
         return [], [], f"the reference hero {reference} has no views yet (run slopoly gen views)"
     folder = asset.views_dir(reference)
-    view_inputs = [{"view": v.view, "path": str(folder / v.image)} for v in views.views]
+    view_inputs = [{"view": v.view, "path": str(folder / v.image), **({"fit": v.fit.model_dump()} if v.fit else {})}
+                   for v in views.views]
     masks = [{"part": "object", "view": v.view, "path": str(folder / v.mask)} for v in views.views]
     if parts := asset.masks(reference):
         mask_folder = asset.masks_dir(reference)
@@ -89,9 +90,24 @@ def build(variant: Variant, timeout: int = DEFAULT_TIMEOUT) -> dict:
         raise SlopolyError("program_error", f"program error at {where}{report['error']}",
                            "fix program.py and build again", status=2, build=number, line=report.get("line"),
                            program=ws.rel(rejected / "program.py"))
+    if (compared := compare_reference(variant, folder)) is not None:
+        report["compare3d"] = compared
+        write_atomic(report_file, json.dumps(report))
     meta = variant.meta
     variant.save(meta.model_copy(update={"current": number}))
     return result(variant, number, report)
+
+
+def compare_reference(variant: Variant, folder: Path) -> dict | None:
+    """The build compared in 3D with its reference hero's reference mesh, when both exist."""
+    from . import compare3d
+    from . import meshview as mv
+    hero = variant.meta.reference
+    views = variant.asset.views(hero) if hero else None
+    mesh = variant.asset.views_dir(hero) / views.mesh if views and views.mesh else None
+    if mesh is None or not mesh.exists() or not (folder / "model.glb").exists():
+        return None
+    return compare3d.compare(mv.load_glb((folder / "model.glb").read_bytes()), mv.load_glb(mesh.read_bytes()))
 
 
 def set_aside(folder: Path) -> Path:
@@ -114,6 +130,7 @@ def result(variant: Variant, number: int, report: dict) -> dict:
     return {"build": number, "variant": variant.address, "current": variant.meta.current == number,
             "validated": report.get("validated"), "triangles": triangles, "budget": variant.asset.budget,
             "bounds": report.get("bounds"), "validation": report.get("validation"), "silhouette": silhouette,
+            "compare3d": report.get("compare3d"),
             "colors": report.get("colors"), "palette": report.get("palette"), "shading": report.get("shading"),
             "files": {"model": ws.rel(folder / "model.glb"), "blend": ws.rel(folder / "model.blend"),
                       "report": ws.rel(folder / "report.json"), "program": ws.rel(folder / "program.py")}}

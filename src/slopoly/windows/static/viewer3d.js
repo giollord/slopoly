@@ -1,6 +1,6 @@
 // 3D viewer for builds and scenes (three.js): orbit camera, neutral studio light, and diagnostic overlays (wireframe,
 // ground grid, origin axes, vertex normals, baked shade on/off). Palette textures are swapped without reloading the
-// model. Used by view.html: create() returns a handle whose methods the page calls.
+// model. Used by view.html and review.html: create() returns a handle whose methods the page calls.
 import * as THREE from "three";
 import { OrbitControls } from "three/addons/controls/OrbitControls.js";
 import { GLTFLoader } from "three/addons/loaders/GLTFLoader.js";
@@ -9,8 +9,9 @@ import { VertexNormalsHelper } from "three/addons/helpers/VertexNormalsHelper.js
 
 const NORMAL_LENGTH = 0.03; // share of the model's bounding sphere radius
 
-export function create(element) {
-    const renderer = new THREE.WebGLRenderer({ antialias: true, alpha: true });
+export function create(element, options = {}) {
+    // preserve: keep the drawn frame so snapshot() can read it (review notes)
+    const renderer = new THREE.WebGLRenderer({ antialias: true, alpha: true, preserveDrawingBuffer: !!options.preserve });
     renderer.setPixelRatio(window.devicePixelRatio);
     renderer.toneMapping = THREE.ACESFilmicToneMapping;
     renderer.toneMappingExposure = 1;
@@ -26,6 +27,8 @@ export function create(element) {
     const camera = new THREE.PerspectiveCamera(35, 1, 0.01, 1000);
     const controls = new OrbitControls(camera, renderer.domElement);
     controls.enableDamping = true;
+    const listeners = [];
+    controls.addEventListener("change", () => { for (const f of listeners) f(); });
 
     const overlays = { wireframe: false, grid: false, axes: false, normals: false, shade: true };
     let model = null, helpers = [], palette = null, radius = 1, centre = new THREE.Vector3(), loadId = 0;
@@ -139,6 +142,23 @@ export function create(element) {
             if (palette) await setTexture(palette);
         },
         setOverlays(values) { Object.assign(overlays, values); if (model) applyOverlays(); },
+        // the orbit camera as plain numbers: {position, target, fov} (metres, degrees)
+        getCamera() {
+            return { position: camera.position.toArray(), target: controls.target.toArray(), fov: camera.fov };
+        },
+        setCamera(value) {
+            camera.position.fromArray(value.position);
+            controls.target.fromArray(value.target);
+            if (value.fov) camera.fov = value.fov;
+            const distance = camera.position.distanceTo(controls.target);
+            camera.near = Math.max(distance / 100, 0.001);
+            camera.far = distance * 100;
+            camera.updateProjectionMatrix();
+            controls.update();
+        },
+        onChange(listener) { listeners.push(listener); },
+        setInteractive(on) { controls.enabled = on; },
+        snapshot() { renderer.render(scene, camera); return renderer.domElement; },
         async setPalette(url) { palette = url; await setTexture(url); },
         resetView() { if (model) frame(); },
         dispose() {

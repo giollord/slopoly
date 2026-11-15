@@ -11,7 +11,7 @@ from pathlib import Path
 
 from .. import jobs
 from .. import models as m
-from ..core import SlopolyError
+from ..core import SlopolyError, load
 from ..workspace import Asset, ImageRef, Variant, Workspace, check_name, images, new_variant, set_reference
 from .server import PageServer
 
@@ -20,13 +20,16 @@ BROWSER_IDLE = 30  # seconds without a request from the page before a browser-ta
 
 # --- selection (shared by the pick window and `slopoly pick --set`) -----------------------------------------------
 
-def variant_names(asset: Asset, count: int) -> list[str]:
-    """Suggested variant names for ``count`` picked heroes: the default variant while it has no reference, then
+def variant_names(asset: Asset, count: int, first: str | None = None) -> list[str]:
+    """Suggested variant names for ``count`` picked heroes: ``first`` when given (a pick that replaces that
+    variant's reference, e.g. after gen revise), else the default variant while it has no reference; then
     variant_2, variant_3, ... that don't exist yet."""
     names, n = [], 2
     default = asset.meta.default_variant
     taken = {v.name for v in asset.variants()}
-    if count and (default not in taken or not asset.variant(default).meta.reference):
+    if count and first:
+        names.append(first)
+    elif count and (default not in taken or not asset.variant(default).meta.reference):
         names.append(default)
     while len(names) < count:
         if f"variant_{n}" not in taken:
@@ -115,7 +118,7 @@ def start_pick(ws: Workspace, spec: dict) -> dict:
     pack = ws.pack(spec["pack"])
     if not spec.get("question") and not pick_images(ws, spec):
         raise SlopolyError("nothing_to_pick", "there are no undecided or picked images to pick from")
-    return jobs.start(pack, "pick", spec.get("target") or pack.name, spec)
+    return with_address(pack, jobs.start(pack, "pick", spec.get("target") or pack.name, spec))
 
 
 def pick_images(ws: Workspace, spec: dict) -> list[tuple[ImageRef, m.Image]]:
@@ -150,7 +153,8 @@ def pick_state(ws: Workspace, spec: dict) -> dict:
     return {"title": spec.get("title") or "Pick", "question": spec.get("question"), "options": spec.get("options") or [],
             "limit": spec.get("limit"), "images": items, "heroes": heroes, "references": references(ws, spec),
             "variants": [v.name for v in asset.variants()] if asset else [],
-            "suggested": variant_names(asset, len(items)) if asset else []}
+            "replacing": spec.get("for"),
+            "suggested": variant_names(asset, len(items), spec.get("for")) if asset else []}
 
 
 @jobs.kind("pick")
@@ -228,7 +232,7 @@ def start_view(ws: Workspace, target: str, build: int | None = None) -> dict:
     t = ws.target(target)
     spec = {"target": target, "build": build}
     view_state(ws, spec)  # fails now when there is nothing to show
-    return jobs.start(t.pack, "view", target, spec)
+    return with_address(t.pack, jobs.start(t.pack, "view", target, spec))
 
 
 @jobs.kind("view")
@@ -237,3 +241,97 @@ def view(context: jobs.JobContext) -> dict:
     with PageServer(ws.root, "view.html", lambda: view_state(ws, spec)) as server:
         how = show(server, f"Slopoly: {spec['target']}", threading.Event(), context)
     return {"closed": True, "shown_in": how}
+
+
+# --- review ------------------------------------------------------------------------------------------------------
+
+HERO_CAMERA = {"yaw": 45.0, "pitch": 20.0}  # the hero image's view: three-quarter from the front-left, a little above
+
+
+def review_state(ws: Workspace, spec: dict) -> dict:
+    from .. import review
+    variant: Variant = ws.target(spec["target"]).need_variant()
+    number = spec.get("build") or variant.meta.current
+    if number is None:
+        raise SlopolyError("not_built", f"{variant.address} has no current build", f"slopoly build {variant.address}")
+    folder = variant.build_dir(int(number))
+    pack, hero = variant.pack, variant.reference
+    views = variant.asset.views(hero.path.name) if hero else None
+    mesh = variant.asset.views_dir(hero.path.name) / views.mesh if views and views.mesh else None
+    textures = {p.stem: url_of(ws, p) for p in sorted(pack.palette_dir.glob("*.png"))} if pack.palette_dir.is_dir() else {}
+    notes = review.load_notes(variant)
+    pins = [{"number": n.number, "comment": n.comment, "camera": n.camera, "left": n.left,
+             "reason": next((e.text for e in reversed(n.history) if e.status == "addressed"), None),
+             "build": next((e.build for e in reversed(n.history) if e.status == "addressed"), None),
+             "images": {k: url_of(ws, review.notes_dir(variant) / v) for k, v in n.images.items()}}
+            for n in notes.notes if n.status == "addressed"]
+    return {"title": f"Review {variant.address} (build {number})", "variant": variant.address, "build": int(number),
+            "model": url_of(ws, folder / "model.glb"), "textures": textures,
+            "hero": url_of(ws, hero.path) if hero else None,
+            "mesh": url_of(ws, mesh) if mesh is not None and mesh.exists() else None,
+            "mesh_reason": None if mesh is not None and mesh.exists() else
+            "no reference mesh yet: make the views with slopoly gen views",
+            "hero_camera": HERO_CAMERA, "pins": pins,
+            "open": [{"number": n.number, "comment": n.comment} for n in notes.notes if n.status == "open"]}
+
+
+def start_review(ws: Workspace, target: str, build: int | None = None) -> dict:
+    t = ws.target(target)
+    spec = {"target": t.need_variant().address, "build": build}
+    review_state(ws, spec)  # fails now when there is nothing to review
+    return with_address(t.pack, jobs.start(t.pack, "review", spec["target"], spec))
+
+
+@jobs.kind("review")
+def review_job(context: jobs.JobContext) -> dict:
+    from .. import meshview as mv
+    from .. import review
+    ws, spec = context.ws, context.inputs
+    variant = ws.target(spec["target"]).need_variant()
+    done, outcome = threading.Event(), {}
+
+    def on_send(body: dict) -> dict:
+        if done.is_set():
+            return outcome
+        state = review_state(ws, spec)
+        number = state["build"]
+        build = mv.load_glb((variant.build_dir(number) / "model.glb").read_bytes())
+        hero = variant.reference
+        views = variant.asset.views(hero.path.name) if hero else None
+        mesh_path = variant.asset.views_dir(hero.path.name) / views.mesh if views and views.mesh else None
+        reference = mv.load_glb(mesh_path.read_bytes()) if mesh_path is not None and mesh_path.exists() else None
+        added = review.add_notes(variant, number, body.get("notes") or [], build, reference)
+        verdicts = review.confirm(variant, body.get("confirm") or [], number)
+        outcome.update({"notes": [review.summary(variant, n) for n in added], **verdicts,
+                        "open": review.open_count(variant)})
+        done.set()
+        return outcome
+
+    with PageServer(ws.root, "review.html", lambda: review_state(ws, spec), on_send) as server:
+        how = show(server, f"Slopoly: review {spec['target']}", done, context, size=(1500, 900))
+    if not done.is_set():
+        raise jobs.Cancelled()
+    return outcome | {"shown_in": how}
+
+
+ADDRESS_WAIT = 10.0  # seconds a window command waits for its page's address
+
+
+def with_address(pack, started: dict) -> dict:
+    """Adds the window's local address to a started window job's result as soon as its page server is up."""
+    deadline = time.monotonic() + ADDRESS_WAIT
+    path = pack.jobs_dir / f"{started['job']}.yaml"
+    while time.monotonic() < deadline and path.exists():
+        try:
+            job = load(m.Job, path)
+        except SlopolyError:  # caught mid-write
+            time.sleep(0.2)
+            continue
+        message = job.message or ""
+        if job.state not in ("queued", "running"):
+            break
+        if "http://" in message:
+            started["url"] = "http://" + message.split("http://", 1)[1].rstrip(")").split()[0].rstrip(")")
+            break
+        time.sleep(0.2)
+    return started

@@ -35,7 +35,12 @@ def test_floating_part_is_disconnected():
     sm.part("wheel", sm.prism(8, r=0.3, length=0.1, axis="x"), parent="bed", at=(2, 0, 0))
     report = validate(assembly.current, budget=2000)
     assert report["disconnected"] == ["wheel"]
-    assert report["contacts"] == [{"part": "wheel", "parent": "bed", "gap": pytest.approx(1.45, abs=0.01), "ok": False}]
+    contact = report["contacts"][0]
+    assert {k: contact[k] for k in ("part", "parent", "ok")} == {"part": "wheel", "parent": "bed", "ok": False}
+    assert contact["gap"] == pytest.approx(1.45, abs=0.01)
+    # the nearest points say where to move: the wheel's inner face at x=1.95 and the bed's side at x=0.5
+    assert contact["nearest"][0] == pytest.approx(1.95, abs=0.01)
+    assert contact["parent_nearest"][0] == pytest.approx(0.5, abs=0.01)
 
 
 def test_budget_is_checked():
@@ -190,3 +195,18 @@ def test_unknown_roles_and_untagged_parts_fail_validation(tmp_path):
     issues = {i["issue"]: i for i in report["validation"]["issues"]}
     assert issues["unknown_roles"]["roles"] == ["gold"]
     assert issues["untagged"]["parts"] == ["lid"]
+
+
+def test_metric_view_fit_reports_absolute_size():
+    # a 1 m wide, 1 m tall view silhouette at 100 px per metre, standing on the ground at row 150
+    mask = np.zeros((200, 200), bool)
+    mask[50:150, 50:150] = True
+    fit = {"scale": 100.0, "offset": [100.0, 150.0], "image": [200, 200]}
+    sm.part("bed", sm.box(1.1, 1.0, 1.0).move(y=0.5))  # 10 % too wide
+    result = silhouette.score(assembly.current, [{"part": "object", "view": "front", "mask": mask}], {"front": fit})
+    front = result["views"][0]
+    assert front["scaling"] == "metric"
+    assert front["object"]["width_error"] == pytest.approx(0.1, abs=0.011)
+    assert front["object"]["height_error"] == pytest.approx(0.0, abs=0.011)
+    fitted = silhouette.score(assembly.current, [{"part": "object", "view": "front", "mask": mask}])["views"][0]
+    assert fitted["scaling"] == "fitted" and abs(fitted["object"]["width_error"]) < 0.06  # proportions only

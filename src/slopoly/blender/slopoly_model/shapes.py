@@ -21,8 +21,9 @@ import bmesh
 import bpy
 import numpy as np
 from mathutils import Euler, Matrix, Vector
+from mathutils.bvhtree import BVHTree
 
-from .normals import BENT_DEGREES, bend_degrees
+from .normals import BENT_DEGREES, bend_degrees, defects
 
 Vec3 = Sequence[float]
 FaceSelector = str | Callable[[tuple[float, float, float], tuple[float, float, float]], bool] | None
@@ -159,6 +160,7 @@ class Shape:
         self.groups: list[str] = []  # vertex group names, by deform-layer index
         self.stack: list[_Modifier] = []
         self.fill_tag = 0  # tag for faces a modifier creates without a source face (SCREW of an outline)
+        self.warnings: list[str] = []  # reported with the part in the build
 
     @property
     def bm(self) -> bmesh.types.BMesh:
@@ -169,6 +171,7 @@ class Shape:
     def copy(self) -> Shape:
         shape = Shape(self._bm.copy(), self.profile)
         shape.booleans, shape.groups, shape.fill_tag = self.booleans, list(self.groups), self.fill_tag
+        shape.warnings = list(self.warnings)
         shape.stack = [_Modifier(m.type, m.group, dict(m.settings)) for m in self.stack]
         return shape
 
@@ -446,6 +449,19 @@ def outline(points: Sequence[Sequence[float]], closed: bool = False, tag: str | 
     return _finish(bm, tag)
 
 
+def _subdivided(points: Sequence[Vec3], closed: bool, spans: int) -> list[Vec3]:
+    """Straight segments split into ``spans`` equal parts each (Blender ignores resolution on POLY splines)."""
+    if spans <= 1:
+        return list(points)
+    ends = list(points) + ([points[0]] if closed else [])
+    out: list[Vec3] = []
+    for a, b in zip(ends, ends[1:]):
+        out.extend(tuple(a[k] + (b[k] - a[k]) * i / spans for k in range(3)) for i in range(spans))
+    if not closed:
+        out.append(tuple(points[-1]))
+    return out
+
+
 def _curve_object(spec: Path, profile: list[tuple[float, float]] | None, resolution: int, made: list):
     data = bpy.data.curves.new("slopoly_curve", "CURVE")
     data.dimensions = "3D"
@@ -458,8 +474,9 @@ def _curve_object(spec: Path, profile: list[tuple[float, float]] | None, resolut
             point.co = co
             point.handle_left_type = point.handle_right_type = "AUTO"
     else:
-        spline.points.add(len(spec.points) - 1)
-        for point, co in zip(spline.points, spec.points):
+        points = _subdivided(spec.points, spec.closed, int(resolution))
+        spline.points.add(len(points) - 1)
+        for point, co in zip(spline.points, points):
             point.co = (*co, 1.0)
     spline.use_cyclic_u = spec.closed
     made.append(data)
@@ -482,12 +499,16 @@ def _curve_object(spec: Path, profile: list[tuple[float, float]] | None, resolut
     return obj
 
 
-def curve(points: Sequence[Vec3] | Path, profile: Shape | Sequence[tuple[float, float]], resolution: int = 4,
+def curve(points: Sequence[Vec3] | Path, profile: Shape | Sequence[tuple[float, float]], resolution: int | None = None,
           smooth: bool = True, closed: bool = False, tag: str | None = None) -> Shape:
     """A tube along a Blender curve through ``points`` (or a ``path()``), with cross-section ``profile`` (an ``ngon``
-    or a list of (u, v) points). ``resolution`` is the number of segments between two control points; ``smooth``
-    False makes straight segments with sharp corners. Open curves get flat n-gon caps; ``closed`` makes a ring."""
+    or a list of (u, v) points). ``resolution`` is the number of segments between two control points (default 4
+    for smooth paths, 1 for straight ones); ``smooth`` False makes straight segments with sharp corners, each split
+    into ``resolution`` rings, so a two-point pole can be tapered and bent with a vertex group. Open curves get flat
+    n-gon caps; ``closed`` makes a ring."""
     spec = points if isinstance(points, Path) else path(points, smooth, closed)
+    if resolution is None:
+        resolution = 4 if spec.smooth else 1
     section = profile.profile if isinstance(profile, Shape) else [tuple(p) for p in profile]
     if not section or len(section) < 3:
         raise ShapeError("curve needs a profile with at least 3 points (use ngon)")
@@ -658,17 +679,52 @@ def _non_manifold(bm: bmesh.types.BMesh) -> int:
     return sum(1 for e in bm.edges if len(e.link_faces) != 2)
 
 
+JITTER_WALL_SHARE = 0.45  # a vertex moves less than half the wall behind it, so opposite faces can't cross
+
+
+def _wall_thickness(bm: bmesh.types.BMesh, tree: BVHTree, v: bmesh.types.BMVert) -> float:
+    """Distance from a vertex through the solid to the surface behind it (inf when nothing is hit)."""
+    inward = -v.normal
+    if inward.length < 1e-9:
+        return math.inf
+    own = {f.index for f in v.link_faces}
+    start = v.co + inward * 1e-5
+    for _ in range(8):  # skip the vertex's own faces, which a ray from a corner grazes first
+        location, _, index, _ = tree.ray_cast(start, inward)
+        if location is None:
+            return math.inf
+        if index not in own:
+            return (location - v.co).length
+        start = location + inward * 1e-5
+    return math.inf
+
+
 def jitter(shape: Shape, amount: float, seed: int = 0, faces: FaceSelector = None) -> Shape:
     """Moves each vertex of the selected faces (all when no selection) by a seeded random offset of up to ``amount``
-    per axis: dents, sag and uneven chips. Shared vertices move once, so the shape stays closed."""
+    per axis: dents, sag and uneven chips. Shared vertices move once, so the shape stays closed. Each move is limited
+    to under half the wall thickness behind the vertex, so thin walls (cloth, window pillars) don't pass through
+    themselves; the part gets a warning when the result still intersects itself. Jitter after booleans."""
     _positive("amount", amount)
     result = shape.copy()
-    result.bm.verts.index_update()
+    bm = result.bm
+    bm.verts.index_update()
+    bm.faces.index_update()
+    bm.normal_update()
     verts = sorted({v for f in _selected(result, faces) for v in f.verts}, key=lambda v: v.index)
     offsets = np.random.default_rng(seed).uniform(-amount, amount, (len(verts), 3))
-    for v, offset in zip(verts, offsets):
-        v.co += Vector(offset.tolist())
-    result.bm.normal_update()
+    before = defects(bm)["selfIntersecting"]
+    tree = BVHTree.FromBMesh(bm)  # no epsilon: it makes rays hit at their start
+    limits = [JITTER_WALL_SHARE * _wall_thickness(bm, tree, v) for v in verts]
+    for v, offset, limit in zip(verts, offsets, limits):
+        move = Vector(offset.tolist())
+        if move.length > limit:
+            move *= limit / move.length
+        v.co += move
+    bm.normal_update()
+    crossing = defects(bm)["selfIntersecting"] - before
+    if crossing > 0:
+        result.warnings.append(f"jitter {amount} made {crossing} self-intersecting faces; lower the amount or "
+                               "jitter before the boolean that made the thin wall")
     return result
 
 
@@ -707,7 +763,8 @@ def paint(shape: Shape, tag: str, faces: FaceSelector = None) -> Shape:
 
 def join(*shapes: Shape) -> Shape:
     """One shape holding all the given shapes' faces (they may overlap; nothing is merged). Vertex groups with the
-    same name are merged."""
+    same name are merged. A face that repeats the vertices of a face already in its shape (left by booleans or
+    raw operations) is dropped, and so are faces with fewer than 3 distinct vertices."""
     if not shapes:
         raise ShapeError("join needs at least one shape")
     bm = bmesh.new()
@@ -733,18 +790,41 @@ def join(*shapes: Shape) -> Shape:
             if not e.link_faces:
                 bm.edges.new([vert_map[v] for v in e.verts])
         for f in source.faces:
-            face = bm.faces.new([vert_map[v] for v in f.verts])
+            verts = list(dict.fromkeys(vert_map[v] for v in f.verts))
+            if len(verts) < 3 or bm.faces.get(verts) is not None:
+                continue
+            try:
+                face = bm.faces.new(verts)
+            except ValueError as error:
+                raise ShapeError(f"join: shape {shapes.index(shape) + 1} of {len(shapes)} has a face Blender can't "
+                                 f"add ({error}); merge its vertices or build it as its own part") from None
             face[tags] = f[shape.tags]
         source_edges = source.edges.layers.int.get(EDGE_LAYER)
         if source_edges is not None:
             flags = bm.edges.layers.int.get(EDGE_LAYER) or bm.edges.layers.int.new(EDGE_LAYER)
             for e in source.edges:
-                if e[source_edges]:
-                    bm.edges.get([vert_map[v] for v in e.verts])[flags] = e[source_edges]
+                edge = bm.edges.get([vert_map[v] for v in e.verts]) if e[source_edges] else None
+                if edge is not None:
+                    edge[flags] = e[source_edges]
     result = Shape(bm)
     result.groups = groups
     result.booleans = sum(s.booleans for s in shapes)
+    result.warnings = [w for s in shapes for w in s.warnings]
     return result
+
+
+def surface_point(shape: Shape, origin: Vec3, direction: Vec3 = (0, -1, 0)) -> tuple[Vec3, Vec3]:
+    """Where a ray from ``origin`` along ``direction`` first meets the shape: ``(point, normal)``, in the shape's own
+    coordinates. Places studs, spikes and trims on curved surfaces exactly (cast straight down onto a roof)."""
+    d = Vector(direction)
+    if d.length == 0:
+        raise ShapeError("surface_point needs a non-zero direction")
+    bm = shape.bm
+    bm.normal_update()
+    hit, normal, _, _ = BVHTree.FromBMesh(bm).ray_cast(Vector(origin), d.normalized())
+    if hit is None:
+        raise ShapeError(f"surface_point: a ray from {tuple(origin)} along {tuple(direction)} misses the shape")
+    return tuple(round(c, 6) for c in hit), tuple(round(c, 6) for c in normal.normalized())
 
 
 BOOLEAN_OPS = {"union": "UNION", "difference": "DIFFERENCE", "intersection": "INTERSECT"}

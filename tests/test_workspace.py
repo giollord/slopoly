@@ -138,6 +138,21 @@ def test_check_reports_manifest(run, pack):
     assert any(p["file"].endswith("manifest.yaml") and "axle" in p["message"] for p in result["problems"])
 
 
+def test_check_accepts_shape_plans_and_reports_bad_checks(run, pack):
+    manifest = pack / "assets/cart/variants/default/manifest.yaml"
+    manifest.write_text(
+        "parts:\n"
+        "  - name: stack\n"
+        "    shape: flared funnel on a saddle, rolled rim\n"
+        "    steps: [lathe profile saddle -> neck -> flare -> rim, bands as profile steps painted iron]\n"
+        "    checks: [side, 'look:top', 'look:30,20']\n")
+    run("check", "gnome-village")
+    manifest.write_text("parts:\n  - name: stack\n    checks: [isometric, 'look:sideways']\n")
+    problems = run("check", "gnome-village", ok=False).json["problems"]
+    fields = {p["field"] for p in problems if p["file"].endswith("manifest.yaml")}
+    assert fields == {"parts.0.checks.0", "parts.0.checks.1"}
+
+
 def test_check_notes(run, pack):
     notes = Path("slopoly/knowledge/techniques")
     (notes / "Cracks.md").write_text("---\ntitle: Cracks\nsummary: s\n---\nbody\n")
@@ -162,3 +177,17 @@ def test_config_outside_workspace(run, pack):
     assert config.get("comfyui.url") == "http://gpu-box:8188"
     assert "gpu-box" not in "".join(p.read_text(errors="ignore") for p in Path("slopoly").rglob("*") if p.is_file())
     assert run("config", "set", "nope", "x", ok=False).json["code"] == "unknown_setting"
+
+
+def test_asset_size_is_parsed_and_stored(run, pack):
+    run("asset", "new", "gnome-village/wagon", "--size", "z=4.5")
+    assert "metres: 4.5" in (pack / "assets/wagon/asset.yaml").read_text()
+    run("asset", "new", "gnome-village/barrel", "--size", "1.2")
+    assert "axis: longest" in (pack / "assets/barrel/asset.yaml").read_text()
+    assert run("asset", "new", "gnome-village/bad", "--size", "q=1", ok=False).json["code"] == "bad_size"
+
+
+def test_split_variant_target_gets_a_joined_hint(run, pack):
+    result = run("variant", "default", "gnome-village/cart", "variant_2", ok=False).json
+    assert result["code"] == "usage"
+    assert "slopoly variant default gnome-village/cart:variant_2" in result["hint"]

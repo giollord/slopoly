@@ -1,6 +1,6 @@
 ---
 title: Curved and bent parts
-tags: [curve, curved, bent, bend, handle, handles, arch, arches, pipe, rail, ring, hoop, hook, frame, path, sweep]
+tags: [sheet, curved sheet, roof, cab roof, canopy, arched, fender, mudguard, curve, curved, bent, bend, handle, handles, arch, arches, pipe, rail, ring, hoop, hook, frame, path, sweep]
 summary: Tubes and bars along Blender curves through a few control points (handles, arches, rails, hoops), and bending an existing shape along a path with the CURVE modifier.
 ---
 
@@ -35,3 +35,22 @@ part("rib", bent, at=(0, 0, -1.5))
 - Compare the side view's silhouette with the comparison image: straight bars against a curved reference show as
   a red/blue band along the handle.
 - Handles of a cart: start at the bed, curve slightly down then up to the grip.
+
+**Curved sheets (cab roofs, canopies, fenders).** A `curve` with a flat, wide profile sweeps a sheet along an arc.
+The profile's axes follow the path: **u lies in the plane the path bends in** (it becomes the sheet's thickness),
+and **v runs along the binormal**, across the bend (it becomes the sheet's depth). So for an arc drawn in XY (a roof
+seen from the front), a profile with u ±0.03 and v ±1 is a sheet 6 cm thick and 2 m deep along Z.
+
+```python
+arc = path([(-0.85, 0, 0), (0, 0.3, 0), (0.85, 0, 0)])
+roof = curve(arc, [(-0.03, -1.0), (0.03, -1.0), (0.03, 1.0), (-0.03, 1.0)], resolution=4, tag="iron dark")
+part("cab_roof", roof)
+
+fender = curve(path([(0, 0, -0.5), (0, 0.42, 0), (0, 0, 0.5)]), [(-0.015, -0.1), (0.015, -0.1), (0.015, 0.1),
+               (-0.015, 0.1)], resolution=5, tag="iron")
+part("fender", fender, at=(1.4, 0, 0))
+```
+
+- An arc in YZ (a fender seen from the side) gets its width along X from v.
+- If the sheet comes out on edge (thin where it should be wide), swap the profile's u and v.
+- 3–5 segments per span are enough; the flat shading shows the facets as panels.

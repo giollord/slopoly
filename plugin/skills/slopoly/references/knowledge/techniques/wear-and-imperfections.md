@@ -1,7 +1,7 @@
 ---
 title: Wear, chips, cracks and dents
 tags: [seam, seams, plank, ring, crate, wear, worn, old, chips, chipped, cracks, cracked, dents, damage, imperfections, weathered, wood, stone, jitter, rustic]
-summary: Make rustic or old objects look used - jitter for uneven shapes, bevel+jitter for chipped edges, thin darker grooves for cracks and plank seams.
+summary: Make rustic or old objects look used - jitter for uneven shapes (safely on thin walls), bevel+jitter for chipped edges, thin darker grooves for cracks and plank seams.
 ---
 
 Perfect boxes look like placeholders. For rustic, old or hand-made styles add a little irregularity, within budget.
@@ -55,3 +55,17 @@ part("bed", bed, at=(0, 0.6, 0))
 - Lumpy, weathered stone or old plaster: a light DISPLACE with `texture("CLOUDS")` after SUBSURF `levels=1`, then
   DECIMATE (see "rocks-and-chunks"); `jitter` stays the cheapest for boxes.
 - Check the triangle total after adding wear; drop seams before cracks when over budget.
+
+**Jitter on thin walls.** A jitter larger than half a wall's thickness pushes vertices through the other side, and
+the part fails as self-intersecting. `jitter` limits each move to under half the wall behind the vertex and adds a
+warning to the part's `warnings` when the shape still cuts through itself. On thin parts (panels, shutters, cab
+walls, sheets):
+
+- keep the amount under a third of the thickness (a 2 cm board: at most 6 mm);
+- jitter one side for dents (`faces="front"`), not the whole part;
+- jitter after booleans that cut windows: the pillars between windows are the thinnest walls.
+
+```python
+shutter = boolean(box(0.6, 0.8, 0.02, tag="wood"), box(0.2, 0.25, 0.1, tag="wood dark").move(y=0.15))
+part("shutter", jitter(shutter, 0.006, seed=3, faces="front"))
+```
