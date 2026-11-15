@@ -14,15 +14,19 @@ public sealed class ConceptImageResults(SlopolyDb db) : IJobResultHandler
 {
     public bool Handles(Job job) => job.Kind == JobKinds.Comfy && job.Operation is Workflows.StyleAnchor or Workflows.Hero;
 
-    public Task ApplyAsync(Job job, JsonObject outputs)
+    public async Task ApplyAsync(Job job, JsonObject outputs)
     {
         var kind = job.Operation == Workflows.Hero ? ConceptKind.Hero : ConceptKind.Anchor;
+        // Heroes join the job's variant, or the asset's default variant (jobs queued before variants existed).
+        var variantId = kind != ConceptKind.Hero ? null
+            : job.Inputs["variantId"]?.GetValue<Guid?>() ?? (await db.Assets.FindAsync(job.AssetId))?.DefaultVariantId;
         foreach (var image in outputs["images"]?.AsArray() ?? [])
         {
             db.ConceptImages.Add(new ConceptImage
             {
                 PackId = job.PackId ?? throw new InvalidOperationException("Image jobs need a pack."),
                 AssetId = job.AssetId,
+                VariantId = variantId,
                 JobId = job.Id,
                 Kind = kind,
                 FileId = image!["fileId"]!.GetValue<Guid>(),
@@ -31,7 +35,6 @@ public sealed class ConceptImageResults(SlopolyDb db) : IJobResultHandler
                 Seed = image["seed"]?.GetValue<long>(),
             });
         }
-        return Task.CompletedTask;
     }
 }
 
@@ -58,6 +61,7 @@ public sealed class ViewsResults(SlopolyDb db) : IJobResultHandler
             {
                 PackId = hero.PackId,
                 AssetId = hero.AssetId,
+                VariantId = hero.VariantId,
                 JobId = job.Id,
                 Kind = ConceptKind.View,
                 View = view!["view"]!.GetValue<string>(),
@@ -94,7 +98,7 @@ public sealed class SegmentationResults(SlopolyDb db) : IJobResultHandler
     }
 }
 
-/// <summary>build: <c>{ glbFileId, validated, report, paletteEntryIds }</c>.</summary>
+/// <summary>build: <c>{ glbFileId, blendFileId, validated, report, paletteEntryIds }</c>.</summary>
 public sealed class BuildResults(SlopolyDb db) : IJobResultHandler
 {
     public bool Handles(Job job) => job.Kind == JobKinds.Build;
@@ -102,20 +106,29 @@ public sealed class BuildResults(SlopolyDb db) : IJobResultHandler
     public async Task ApplyAsync(Job job, JsonObject outputs)
     {
         var versionId = job.Inputs["programVersionId"]!.GetValue<Guid>();
+        var version = await db.ProgramVersions.FindAsync(versionId);
+        if (version is null) return; // its variant or asset was deleted meanwhile
         var build = new Build
         {
             AssetId = job.AssetId!.Value,
+            VariantId = version.VariantId,
             ProgramVersionId = versionId,
             JobId = job.Id,
             GlbFileId = outputs["glbFileId"]?.GetValue<Guid>(),
+            BlendFileId = outputs["blendFileId"]?.GetValue<Guid>(),
             Validated = outputs["validated"]?.GetValue<bool>() ?? false,
             Report = outputs["report"]?.DeepClone().AsObject(),
             PaletteEntryIds = outputs["paletteEntryIds"]?.Deserialize<List<Guid>>(Broker.Json) ?? [],
         };
         db.Builds.Add(build);
-        var asset = await db.Assets.FindAsync(build.AssetId);
-        if (asset is not null && asset.CurrentProgramVersionId == versionId)
-            asset.Status = build.Validated ? AssetStatus.Validated : AssetStatus.Built;
+        var variant = await db.AssetVariants.FindAsync(version.VariantId);
+        if (variant is null || variant.CurrentProgramVersionId != versionId) return;
+        variant.Status = build.Validated ? AssetStatus.Validated : AssetStatus.Built;
+        if (await db.Assets.FindAsync(build.AssetId) is { } asset)
+        {
+            var others = await db.AssetVariants.Where(v => v.AssetId == asset.Id && v.Id != variant.Id).Select(v => v.Status).ToListAsync();
+            asset.Status = others.Append(variant.Status).Max();
+        }
     }
 }
 
@@ -132,14 +145,15 @@ public sealed class SceneResults(SlopolyDb db) : IJobResultHandler
     }
 }
 
-/// <summary>agent-turn: <c>{ sessionId }</c>; keeps the pack's Claude Code session for the next turn.</summary>
+/// <summary>agent-turn: <c>{ sessionId }</c>; keeps the chat's Claude Code session for the next turn (the
+/// <c>session</c> stream event already stored it; see <see cref="JobEventApplier"/>).</summary>
 public sealed class AgentTurnResults(SlopolyDb db) : IJobResultHandler
 {
     public bool Handles(Job job) => job.Kind == JobKinds.AgentTurn;
 
     public async Task ApplyAsync(Job job, JsonObject outputs)
     {
-        if (outputs["sessionId"]?.GetValue<string>() is { } session && await db.Packs.FindAsync(job.PackId) is { } pack)
-            pack.AgentSessionId = session;
+        if (outputs["sessionId"]?.GetValue<string>() is { } session && await db.Chats.FindAsync(job.ChatId) is { } chat)
+            chat.SessionId = session;
     }
 }

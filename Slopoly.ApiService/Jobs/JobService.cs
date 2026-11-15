@@ -13,10 +13,10 @@ public sealed class JobService(SlopolyDb db, Broker broker, Notifier notifier, I
 
     public async Task<Job> GetAsync(Guid id) => await db.Jobs.FindAsync(id) ?? throw StudioException.NotFound("Job");
 
-    public async Task<Job> SubmitAsync(string kind, string? operation, Guid? packId, Guid? assetId, JsonObject inputs)
+    public async Task<Job> SubmitAsync(string kind, string? operation, Guid? packId, Guid? assetId, JsonObject inputs, Guid? chatId = null)
     {
         if (!JobKinds.All.Contains(kind)) throw new StudioException($"Unknown job kind \"{kind}\".");
-        var job = new Job { Kind = kind, Operation = operation, PackId = packId, AssetId = assetId, Inputs = inputs };
+        var job = new Job { Kind = kind, Operation = operation, PackId = packId, AssetId = assetId, Inputs = inputs, ChatId = chatId };
         db.Jobs.Add(job);
         await db.SaveChangesAsync();
         await DispatchAsync(job, "queued");

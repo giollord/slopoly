@@ -31,7 +31,7 @@ public sealed class PaletteApiTests
             ["paletteEntryIds"] = new JsonArray(entryIds.Select(id => (JsonNode)JsonValue.Create(id)).ToArray()),
         });
         await WaitForJobAsync(jobId, j => j.State == JobState.Succeeded);
-        return (await ReadAsync<List<Build>>(await client.GetAsync($"/api/assets/{asset.Id}/builds"))).Single();
+        return (await ReadAsync<Page<Build>>(await client.GetAsync($"/api/assets/{asset.Id}/builds"))).Items.Single();
     }
 
     /// <summary>A PNG header (signature + IHDR) is enough to carry dimensions.</summary>

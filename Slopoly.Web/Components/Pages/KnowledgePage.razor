@@ -1,5 +1,6 @@
 @page "/knowledge"
 @inherits LiveComponent
+@inject PageContext PageCtx
 @inject IDialogService Dialogs
 
 <PageTitle>Knowledge · Slopoly</PageTitle>
@@ -72,8 +73,11 @@
     private bool _isNew;
     private string _query = "";
 
-    protected override async Task LoadAsync() =>
+    protected override async Task LoadAsync()
+    {
+        PageCtx.Set(new ChatContext(ChatPages.Knowledge));
         _hits = await Api.GetAsync<List<KnowledgeHit>>($"api/knowledge?q={Uri.EscapeDataString(_query)}");
+    }
 
     // Notes are global: their change events carry no pack.
     protected override bool Concerns(Guid? packId, Guid? assetId) => packId is null && assetId is null;

@@ -71,7 +71,8 @@ def build(job: dict, out: Path) -> dict:
     if untagged:
         validation["issues"].append({"issue": "untagged", "parts": untagged,
                                      "message": "faces without a palette role: set color= on the part or paint()"})
-    missing, stats = export(model, out / "model.glb", entries, texture, job.get("shading"))
+    missing, stats = export(model, out / "model.glb", entries, texture, job.get("shading"), blend=out / "model.blend")
+    repair = stats.pop("repair")
     if missing:
         validation["issues"].append({"issue": "unknown_roles", "roles": missing,
                                      "message": "palette roles not in the pack palette: add them first"})
@@ -84,7 +85,7 @@ def build(job: dict, out: Path) -> dict:
     if model.parts:
         render_views(silhouette, views, objects, out)
     if not objects:
-        silhouette["renders"] = "missing: the asset has no picked hero with views and masks yet"
+        silhouette["renders"] = "missing: " + (job.get("noViewsReason") or "the variant's reference hero has no views and masks yet")
     parts = summary(model)
     corners = np.array([b for p in parts for b in p["bounds"]]).reshape(-1, 3)
     return {
@@ -96,6 +97,7 @@ def build(job: dict, out: Path) -> dict:
         "colors": likeness(model, job.get("masks") or [], entries),
         "palette": {"roles": used, "missing": missing},
         "export": {**stats, "shading": job.get("shading")},
+        "shading": repair,  # what the normals pass fixed, and per part what is left to fix
     }
 
 

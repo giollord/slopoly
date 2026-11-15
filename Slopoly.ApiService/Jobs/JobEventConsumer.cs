@@ -68,6 +68,10 @@ public sealed class JobEventApplier(SlopolyDb db, Notifier notifier, IEnumerable
                 job.Progress = message.Progress;
                 break;
             case "stream":
+                // The agent reports its session as soon as it starts, so a stopped turn keeps it for the next one.
+                if (job.Kind == JobKinds.AgentTurn && message.Data?["kind"]?.GetValue<string>() == "session"
+                    && message.Data["sessionId"]?.GetValue<string>() is { } session && await db.Chats.FindAsync(job.ChatId) is { } chat)
+                    chat.SessionId = session;
                 break;
             case "succeeded":
                 job.Outputs = message.Outputs ?? [];

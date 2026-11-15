@@ -58,6 +58,9 @@ public sealed class ApiFixture
 
     public static HttpClient Client() => _factory.CreateClient();
 
+    /// <summary>A handler that sends requests to the in-memory API (for the web app under test).</summary>
+    public static HttpMessageHandler ApiHandler() => _factory.Server.CreateHandler();
+
     public static HttpClient WorkerClient()
     {
         var client = _factory.CreateClient();
@@ -84,6 +87,13 @@ public sealed class ApiFixture
 
     public static async Task<Pack> CreatePackAsync(string name = "Test pack") =>
         await ReadAsync<Pack>(await Client().PostAsJsonAsync("/api/packs", new PackEdit(name, "instructions", "quirky, vibrant", null), Json));
+
+    /// <summary>Starts a chat on the pack page and sends it a message; returns the agent-turn job.</summary>
+    public static async Task<Job> SendChatAsync(Guid packId, string message)
+    {
+        var chat = await ReadAsync<Chat>(await Client().PostAsJsonAsync("/api/chats", new ChatCreate(new ChatContext(ChatPages.Pack, packId)), Json));
+        return await ReadAsync<Job>(await Client().PostAsJsonAsync($"/api/chats/{chat.Id}/messages", new ChatMessage(message), Json));
+    }
 
     /// <summary>Takes the next message of a job queue, like a worker would (auto-ack).</summary>
     public static async Task<JobMessage> TakeJobAsync(string kind, Guid jobId, TimeSpan? timeout = null)

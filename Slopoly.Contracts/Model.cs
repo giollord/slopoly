@@ -18,8 +18,7 @@ public sealed class Pack
     public double HardEdgeAngle { get; set; } = 60;
     /// <summary>0..1 strength of the baked vertex shade (ambient occlusion and edge wear); 0 turns it off.</summary>
     public double ShadeStrength { get; set; } = 0.5;
-    /// <summary>Claude Code session id of the pack's chat; set by the agent worker.</summary>
-    public string? AgentSessionId { get; set; }
+
     /// <summary>Rendered main palette texture; re-rendered on palette edits.</summary>
     public Guid? PaletteTextureFileId { get; set; }
     public DateTimeOffset CreatedAt { get; set; } = DateTimeOffset.UtcNow;
@@ -44,8 +43,21 @@ public sealed class Asset
     public string Name { get; set; } = "";
     public string Description { get; set; } = "";
     public AssetStatus Status { get; set; }
-    /// <summary>Triangle budget of this asset's builds; null uses the pack's budget.</summary>
+    /// <summary>Triangle budget of this asset's builds (all variants); null uses the pack's budget.</summary>
     public int? PolyBudget { get; set; }
+    /// <summary>The variant that operations naming no variant act on.</summary>
+    public Guid DefaultVariantId { get; set; }
+    public DateTimeOffset CreatedAt { get; set; } = DateTimeOffset.UtcNow;
+}
+
+/// <summary>One look of an asset, with its own reference hero, manifest, program versions, builds and current
+/// version. The asset's status is the furthest status of its variants.</summary>
+public sealed class AssetVariant
+{
+    public Guid Id { get; set; } = Guid.CreateVersion7();
+    public Guid AssetId { get; set; }
+    public string Name { get; set; } = "";
+    public AssetStatus Status { get; set; }
     public Guid? CurrentProgramVersionId { get; set; }
     public DateTimeOffset CreatedAt { get; set; } = DateTimeOffset.UtcNow;
 }
@@ -64,6 +76,8 @@ public sealed class ConceptImage
     public Guid Id { get; set; } = Guid.CreateVersion7();
     public Guid PackId { get; set; }
     public Guid? AssetId { get; set; }
+    /// <summary>The variant of a hero and its views (anchors have none).</summary>
+    public Guid? VariantId { get; set; }
     public Guid FileId { get; set; }
     public Guid? JobId { get; set; }
     public ConceptKind Kind { get; set; }
@@ -150,6 +164,7 @@ public sealed class PaletteVariantColor
 
 public sealed class Manifest
 {
+    public Guid VariantId { get; set; }
     public Guid AssetId { get; set; }
     public JsonObject Content { get; set; } = [];
     public DateTimeOffset UpdatedAt { get; set; } = DateTimeOffset.UtcNow;
@@ -159,6 +174,8 @@ public sealed class ProgramVersion
 {
     public Guid Id { get; set; } = Guid.CreateVersion7();
     public Guid AssetId { get; set; }
+    public Guid VariantId { get; set; }
+    /// <summary>Counts up within the variant.</summary>
     public int Number { get; set; }
     public string Source { get; set; } = "";
     public string Note { get; set; } = "";
@@ -169,9 +186,12 @@ public sealed class Build
 {
     public Guid Id { get; set; } = Guid.CreateVersion7();
     public Guid AssetId { get; set; }
+    public Guid VariantId { get; set; }
     public Guid ProgramVersionId { get; set; }
     public Guid JobId { get; set; }
     public Guid? GlbFileId { get; set; }
+    /// <summary>The model as a Blender file; its palette image is linked as //palette.png (null for older builds).</summary>
+    public Guid? BlendFileId { get; set; }
     public bool Validated { get; set; }
     /// <summary>Validator report, silhouette and colour scores (see the geometry worker).</summary>
     public JsonObject? Report { get; set; }
@@ -188,14 +208,20 @@ public sealed class Scene
     public string Name { get; set; } = "";
     public string Description { get; set; } = "";
     public List<ScenePlacement> Placements { get; set; } = [];
+    /// <summary>The program version used per asset and variant; a missing entry means the current version.</summary>
+    public List<SceneVersion> Versions { get; set; } = [];
     public Guid? GlbFileId { get; set; }
     /// <summary>Scene build report: placements (bounds, grounded) and overlaps.</summary>
     public JsonObject? Report { get; set; }
     public DateTimeOffset UpdatedAt { get; set; } = DateTimeOffset.UtcNow;
 }
 
-/// <summary>One asset in a scene. Metres, Y up; rotation in Euler degrees (X, then Y, then Z).</summary>
-public sealed record ScenePlacement(string Name, Guid AssetId, double[] At, double[]? Rot = null, double Scale = 1);
+/// <summary>One asset in a scene. Metres, Y up; rotation in Euler degrees (X, then Y, then Z). No variant means the
+/// asset's default variant.</summary>
+public sealed record ScenePlacement(string Name, Guid AssetId, double[] At, double[]? Rot = null, double Scale = 1, Guid? VariantId = null);
+
+/// <summary>The program version a scene uses for all placements of one asset variant (null: the current version).</summary>
+public sealed record SceneVersion(Guid AssetId, Guid VariantId, Guid? ProgramVersionId);
 
 public enum JobState { Queued, Running, Succeeded, Failed, Cancelled }
 
@@ -208,6 +234,8 @@ public sealed class Job
     public string? Operation { get; set; }
     public Guid? PackId { get; set; }
     public Guid? AssetId { get; set; }
+    /// <summary>The chat of an agent-turn job.</summary>
+    public Guid? ChatId { get; set; }
     public JsonObject Inputs { get; set; } = [];
     public JobState State { get; set; }
     public int Attempt { get; set; }
@@ -218,6 +246,32 @@ public sealed class Job
     public DateTimeOffset CreatedAt { get; set; } = DateTimeOffset.UtcNow;
     public DateTimeOffset? StartedAt { get; set; }
     public DateTimeOffset? FinishedAt { get; set; }
+}
+
+/// <summary>A conversation with the agent, started on a page whose context it records. No pack: started outside one.</summary>
+public sealed class Chat
+{
+    public Guid Id { get; set; } = Guid.CreateVersion7();
+    public Guid? PackId { get; set; }
+    public string Title { get; set; } = "";
+    /// <summary>Claude Code session id; set as soon as the agent's session starts.</summary>
+    public string? SessionId { get; set; }
+    public ChatContext Context { get; set; } = new(ChatPages.Home);
+    /// <summary>Copied from the context, to find the newest chat on an asset or scene.</summary>
+    public Guid? AssetId { get; set; }
+    public Guid? VariantId { get; set; }
+    public Guid? SceneId { get; set; }
+    public DateTimeOffset CreatedAt { get; set; } = DateTimeOffset.UtcNow;
+    public DateTimeOffset UpdatedAt { get; set; } = DateTimeOffset.UtcNow;
+}
+
+/// <summary>The page the user is on and the objects shown there (see <see cref="ChatPages"/>).</summary>
+public sealed record ChatContext(string Page, Guid? PackId = null, Guid? AssetId = null, Guid? VariantId = null,
+    Guid? BuildId = null, Guid? SceneId = null, Guid? ConceptId = null, string? Tab = null);
+
+public static class ChatPages
+{
+    public const string Home = "home", Pack = "pack", Asset = "asset", Scene = "scene", Concept = "concept", Knowledge = "knowledge";
 }
 
 public sealed class JobEvent

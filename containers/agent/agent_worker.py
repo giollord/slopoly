@@ -1,13 +1,16 @@
 """Design agent worker: one chat message = one agent-turn job (design section 9).
 
-agent-turn: inputs {message, sessionId}; the job's packId tells the agent which pack it works on. Runs Claude Code
-through the Agent SDK with only the Slopoly MCP tools, resumes the pack's session, streams messages as job events
-({kind: text|tool_use|tool_result|result, ...}) and returns {sessionId, reply}. A rejected credential fails the job
-with code "auth" so the UI can show how to re-authorise.
+agent-turn: inputs {message, prompt, sessionId, chatId}. The API composes the prompt (the message with the chat's page
+context, or a line naming the page the user is on); it is sent as it is. Runs Claude Code through the Agent SDK with
+only the Slopoly MCP tools, resumes the chat's session, streams messages as job events ({kind: session|text|tool_use|
+tool_result|result, ...}) and returns {sessionId, reply}. The session event comes first, so a stopped (cancelled) turn
+still leaves its session for the next message. A rejected credential fails the job with code "auth" so the UI can show
+how to re-authorise.
 """
 
 from __future__ import annotations
 
+import contextlib
 import os
 from typing import Any
 
@@ -58,36 +61,38 @@ def is_auth_error(message: Any) -> bool:
 async def turn(job: Job) -> dict[str, Any]:
     if not os.environ.get("CLAUDE_CODE_OAUTH_TOKEN"):
         raise JobFailed("The agent has no Claude credential. " + AUTH_STEPS, "auth")
-    message = (job.inputs.get("message") or "").strip()
-    if not message:
+    prompt = (job.inputs.get("prompt") or job.inputs.get("message") or "").strip()
+    if not prompt:
         raise JobFailed("The message is empty.", "bad_request")
-    prompt = f"[Pack {job.message.pack_id}]\n{message}"
 
     session_id, reply = job.inputs.get("sessionId"), []
-    async for item in query(prompt=prompt, options=options(session_id)):
-        if is_auth_error(item):
-            raise JobFailed("Claude rejected the agent's credential (expired or revoked). " + AUTH_STEPS, "auth")
-        if isinstance(item, sdk.SystemMessage) and item.subtype == "init":
-            session_id = item.data.get("session_id", session_id)
-        elif isinstance(item, sdk.AssistantMessage):
-            for block in item.content:
-                if isinstance(block, sdk.TextBlock) and block.text.strip():
-                    reply.append(block.text)
-                    await job.stream({"kind": "text", "text": block.text})
-                elif isinstance(block, sdk.ToolUseBlock):
-                    await job.stream({"kind": "tool_use", "id": block.id, "name": block.name.removeprefix("mcp__slopoly__"),
-                                      "input": block.input})
-        elif isinstance(item, sdk.UserMessage) and isinstance(item.content, list):
-            for block in item.content:
-                if isinstance(block, sdk.ToolResultBlock):
-                    await job.stream({"kind": "tool_result", "id": block.tool_use_id, "isError": bool(block.is_error),
-                                      "text": text_of(block.content)[:RESULT_PREVIEW]})
-        elif isinstance(item, sdk.ResultMessage):
-            session_id = item.session_id or session_id
-            await job.stream({"kind": "result", "turns": item.num_turns, "costUsd": item.total_cost_usd,
-                              "stopReason": item.subtype})
-            if item.is_error and item.subtype != "error_max_turns":
-                raise JobFailed(f"The agent stopped with an error: {item.result or item.subtype}", "agent_error")
+    # aclosing: a cancel (the user's Stop) closes the SDK generator, which ends the Claude Code process at once.
+    async with contextlib.aclosing(query(prompt=prompt, options=options(session_id))) as items:
+        async for item in items:
+            if is_auth_error(item):
+                raise JobFailed("Claude rejected the agent's credential (expired or revoked). " + AUTH_STEPS, "auth")
+            if isinstance(item, sdk.SystemMessage) and item.subtype == "init":
+                session_id = item.data.get("session_id", session_id)
+                await job.stream({"kind": "session", "sessionId": session_id})
+            elif isinstance(item, sdk.AssistantMessage):
+                for block in item.content:
+                    if isinstance(block, sdk.TextBlock) and block.text.strip():
+                        reply.append(block.text)
+                        await job.stream({"kind": "text", "text": block.text})
+                    elif isinstance(block, sdk.ToolUseBlock):
+                        await job.stream({"kind": "tool_use", "id": block.id, "name": block.name.removeprefix("mcp__slopoly__"),
+                                          "input": block.input})
+            elif isinstance(item, sdk.UserMessage) and isinstance(item.content, list):
+                for block in item.content:
+                    if isinstance(block, sdk.ToolResultBlock):
+                        await job.stream({"kind": "tool_result", "id": block.tool_use_id, "isError": bool(block.is_error),
+                                          "text": text_of(block.content)[:RESULT_PREVIEW]})
+            elif isinstance(item, sdk.ResultMessage):
+                session_id = item.session_id or session_id
+                await job.stream({"kind": "result", "turns": item.num_turns, "costUsd": item.total_cost_usd,
+                                  "stopReason": item.subtype})
+                if item.is_error and item.subtype != "error_max_turns":
+                    raise JobFailed(f"The agent stopped with an error: {item.result or item.subtype}", "agent_error")
     return {"sessionId": session_id, "reply": "\n\n".join(reply)}
 
 

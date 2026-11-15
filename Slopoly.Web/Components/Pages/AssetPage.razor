@@ -1,21 +1,34 @@
 @page "/assets/{AssetId:guid}"
 @inherits LiveComponent
-@inject IJSRuntime JS
 @inject IDialogService Dialogs
 @inject NavigationManager Nav
+@inject PageContext PageCtx
 
 <PageTitle>@(_asset?.Name ?? "Asset") · Slopoly</PageTitle>
 
-@if (_asset is null)
+@if (_asset is null || _variant is null)
 {
     <MudProgressLinear Indeterminate="true" />
     return;
 }
 
 <PackCrumbs PackId="_asset.PackId" PackName="@_pack?.Name" Tab="assets" Current="@_asset.Name" />
-<MudStack Row="true" AlignItems="AlignItems.Center" Class="mb-2">
+<MudStack Row="true" AlignItems="AlignItems.Center" Class="mb-2" Wrap="Wrap.Wrap">
     <MudText Typo="Typo.h5">@_asset.Name</MudText>
     <MudChip T="string" Size="Size.Small" Color="@AssetList.StatusColor(_asset.Status)">@_asset.Status</MudChip>
+    <MudSelect T="Guid" Value="_variant.Id" ValueChanged="SelectVariant" Label="Variant" Variant="Variant.Outlined" Margin="Margin.Dense" Style="max-width: 16rem">
+        @foreach (var v in _variants)
+        {
+            <MudSelectItem T="Guid" Value="v.Id">@v.Name@(v.Id == _asset.DefaultVariantId ? " (default)" : "") · @v.Status</MudSelectItem>
+        }
+    </MudSelect>
+    <MudMenu Icon="@Icons.Material.Filled.MoreVert" aria-label="Variant actions">
+        <MudMenuItem Icon="@Icons.Material.Filled.ContentCopy" OnClick="() => NewVariantAsync(copy: true)">New variant (copy of this one)…</MudMenuItem>
+        <MudMenuItem Icon="@Icons.Material.Filled.Add" OnClick="() => NewVariantAsync(copy: false)">New empty variant…</MudMenuItem>
+        <MudMenuItem Icon="@Icons.Material.Filled.Edit" OnClick="RenameVariantAsync">Rename variant…</MudMenuItem>
+        <MudMenuItem Icon="@Icons.Material.Filled.Star" Disabled="_variant.Id == _asset.DefaultVariantId" OnClick="MakeDefaultAsync">Make default</MudMenuItem>
+        <MudMenuItem Icon="@Icons.Material.Filled.Delete" Disabled="_variants.Count < 2" OnClick="DeleteVariantAsync">Delete variant…</MudMenuItem>
+    </MudMenu>
     <MudText Typo="Typo.body2">@_asset.Description · @(_asset.PolyBudget is { } b ? $"{b} triangles" : $"pack budget ({_pack?.PolyBudget} triangles)")</MudText>
     <MudSpacer />
     <MudButton Variant="Variant.Outlined" StartIcon="@Icons.Material.Filled.Edit" OnClick="EditAsync">Edit</MudButton>
@@ -23,30 +36,89 @@
 </MudStack>
 
 <MudGrid>
-    <MudItem xs="12" lg="6">
+    <MudItem xs="12" lg="7">
         @if (_build?.GlbFileId is { } glb)
         {
-            <model-viewer @ref="_viewer" src="/files/@glb" camera-controls auto-rotate shadow-intensity="0.6" exposure="1"
-                          style="width: 100%; height: 480px; background: var(--mud-palette-background-gray)"></model-viewer>
-            <MudStack Row="true" AlignItems="AlignItems.Center" Class="mt-2">
-                <MudSelect T="Guid?" Value="_variantId" ValueChanged="SetVariantAsync" Label="Palette" Variant="Variant.Outlined" Margin="Margin.Dense"
-                           Clearable="true" Placeholder="main" Style="max-width: 14rem">
-                    @foreach (var v in _variants.Where(v => v.TextureFileId is not null))
-                    {
-                        <MudSelectItem T="Guid?" Value="v.Id">@v.Name</MudSelectItem>
-                    }
-                </MudSelect>
-                <MudSpacer />
-                <MudButton Href="@($"/builds/{_build.Id}/export")" Variant="Variant.Outlined" StartIcon="@Icons.Material.Filled.Download">Export</MudButton>
-            </MudStack>
+            <ModelViewer Src="@($"/files/{glb}")" PaletteUrl="@_paletteUrl" Height="480px">
+                <Toolbar>
+                    <MudChip T="string" Size="Size.Small" Color="@(_build.Validated ? Color.Success : Color.Warning)">
+                        v@(_buildVersion?.Number) · @_build.CreatedAt.ToLocalTime().ToString("g")
+                    </MudChip>
+                    <MudSelect T="Guid?" Value="_paletteVariantId" ValueChanged="SetPaletteAsync" Label="Palette" Variant="Variant.Outlined" Margin="Margin.Dense"
+                               Placeholder="main" Style="max-width: 12rem">
+                        <MudSelectItem T="Guid?" Value="@((Guid?)null)">main</MudSelectItem>
+                        @foreach (var v in _paletteVariants.Where(v => v.TextureFileId is not null))
+                        {
+                            <MudSelectItem T="Guid?" Value="v.Id">@v.Name</MudSelectItem>
+                        }
+                    </MudSelect>
+                    <MudButton Href="@($"/builds/{_build.Id}/export")" Variant="Variant.Outlined" Size="Size.Small" StartIcon="@Icons.Material.Filled.Download">Export</MudButton>
+                    <MudTooltip Text="@(_build.BlendFileId is null ? "This build has no Blender file; rebuild its version to get one." : "The .blend with the current palette textures (zip)")">
+                        <MudButton Href="@(_build.BlendFileId is null ? null : $"/builds/{_build.Id}/blend")" Disabled="_build.BlendFileId is null"
+                                   Variant="Variant.Outlined" Size="Size.Small" StartIcon="@Icons.Material.Filled.Download">Blender</MudButton>
+                    </MudTooltip>
+                </Toolbar>
+            </ModelViewer>
         }
         else
         {
-            <MudAlert Severity="Severity.Info">No build with a model yet.</MudAlert>
+            <MudAlert Severity="Severity.Info">No build with a model yet for the variant "@_variant.Name".</MudAlert>
         }
+    </MudItem>
+    <MudItem xs="12" lg="5">
+        <div class="chat-embedded">
+            <ChatPanel Context="Context" AssetId="AssetId" Height="530px" />
+        </div>
+    </MudItem>
+</MudGrid>
+
+<MudExpansionPanels MultiExpansion="true" Class="mt-4">
+    <MudExpansionPanel Text="Reference" Expanded="true">
+        @if (_reference is null)
+        {
+            <MudAlert Severity="Severity.Info" Dense="true" Class="mb-2">The variant "@_variant.Name" has no reference hero yet: pick one below or make heroes on the Concepts tab.</MudAlert>
+        }
+        else
+        {
+            <MudGrid Spacing="1">
+                <MudItem xs="12" sm="4" md="3">
+                    <MudText Typo="Typo.caption">Hero (reference)</MudText>
+                    <a href="/concepts/@_reference.Id"><img class="concept-image" src="/files/@_reference.FileId" alt="reference hero" /></a>
+                </MudItem>
+                @foreach (var view in _views)
+                {
+                    <MudItem xs="6" sm="4" md="2">
+                        <MudText Typo="Typo.caption">@view.View</MudText>
+                        <a href="/concepts/@view.Id"><img class="concept-image" src="/files/@view.FileId" alt="@view.View view" /></a>
+                    </MudItem>
+                }
+            </MudGrid>
+            @if (_views.Count == 0)
+            {
+                <MudText Typo="Typo.caption">No views yet: open the hero and make them.</MudText>
+            }
+        }
+        @if (_otherHeroes.Count > 0)
+        {
+            <MudText Typo="Typo.subtitle2" Class="mt-3">Other heroes of this variant</MudText>
+            <MudGrid Spacing="1">
+                @foreach (var hero in _otherHeroes)
+                {
+                    <MudItem xs="6" sm="3" md="2">
+                        <a href="/concepts/@hero.Id"><img class="concept-image" src="/files/@hero.FileId" alt="hero" /></a>
+                        <MudStack Row="true" Spacing="0">
+                            <MudButton Size="Size.Small" OnClick="() => PickAsync(hero)">Pick</MudButton>
+                            <MudButton Size="Size.Small" OnClick="() => VariantFromHeroAsync(hero)">New variant</MudButton>
+                        </MudStack>
+                    </MudItem>
+                }
+            </MudGrid>
+        }
+    </MudExpansionPanel>
+
+    <MudExpansionPanel Text="Build comparison">
         @if (Comparisons() is { Count: > 0 } comparisons)
         {
-            <MudText Typo="Typo.subtitle1" Class="mt-4">Build vs views</MudText>
             <MudText Typo="Typo.caption">Reference view · model render · difference (red: only the model, blue: only the view). Click to open full size.</MudText>
             <MudGrid Spacing="1" Class="mt-1">
                 @foreach (var (view, iou, file) in comparisons)
@@ -58,38 +130,28 @@
                 }
             </MudGrid>
         }
-        else if (_build?.Report?["silhouette"]?["renders"] is { } why)
+        else
         {
-            <MudText Typo="Typo.caption" Class="mt-2">No comparisons: @why</MudText>
+            <MudText Typo="Typo.body2">No comparisons@(_build?.Report?["silhouette"]?["renders"] is { } why ? $": {why}" : ".")</MudText>
         }
+    </MudExpansionPanel>
 
-        <MudStack Row="true" AlignItems="AlignItems.Center" Class="mt-4">
-            <MudText Typo="Typo.subtitle1">Manifest</MudText>
-            <MudSpacer />
-            <MudButton Size="Size.Small" Variant="Variant.Outlined" Disabled="_manifestText == _manifestSaved" OnClick="SaveManifestAsync">Save manifest</MudButton>
-        </MudStack>
-        <MudTextField T="string" @bind-Value="_manifestText" Variant="Variant.Outlined" Lines="14" Class="code-input" Immediate="true"
-                      Placeholder='{ "parts": [ { "name": "bed" }, { "name": "wheel", "parent": "bed", "mirror": "x" } ] }' />
-    </MudItem>
+    <MudExpansionPanel Text="Builds">
+        <MudTable T="Build" @ref="_buildsTable" ServerData="LoadBuildsAsync" Dense="true" Hover="true" Elevation="0" RowsPerPage="10"
+                  OnRowClick="e => SelectBuildAsync(e.Item!)" RowStyleFunc="@((b, _) => b.Id == _build?.Id ? "font-weight: bold; cursor: pointer" : "cursor: pointer")">
+            <HeaderContent><MudTh>Created</MudTh><MudTh>Program</MudTh><MudTh>Validated</MudTh><MudTh>Object IoU</MudTh><MudTh>Part IoU</MudTh></HeaderContent>
+            <RowTemplate>
+                <MudTd>@context.CreatedAt.ToLocalTime().ToString("g")</MudTd>
+                <MudTd>v@(_versionNumbers.GetValueOrDefault(context.ProgramVersionId))</MudTd>
+                <MudTd><MudChip T="string" Size="Size.Small" Color="@(context.Validated ? Color.Success : Color.Warning)">@(context.Validated ? "yes" : "no")</MudChip></MudTd>
+                <MudTd>@context.Report?["silhouette"]?["mean_object_iou"]</MudTd>
+                <MudTd>@context.Report?["silhouette"]?["mean_iou"]</MudTd>
+            </RowTemplate>
+            <PagerContent><MudTablePager PageSizeOptions="@([10, 25, 50])" /></PagerContent>
+        </MudTable>
+    </MudExpansionPanel>
 
-    <MudItem xs="12" lg="6">
-        <MudText Typo="Typo.subtitle1">Builds</MudText>
-        <MudSimpleTable Dense="true" Hover="true">
-            <thead><tr><th>Created</th><th>Program</th><th>Validated</th><th>Object IoU</th><th>Part IoU</th></tr></thead>
-            <tbody>
-                @foreach (var b in _builds)
-                {
-                    <tr @onclick="() => SelectBuild(b)" style="cursor: pointer; @(b == _build ? "font-weight: bold" : "")">
-                        <td>@b.CreatedAt.ToLocalTime().ToString("g")</td>
-                        <td>v@(_programs.FirstOrDefault(p => p.Id == b.ProgramVersionId)?.Number)</td>
-                        <td><MudChip T="string" Size="Size.Small" Color="@(b.Validated ? Color.Success : Color.Warning)">@(b.Validated ? "yes" : "no")</MudChip></td>
-                        <td>@b.Report?["silhouette"]?["mean_object_iou"]</td>
-                        <td>@b.Report?["silhouette"]?["mean_iou"]</td>
-                    </tr>
-                }
-            </tbody>
-        </MudSimpleTable>
-
+    <MudExpansionPanel Text="Build report">
         @if (_build?.Report is { } report)
         {
             @if (report["error"] is not null)
@@ -105,6 +167,11 @@
             {
                 <MudText Typo="Typo.body2" Class="mt-2">Triangles: @tri["count"] / @tri["budget"]@(validation["disconnected"] is JsonArray { Count: > 0 } d ? $" · disconnected: {Text(d)}" : "")</MudText>
             }
+            @if (report["shading"] is JsonObject shading)
+            {
+                <MudText Typo="Typo.body2" Class="mt-2">Normals: merged @shading["merged"] vertices, removed @shading["removed"] faces, flipped @shading["flipped"] faces.</MudText>
+                <JsonTable Title="Shading defects (open edges, inside-out pieces, faces bent out of plane)" Rows="@(shading["parts"] as JsonArray)" Columns="@(["part", "openEdges", "inward", "bent"])" />
+            }
             @foreach (var view in (report["silhouette"]?["views"] as JsonArray ?? []).OfType<JsonObject>())
             {
                 <JsonTable Title="@($"Silhouette · {view["view"]}{(view["skipped"] is { } s ? $" (skipped: {s})" : "")}")"
@@ -112,67 +179,156 @@
             }
             <JsonTable Title="Colours" Rows="@(report["colors"] as JsonArray)" Columns="@(["mask", "view", "role", "role_color", "mask_color", "delta_e", "ok"])" />
         }
+        else
+        {
+            <MudText Typo="Typo.body2">No build selected.</MudText>
+        }
+    </MudExpansionPanel>
 
-        <MudStack Row="true" AlignItems="AlignItems.Center" Class="mt-4">
-            <MudText Typo="Typo.subtitle1">New program version</MudText>
+    <MudExpansionPanel Text="Manifest">
+        <MudStack Row="true" AlignItems="AlignItems.Center">
             <MudSpacer />
-            <MudButton Size="Size.Small" Variant="Variant.Outlined" OnClick="LoadCurrentSource">Start from current</MudButton>
+            <MudButton Size="Size.Small" Variant="Variant.Outlined" Disabled="_manifestText == _manifestSaved" OnClick="SaveManifestAsync">Save manifest</MudButton>
+        </MudStack>
+        <MudTextField T="string" @bind-Value="_manifestText" Variant="Variant.Outlined" Lines="14" Class="code-input" Immediate="true"
+                      Placeholder='{ "parts": [ { "name": "bed" }, { "name": "wheel", "parent": "bed", "mirror": "x" } ] }' />
+    </MudExpansionPanel>
+
+    <MudExpansionPanel Text="Program versions">
+        <MudTable T="ProgramVersion" @ref="_programsTable" ServerData="LoadProgramsAsync" Dense="true" Hover="true" Elevation="0" RowsPerPage="10">
+            <HeaderContent><MudTh>Version</MudTh><MudTh>Created</MudTh><MudTh>Note</MudTh><MudTh></MudTh></HeaderContent>
+            <RowTemplate>
+                <MudTd>v@(context.Number)@(context.Id == _variant.CurrentProgramVersionId ? " (current)" : "")</MudTd>
+                <MudTd>@context.CreatedAt.ToLocalTime().ToString("g")</MudTd>
+                <MudTd>@context.Note</MudTd>
+                <MudTd>
+                    <MudButton Size="Size.Small" OnClick="() => ToggleSource(context.Id)">@(_openSources.Contains(context.Id) ? "Hide" : "Source")</MudButton>
+                    @if (context.Id != _variant.CurrentProgramVersionId)
+                    {
+                        <MudButton Size="Size.Small" OnClick="() => SetCurrentAsync(context)">Set current</MudButton>
+                    }
+                </MudTd>
+            </RowTemplate>
+            <ChildRowContent>
+                @if (_openSources.Contains(context.Id))
+                {
+                    <MudTr><td colspan="4"><pre class="code">@context.Source</pre></td></MudTr>
+                }
+            </ChildRowContent>
+            <PagerContent><MudTablePager PageSizeOptions="@([10, 25, 50])" /></PagerContent>
+        </MudTable>
+    </MudExpansionPanel>
+
+    <MudExpansionPanel Text="New program version">
+        <MudStack Row="true" AlignItems="AlignItems.Center">
+            <MudSpacer />
+            <MudButton Size="Size.Small" Variant="Variant.Outlined" OnClick="LoadCurrentSourceAsync">Start from current</MudButton>
         </MudStack>
         <MudTextField T="string" @bind-Value="_source" Variant="Variant.Outlined" Lines="16" Class="code-input" Placeholder="part(&quot;bed&quot;, box(0.8, 0.3, 0.7), color=&quot;wood&quot;)" />
         <MudStack Row="true" AlignItems="AlignItems.Center" Class="mt-2">
             <MudTextField T="string" @bind-Value="_note" Label="Note" Variant="Variant.Outlined" Margin="Margin.Dense" />
             <MudButton Variant="Variant.Filled" Color="Color.Primary" Disabled="string.IsNullOrWhiteSpace(_source)" OnClick="SubmitProgramAsync">Submit and build</MudButton>
         </MudStack>
-
-        <MudText Typo="Typo.subtitle1" Class="mt-4">Program versions</MudText>
-        <MudExpansionPanels Dense="true">
-            @foreach (var p in _programs)
-            {
-                <MudExpansionPanel Text="@($"v{p.Number} · {p.CreatedAt.ToLocalTime():g} · {p.Note}{(p.Id == _asset.CurrentProgramVersionId ? " (current)" : "")}")">
-                    @if (p.Id != _asset.CurrentProgramVersionId)
-                    {
-                        <MudButton Size="Size.Small" Variant="Variant.Outlined" OnClick="() => SetCurrentAsync(p)" Class="mb-2">Set current</MudButton>
-                    }
-                    <pre class="code">@p.Source</pre>
-                </MudExpansionPanel>
-            }
-        </MudExpansionPanels>
-    </MudItem>
-</MudGrid>
+    </MudExpansionPanel>
+</MudExpansionPanels>
 
 @code {
     private static readonly System.Text.Json.JsonSerializerOptions Indented = new() { WriteIndented = true };
     [Parameter] public Guid AssetId { get; set; }
+    /// <summary><c>?variant=&lt;id&gt;</c> opens a variant; the default variant otherwise.</summary>
+    [SupplyParameterFromQuery(Name = "variant")] public Guid? VariantQuery { get; set; }
+
     private Asset? _asset;
     private Pack? _pack;
+    private List<AssetVariant> _variants = [];
+    private AssetVariant? _variant;
     private bool _deleted;
     private string _manifestText = "", _manifestSaved = "", _source = "", _note = "";
-    private Manifest? _manifest;
-    private List<ProgramVersion> _programs = [];
-    private List<Build> _builds = [];
-    private List<VariantView> _variants = [];
+    private Guid? _manifestVariant;
+    private List<VariantView> _paletteVariants = [];
+    private Guid? _mainTexture, _paletteVariantId;
+    private string? _paletteUrl;
     private Build? _build;
-    private Guid? _variantId;
-    private ElementReference _viewer;
+    private ProgramVersion? _buildVersion;
+    private Dictionary<Guid, int> _versionNumbers = [];
+    private ConceptImage? _reference;
+    private List<ConceptImage> _views = [], _otherHeroes = [];
+    private MudTable<Build>? _buildsTable;
+    private MudTable<ProgramVersion>? _programsTable;
+    private readonly HashSet<Guid> _openSources = [];
+
+    private ChatContext Context => new(ChatPages.Asset, _asset?.PackId, AssetId, _variant?.Id, _build?.Id);
 
     protected override async Task LoadAsync()
     {
+        if (_deleted) return;
         _asset = await Api.GetAsync<Asset>($"api/assets/{AssetId}");
         _pack = await Api.GetAsync<Pack>($"api/packs/{_asset.PackId}");
-        _manifest = await Api.FindAsync<Manifest>($"api/assets/{AssetId}/manifest");
-        var saved = _manifest?.Content.ToJsonString(Indented) ?? "";
-        if (_manifestText == _manifestSaved) _manifestText = saved; // keep unsaved edits
-        _manifestSaved = saved;
-        _programs = await Api.GetAsync<List<ProgramVersion>>($"api/assets/{AssetId}/programs");
-        _builds = await Api.GetAsync<List<Build>>($"api/assets/{AssetId}/builds");
-        _variants = (await Api.GetAsync<PaletteView>($"api/packs/{_asset.PackId}/palette")).Variants;
-        _build = _builds.FirstOrDefault(b => b.Id == _build?.Id) ?? _builds.FirstOrDefault();
+        _variants = await Api.GetAsync<List<AssetVariant>>($"api/assets/{AssetId}/variants");
+        var wanted = _variant?.Id ?? VariantQuery ?? _asset.DefaultVariantId;
+        var previous = _variant?.Id;
+        _variant = _variants.FirstOrDefault(v => v.Id == wanted) ?? _variants.FirstOrDefault(v => v.Id == _asset.DefaultVariantId) ?? _variants.First();
+        var v = _variant.Id;
+
+        var manifest = await Api.FindAsync<Manifest>($"api/assets/{AssetId}/manifest?variantId={v}");
+        var saved = manifest?.Content.ToJsonString(Indented) ?? "";
+        if (_manifestText == _manifestSaved || _manifestVariant != v) _manifestText = saved; // keep unsaved edits of this variant
+        (_manifestSaved, _manifestVariant) = (saved, v);
+
+        var palette = await Api.GetAsync<PaletteView>($"api/packs/{_asset.PackId}/palette");
+        (_paletteVariants, _mainTexture) = (palette.Variants, palette.TextureFileId);
+
+        // The selected build stays selected (refreshed); a new variant starts on its newest build.
+        var keep = previous == v ? _build?.Id : null;
+        _build = keep is { } id ? await Api.GetAsync<Build>($"api/builds/{id}") : (await Api.GetAsync<Page<Build>>($"api/assets/{AssetId}/builds?variantId={v}&take=1")).Items.FirstOrDefault();
+        _buildVersion = _build is null ? null : await Api.GetAsync<ProgramVersion>($"api/programs/{_build.ProgramVersionId}");
+
+        var heroes = (await Api.GetAsync<List<ConceptImage>>($"api/packs/{_asset.PackId}/concepts?assetId={AssetId}"))
+            .Where(c => c.Kind == ConceptKind.Hero && c.VariantId == v).OrderByDescending(c => c.CreatedAt).ToList();
+        _reference = heroes.FirstOrDefault(h => h.Selection == Selection.Picked);
+        _otherHeroes = heroes.Where(h => h != _reference).ToList();
+        _views = _reference is null ? [] : await Api.GetAsync<List<ConceptImage>>($"api/concepts/{_reference.Id}/views");
+
+        PageCtx.Set(Context);
+        if (_buildsTable is not null) await _buildsTable.ReloadServerData();
+        if (_programsTable is not null) await _programsTable.ReloadServerData();
     }
 
     // Palette edits of the pack (asset-less changes) re-render textures, so they concern this page too.
     protected override bool Concerns(Guid? packId, Guid? assetId) => !_deleted && (assetId == AssetId || (assetId is null && packId == _asset?.PackId));
 
-    private void SelectBuild(Build b) { _build = b; _variantId = null; }
+    private async Task<TableData<Build>> LoadBuildsAsync(TableState state, CancellationToken ct)
+    {
+        if (_variant is null) return new() { Items = [], TotalItems = 0 };
+        var page = await Api.GetAsync<Page<Build>>($"api/assets/{AssetId}/builds?variantId={_variant.Id}&skip={state.Page * state.PageSize}&take={state.PageSize}");
+        foreach (var id in page.Items.Select(b => b.ProgramVersionId).Distinct().Where(id => !_versionNumbers.ContainsKey(id)))
+            _versionNumbers[id] = (await Api.GetAsync<ProgramVersion>($"api/programs/{id}")).Number;
+        return new() { Items = page.Items, TotalItems = page.Total };
+    }
+
+    private async Task<TableData<ProgramVersion>> LoadProgramsAsync(TableState state, CancellationToken ct)
+    {
+        if (_variant is null) return new() { Items = [], TotalItems = 0 };
+        var page = await Api.GetAsync<Page<ProgramVersion>>($"api/assets/{AssetId}/programs?variantId={_variant.Id}&skip={state.Page * state.PageSize}&take={state.PageSize}");
+        foreach (var p in page.Items) _versionNumbers[p.Id] = p.Number;
+        return new() { Items = page.Items, TotalItems = page.Total };
+    }
+
+    private Task SelectVariant(Guid id) => Try(async () =>
+    {
+        _variant = _variants.First(v => v.Id == id);
+        (_build, _paletteVariantId, _paletteUrl) = (null, null, null);
+        Nav.NavigateTo(Nav.GetUriWithQueryParameters(new Dictionary<string, object?> { ["variant"] = id }), replace: true);
+        await LoadAsync();
+    });
+
+    private Task SelectBuildAsync(Build b) => Try(async () =>
+    {
+        _build = b;
+        _buildVersion = await Api.GetAsync<ProgramVersion>($"api/programs/{b.ProgramVersionId}");
+        (_paletteVariantId, _paletteUrl) = (null, null);
+        PageCtx.Set(Context);
+    });
 
     /// <summary>The selected build's comparison images, in view order (front, side, top, back).</summary>
     private List<(string View, double? Iou, string File)> Comparisons() =>
@@ -181,18 +337,62 @@
             .Select(v => (View: (string)v["view"]!, Iou: (double?)v["object"]?["iou"], File: (string)v["compareFileId"]!))
             .OrderBy(v => Array.IndexOf(ViewNames.All, v.View)).ToList();
 
-    private async Task SetVariantAsync(Guid? id)
+    private Task SetPaletteAsync(Guid? id)
     {
-        _variantId = id;
-        var texture = _variants.FirstOrDefault(v => v.Id == id)?.TextureFileId
-                      ?? (await Api.GetAsync<PaletteView>($"api/packs/{_asset!.PackId}/palette")).TextureFileId;
-        if (texture is null) return;
-        try { await JS.InvokeVoidAsync("slopolyViewer.setPalette", _viewer, $"/files/{texture}"); }
-        catch (JSException ex) { Snackbar.Add($"The viewer could not swap the palette: {ex.Message}", Severity.Error); }
+        _paletteVariantId = id;
+        var texture = _paletteVariants.FirstOrDefault(v => v.Id == id)?.TextureFileId ?? _mainTexture;
+        _paletteUrl = texture is null ? null : $"/files/{texture}";
+        return Task.CompletedTask;
+    }
+
+    private Task PickAsync(ConceptImage hero) => Try(async () => { await HeroPick.SelectAsync(Api, Dialogs, hero, Selection.Picked); await LoadAsync(); });
+
+    private Task VariantFromHeroAsync(ConceptImage hero) => Try(async () =>
+    {
+        if (await NameDialog.AskAsync(Dialogs, "New variant from this hero", "Variant name", "Create") is not { } name) return;
+        var created = await Api.PostAsync<AssetVariant>($"api/assets/{AssetId}/variants", new VariantCreate(name, FromHeroId: hero.Id));
+        await SelectVariant(created.Id);
+    });
+
+    private Task NewVariantAsync(bool copy) => Try(async () =>
+    {
+        var title = copy ? $"New variant (copy of \"{_variant!.Name}\")" : "New empty variant";
+        if (await NameDialog.AskAsync(Dialogs, title, "Variant name", "Create") is not { } name) return;
+        var created = await Api.PostAsync<AssetVariant>($"api/assets/{AssetId}/variants", new VariantCreate(name, copy ? _variant!.Id : null));
+        _variants = await Api.GetAsync<List<AssetVariant>>($"api/assets/{AssetId}/variants");
+        await SelectVariant(created.Id);
+    });
+
+    private Task RenameVariantAsync() => Try(async () =>
+    {
+        if (await NameDialog.AskAsync(Dialogs, "Rename variant", "Variant name", "Rename", _variant!.Name) is not { } name) return;
+        await Api.PatchAsync<AssetVariant>($"api/variants/{_variant.Id}", new VariantUpdate(name, null));
+        await LoadAsync();
+    });
+
+    private Task MakeDefaultAsync() => Try(async () =>
+    {
+        await Api.PatchAsync<AssetVariant>($"api/variants/{_variant!.Id}", new VariantUpdate(null, true));
+        await LoadAsync();
+    });
+
+    private async Task DeleteVariantAsync()
+    {
+        if (await Dialogs.ShowMessageBoxAsync("Delete variant", $"Delete the variant \"{_variant!.Name}\" with its heroes, views, manifest, programs and builds? This can't be undone.",
+                yesText: "Delete", cancelText: "Cancel") != true) return;
+        await Try(async () =>
+        {
+            await Api.DeleteAsync($"api/variants/{_variant.Id}");
+            _variant = null;
+            Nav.NavigateTo(Nav.GetUriWithQueryParameters(new Dictionary<string, object?> { ["variant"] = null }), replace: true);
+            await LoadAsync();
+        });
     }
 
     private Task SetCurrentAsync(ProgramVersion p) =>
-        Try(() => Api.PutAsync<Asset>($"api/assets/{AssetId}/current-version", new CurrentVersionEdit(p.Id)));
+        Try(async () => { await Api.PutAsync<AssetVariant>($"api/assets/{AssetId}/current-version", new CurrentVersionEdit(p.Id)); await LoadAsync(); });
+
+    private void ToggleSource(Guid id) { if (!_openSources.Remove(id)) _openSources.Add(id); }
 
     private async Task EditAsync()
     {
@@ -202,7 +402,7 @@
 
     private async Task DeleteAsync()
     {
-        if (await Dialogs.ShowMessageBoxAsync("Delete asset", $"Delete \"{_asset!.Name}\" with its concept images, manifest, programs and builds? This can't be undone.",
+        if (await Dialogs.ShowMessageBoxAsync("Delete asset", $"Delete \"{_asset!.Name}\" with all its variants, concept images, manifests, programs and builds? This can't be undone.",
                 yesText: "Delete", cancelText: "Cancel") != true) return;
         await Try(async () =>
         {
@@ -217,18 +417,21 @@
         JsonObject content;
         try { content = JsonNode.Parse(_manifestText) as JsonObject ?? throw new System.Text.Json.JsonException("not an object"); }
         catch (System.Text.Json.JsonException ex) { Snackbar.Add($"The manifest is not a JSON object: {ex.Message}", Severity.Error); return; }
-        var saved = await Api.PutAsync<Manifest>($"api/assets/{AssetId}/manifest", content);
+        var saved = await Api.PutAsync<Manifest>($"api/assets/{AssetId}/manifest?variantId={_variant!.Id}", content);
         _manifestText = _manifestSaved = saved.Content.ToJsonString(Indented);
         Snackbar.Add("Manifest saved.", Severity.Success);
     });
 
-    private void LoadCurrentSource() => _source = _programs.FirstOrDefault(p => p.Id == _asset?.CurrentProgramVersionId)?.Source ?? "";
+    private Task LoadCurrentSourceAsync() => Try(async () =>
+    {
+        _source = _variant?.CurrentProgramVersionId is { } id ? (await Api.GetAsync<ProgramVersion>($"api/programs/{id}")).Source : "";
+    });
 
     private Task SubmitProgramAsync() => Try(async () =>
     {
-        await Api.PostAsync<System.Text.Json.Nodes.JsonObject>($"api/assets/{AssetId}/programs", new ProgramSubmit(_source, string.IsNullOrWhiteSpace(_note) ? "edited by hand" : _note.Trim()));
+        await Api.PostAsync<JsonObject>($"api/assets/{AssetId}/programs?variantId={_variant!.Id}", new ProgramSubmit(_source, string.IsNullOrWhiteSpace(_note) ? "edited by hand" : _note.Trim()));
         _note = "";
-        Snackbar.Add("New version submitted; the build appears in the table when done.", Severity.Info);
+        Snackbar.Add("New version submitted; the build appears in Builds when done.", Severity.Info);
     });
 
     private static string Text(JsonArray a) => string.Join(", ", a.Select(x => x?.ToString()));

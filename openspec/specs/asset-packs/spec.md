@@ -38,12 +38,22 @@ Generated images SHALL be stored as concept images linked to their pack or asset
 - **WHEN** the user deletes a hero that has views
 - **THEN** its views and their masks are deleted with it
 
+#### Scenario: A hero and its views share a variant
+- **WHEN** views are rendered from the cart's picked hero
+- **THEN** they belong to the hero's variant, and that variant has no other picked hero (see asset-variants)
+
+#### Scenario: New heroes go to the requested variant
+- **WHEN** hero images are generated for the cart's "loaded" variant
+- **THEN** they belong to the loaded variant, and hero jobs that name no variant add their images to the default
+  variant
+
 ### Requirement: Versioned part programs and builds
-Each submitted part program SHALL be stored as a new immutable version. Each build of a version SHALL keep its exported model, validator report and silhouette scores.
+Each submitted part program SHALL be stored as a new immutable version of one variant of its asset. Each build of a version SHALL keep its exported model, validator report and silhouette scores.
 
 #### Scenario: Roll back
 - **WHEN** a new program version fails validation
-- **THEN** earlier versions and their builds remain available and any earlier version can be marked as the asset's current version
+- **THEN** earlier versions of that variant and their builds remain available, and any earlier version can be marked
+  as the variant's current version
 
 ### Requirement: File access over the API
 Images, masks, programs and exported models SHALL be stored as files. The API SHALL let the UI, the workers and the agent download them and let workers upload them.
@@ -72,3 +82,19 @@ The user SHALL be able to delete a concept image; its part masks are removed wit
 #### Scenario: Delete a turnaround
 - **WHEN** the user deletes a segmented turnaround
 - **THEN** the image and its masks no longer appear for the user or the agent
+
+### Requirement: Pack deletion
+The user SHALL be able to delete a pack from the pack list or the pack page, confirming by typing the pack's name. Deleting SHALL first cancel the pack's queued and running jobs. It SHALL then remove the pack with its style references, assets, variants, concepts, masks, manifests, programs, builds, scenes, palette, palette variants, jobs and chats. Knowledge notes SHALL stay.
+
+#### Scenario: Delete a pack
+- **WHEN** the user deletes "Gnome village" and types its name to confirm
+- **THEN** the pack disappears from the pack list, its pages and chats are no longer reachable, and the knowledge notes
+  are unchanged
+
+#### Scenario: Running jobs are cancelled
+- **WHEN** the user deletes a pack while one of its image jobs is running
+- **THEN** the job is cancelled, its worker discards the result, and nothing is attached to the deleted pack
+
+#### Scenario: Wrong name
+- **WHEN** the typed name does not match the pack's name
+- **THEN** the delete button stays disabled

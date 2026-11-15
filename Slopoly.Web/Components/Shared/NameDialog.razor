@@ -1,0 +1,55 @@
+@* Asks for one name (a variant's, for example), or for typing a given text to confirm a deletion. *@
+<MudDialog>
+    <DialogContent>
+        @if (Message is not null)
+        {
+            <MudText Typo="Typo.body2" Class="mb-2">@Message</MudText>
+        }
+        <MudTextField T="string" @bind-Value="_value" Label="@Label" Variant="Variant.Outlined" Immediate="true" AutoFocus="true" OnKeyUp="KeyUp" />
+    </DialogContent>
+    <DialogActions>
+        <MudButton OnClick="() => Dialog.Cancel()">Cancel</MudButton>
+        <MudButton Variant="Variant.Filled" Color="@(Confirm is null ? Color.Primary : Color.Error)" Disabled="!Valid" OnClick="Submit">@OkText</MudButton>
+    </DialogActions>
+</MudDialog>
+
+@code {
+    [CascadingParameter] private IMudDialogInstance Dialog { get; set; } = null!;
+    [Parameter] public string Label { get; set; } = "Name";
+    [Parameter] public string? Message { get; set; }
+    [Parameter] public string OkText { get; set; } = "OK";
+    [Parameter] public string? Initial { get; set; }
+    /// <summary>When set, OK is enabled only when the typed text equals it (a confirmation, not a name).</summary>
+    [Parameter] public string? Confirm { get; set; }
+    private string _value = "";
+
+    protected override void OnInitialized() => _value = Initial ?? "";
+
+    private bool Valid => Confirm is null ? !string.IsNullOrWhiteSpace(_value) : _value.Trim() == Confirm;
+
+    private void Submit() { if (Valid) Dialog.Close(DialogResult.Ok(_value.Trim())); }
+
+    private void KeyUp(KeyboardEventArgs e) { if (e.Key == "Enter") Submit(); }
+
+    /// <summary>Shows the dialog; returns the entered text, or null when cancelled.</summary>
+    public static async Task<string?> AskAsync(IDialogService dialogs, string title, string label, string ok, string? initial = null,
+        string? message = null, string? confirm = null)
+    {
+        var parameters = new DialogParameters<NameDialog>
+        {
+            { d => d.Label, label }, { d => d.OkText, ok }, { d => d.Initial, initial }, { d => d.Message, message }, { d => d.Confirm, confirm },
+        };
+        var result = await (await dialogs.ShowAsync<NameDialog>(title, parameters, new DialogOptions { MaxWidth = MaxWidth.Small, FullWidth = true })).Result;
+        return result is { Canceled: false, Data: string text } ? text : null;
+    }
+
+    /// <summary>Deletes a pack after the user types its name; returns whether it was deleted.</summary>
+    public static async Task<bool> DeletePackAsync(IDialogService dialogs, StudioApi api, Pack pack)
+    {
+        if (await AskAsync(dialogs, "Delete pack", "Pack name", "Delete", confirm: pack.Name,
+                message: $"This deletes \"{pack.Name}\" with all its assets, variants, concepts, builds, scenes, palette, jobs and chats, and cancels its running jobs. Knowledge notes stay. Type the pack's name to confirm.") is null)
+            return false;
+        await api.DeleteAsync($"api/packs/{pack.Id}");
+        return true;
+    }
+}

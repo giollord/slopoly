@@ -34,10 +34,11 @@ public sealed class GenerationService(SlopolyDb db, StudioService studio, JobSer
         });
     }
 
-    /// <summary>Hero images of one asset, referencing the pack's picked anchor images.</summary>
-    public async Task<Job> HeroAsync(Guid assetId, string? objectDescription = null, int count = 1, long? seed = null)
+    /// <summary>Hero images of one asset variant (the default when omitted), referencing the pack's picked anchor images.</summary>
+    public async Task<Job> HeroAsync(Guid assetId, string? objectDescription = null, int count = 1, long? seed = null, Guid? variantId = null)
     {
         var asset = await studio.GetAssetAsync(assetId);
+        var variant = await studio.VariantOfAsync(assetId, variantId);
         var pack = await studio.GetPackAsync(asset.PackId);
         var anchors = await db.ConceptImages
             .Where(c => c.PackId == pack.Id && c.Kind == ConceptKind.Anchor && c.Selection == Selection.Picked)
@@ -51,6 +52,7 @@ public sealed class GenerationService(SlopolyDb db, StudioService studio, JobSer
             ["references"] = Ids(anchors),
             ["count"] = Math.Clamp(count, 1, 4),
             ["seed"] = seed,
+            ["variantId"] = variant.Id,
         });
     }
 
@@ -84,6 +86,7 @@ public sealed class GenerationService(SlopolyDb db, StudioService studio, JobSer
         if (source is null) throw new StudioException("This image has no generation job to repeat.");
         var inputs = source.Inputs.DeepClone().AsObject();
         inputs["seed"] = null;
+        if (concept.Kind == ConceptKind.Hero) inputs["variantId"] = concept.VariantId; // the hero may have moved variant
         inputs["count"] = Math.Clamp(count, 1, 4);
         if (!string.IsNullOrWhiteSpace(change))
         {
@@ -136,30 +139,44 @@ public sealed class GenerationService(SlopolyDb db, StudioService studio, JobSer
         (await db.ConceptImages.Where(c => c.SourceConceptId == heroId && c.Kind == ConceptKind.View).ToListAsync())
         .OrderBy(v => Array.IndexOf(ViewNames.All, v.View)).ToList();
 
-    /// <summary>Stores a new immutable program version, makes it current and queues its build.</summary>
-    public async Task<(ProgramVersion Version, Job Job)> SubmitProgramAsync(Guid assetId, string source, string note)
+    /// <summary>Stores a new immutable program version of a variant (the default when omitted), makes it the
+    /// variant's current version and queues its build.</summary>
+    public async Task<(ProgramVersion Version, Job Job)> SubmitProgramAsync(Guid assetId, Guid? variantId, string source, string note)
     {
         var asset = await studio.GetAssetAsync(assetId);
+        var variant = await studio.VariantOfAsync(assetId, variantId);
         if (string.IsNullOrWhiteSpace(source)) throw new StudioException("The program is empty.");
-        var number = await db.ProgramVersions.Where(v => v.AssetId == assetId).MaxAsync(v => (int?)v.Number) ?? 0;
-        var version = new ProgramVersion { AssetId = assetId, Number = number + 1, Source = source, Note = note };
+        var number = await db.ProgramVersions.Where(v => v.VariantId == variant.Id).MaxAsync(v => (int?)v.Number) ?? 0;
+        var version = new ProgramVersion { AssetId = assetId, VariantId = variant.Id, Number = number + 1, Source = source, Note = note };
         db.ProgramVersions.Add(version);
-        asset.CurrentProgramVersionId = version.Id;
+        variant.CurrentProgramVersionId = version.Id;
         await db.SaveChangesAsync();
         await notifier.Changed<ProgramVersion>(version.Id, asset.PackId, assetId);
         return (version, await BuildAsync(asset, version));
+    }
+
+    /// <summary>A new variant (see <see cref="StudioService.CreateVariantAsync"/>); a copied program is built.</summary>
+    public async Task<AssetVariant> CreateVariantAsync(Guid assetId, VariantCreate create)
+    {
+        var (variant, copied) = await studio.CreateVariantAsync(assetId, create);
+        if (copied is not null) await BuildAsync(await studio.GetAssetAsync(assetId), copied);
+        return variant;
     }
 
     /// <summary>Queues a build of an existing version (e.g. after new masks or palette entries).</summary>
     public async Task<Job> BuildAsync(Asset asset, ProgramVersion version) =>
         await jobs.SubmitAsync(JobKinds.Build, null, asset.PackId, asset.Id, await BuildInputsAsync(asset, version));
 
-    /// <summary>Build inputs: program source, budget, the pack's shading, main palette and the views of the picked hero with their masks.</summary>
+    /// <summary>Why a build has no views to compare with, when its variant has no picked hero.</summary>
+    public const string NoReferenceHero = "no reference hero for this variant";
+
+    /// <summary>Build inputs: program source, budget, the pack's shading, main palette and the views (with masks) of
+    /// the version's variant's reference hero.</summary>
     public async Task<JsonObject> BuildInputsAsync(Asset asset, ProgramVersion version)
     {
         var pack = await studio.GetPackAsync(asset.PackId);
         var hero = await db.ConceptImages
-            .Where(c => c.AssetId == asset.Id && c.Kind == ConceptKind.Hero && c.Selection == Selection.Picked)
+            .Where(c => c.VariantId == version.VariantId && c.Kind == ConceptKind.Hero && c.Selection == Selection.Picked)
             .OrderByDescending(c => c.CreatedAt).FirstOrDefaultAsync();
         var views = hero is null ? [] : await ViewsOfAsync(hero.Id);
         var viewIds = views.Select(v => v.Id).ToList();
@@ -167,6 +184,8 @@ public sealed class GenerationService(SlopolyDb db, StudioService studio, JobSer
         return new JsonObject
         {
             ["programVersionId"] = version.Id,
+            ["variantId"] = version.VariantId,
+            ["noViewsReason"] = hero is null ? NoReferenceHero : null,
             ["source"] = version.Source,
             ["polyBudget"] = asset.PolyBudget ?? pack.PolyBudget,
             ["shading"] = new JsonObject
@@ -198,6 +217,7 @@ public sealed class GenerationService(SlopolyDb db, StudioService studio, JobSer
         if (scene is null) db.Scenes.Add(scene = new Scene { PackId = packId, Name = name });
         scene.Description = edit.Description ?? scene.Description;
         scene.Placements = edit.Placements;
+        if (edit.Versions is not null) scene.Versions = edit.Versions.Where(v => v.ProgramVersionId is not null).ToList();
         scene.UpdatedAt = DateTimeOffset.UtcNow;
         var inputs = await SceneInputsAsync(scene);
         await db.SaveChangesAsync();
@@ -208,7 +228,8 @@ public sealed class GenerationService(SlopolyDb db, StudioService studio, JobSer
         return scene;
     }
 
-    /// <summary>Scene build inputs: each placement with the GLB of its asset's latest build of the current version.</summary>
+    /// <summary>Scene build inputs: each placement with the GLB of the latest build of the version chosen for its
+    /// asset variant (the variant's current version unless the scene names one).</summary>
     private async Task<JsonObject> SceneInputsAsync(Scene scene)
     {
         var placements = new JsonArray();
@@ -216,10 +237,18 @@ public sealed class GenerationService(SlopolyDb db, StudioService studio, JobSer
         {
             var asset = await db.Assets.FirstOrDefaultAsync(a => a.Id == p.AssetId && a.PackId == scene.PackId)
                         ?? throw new StudioException($"Placement \"{p.Name}\" refers to an asset that is not in this pack.");
+            var variant = await db.AssetVariants.FindAsync(p.VariantId ?? asset.DefaultVariantId);
+            if (variant is null || variant.AssetId != asset.Id)
+                throw new StudioException($"Placement \"{p.Name}\" refers to a variant that \"{asset.Name}\" doesn't have.");
+            var versionId = scene.Versions.FirstOrDefault(v => v.AssetId == asset.Id && v.VariantId == variant.Id)?.ProgramVersionId
+                            ?? variant.CurrentProgramVersionId;
+            var version = versionId is null ? null : await db.ProgramVersions.FindAsync(versionId);
+            if (version is null || version.VariantId != variant.Id)
+                throw new StudioException($"\"{asset.Name}\" has no build yet: its variant \"{variant.Name}\" has no program version.");
             var glb = await db.Builds
-                          .Where(b => b.AssetId == asset.Id && b.ProgramVersionId == asset.CurrentProgramVersionId && b.GlbFileId != null)
+                          .Where(b => b.ProgramVersionId == version.Id && b.GlbFileId != null)
                           .OrderByDescending(b => b.CreatedAt).Select(b => b.GlbFileId).FirstOrDefaultAsync()
-                      ?? throw new StudioException($"\"{asset.Name}\" has no build of its current program yet.");
+                      ?? throw new StudioException($"\"{asset.Name}\" ({variant.Name}) has no build of v{version.Number} yet.");
             placements.Add(new JsonObject
             {
                 ["name"] = p.Name,

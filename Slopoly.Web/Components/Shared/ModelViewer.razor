@@ -1,0 +1,125 @@
+@implements IAsyncDisposable
+@inject IJSRuntime JS
+
+@* The 3D viewer of builds and scenes (wwwroot/js/viewer3d.js): orbit camera, overlay toggles kept in the browser,
+   palette swap. Pages add their own controls (palette choice, downloads) through Toolbar. *@
+<div class="model-viewer" style="height: @Height">
+    <div @ref="_host" class="model-viewer-canvas"></div>
+    @if (_error is not null)
+    {
+        <MudAlert Severity="Severity.Warning" Dense="true" Class="model-viewer-error">@_error</MudAlert>
+    }
+</div>
+<MudStack Row="true" AlignItems="AlignItems.Center" Spacing="1" Class="mt-1" Wrap="Wrap.Wrap">
+    @foreach (var (key, label, icon) in Toggles)
+    {
+        <MudTooltip Text="@label">
+            <MudToggleIconButton Toggled="@IsOn(key)" ToggledChanged="v => SetAsync(key, v)" Icon="@icon" ToggledIcon="@icon"
+                                 ToggledColor="Color.Primary" Size="Size.Small" aria-label="@label" />
+        </MudTooltip>
+    }
+    <MudTooltip Text="Reset view">
+        <MudIconButton Icon="@Icons.Material.Filled.CenterFocusStrong" Size="Size.Small" OnClick="ResetAsync" aria-label="Reset view" />
+    </MudTooltip>
+    <MudSpacer />
+    @Toolbar
+</MudStack>
+
+@code {
+    private const string StorageKey = "slopoly.viewer.overlays";
+
+    /// <summary>Overlay key (as viewer3d.js names it), label, icon.</summary>
+    private static readonly (string Key, string Label, string Icon)[] Toggles =
+    [
+        ("wireframe", "Wireframe", Icons.Material.Filled.ChangeHistory),
+        ("grid", "Ground grid (1 m)", Icons.Material.Filled.Grid4x4),
+        ("axes", "Origin axes (x red, y green, z blue)", Icons.Material.Filled.OpenWith),
+        ("normals", "Vertex normals", Icons.Material.Filled.CallMade),
+        ("shade", "Baked shade (off: palette colours only)", Icons.Material.Filled.Contrast),
+    ];
+
+    [Parameter, EditorRequired] public string? Src { get; set; }
+    /// <summary>Palette texture to show (main or a palette variant); null keeps the model's embedded one.</summary>
+    [Parameter] public string? PaletteUrl { get; set; }
+    [Parameter] public string Height { get; set; } = "480px";
+    [Parameter] public RenderFragment? Toolbar { get; set; }
+
+    private ElementReference _host;
+    private IJSObjectReference? _module, _viewer;
+    private Dictionary<string, bool> _overlays = new() { ["wireframe"] = false, ["grid"] = false, ["axes"] = false, ["normals"] = false, ["shade"] = true };
+    private string? _loaded, _palette, _error;
+
+    private bool IsOn(string key) => _overlays.GetValueOrDefault(key);
+
+    protected override async Task OnAfterRenderAsync(bool firstRender)
+    {
+        if (firstRender)
+        {
+            try
+            {
+                _module = await JS.InvokeAsync<IJSObjectReference>("import", "./js/viewer3d.js");
+                _viewer = await _module.InvokeAsync<IJSObjectReference>("create", _host);
+                if (await JS.InvokeAsync<Dictionary<string, bool>?>("slopolyViewer.load", StorageKey) is { } saved)
+                    foreach (var (key, value) in saved) _overlays[key] = value;
+                await _viewer.InvokeVoidAsync("setOverlays", _overlays);
+                StateHasChanged();
+            }
+            catch (JSException ex) { _error = $"The 3D viewer could not start: {ex.Message}"; StateHasChanged(); return; }
+            catch (JSDisconnectedException) { return; }
+        }
+        await SyncAsync();
+    }
+
+    /// <summary>Loads a new model or palette when the parameters changed.</summary>
+    private async Task SyncAsync()
+    {
+        if (_viewer is null) return;
+        try
+        {
+            if (Src != _loaded && Src is not null)
+            {
+                var keepCamera = _loaded is not null;
+                _loaded = Src;
+                _palette = null;
+                _error = null;
+                await _viewer.InvokeVoidAsync("load", Src, keepCamera);
+            }
+            if (PaletteUrl != _palette && PaletteUrl is not null)
+            {
+                _palette = PaletteUrl;
+                await _viewer.InvokeVoidAsync("setPalette", PaletteUrl);
+            }
+        }
+        catch (JSException ex) { _error = $"The model could not be shown: {ex.Message}"; StateHasChanged(); }
+        catch (JSDisconnectedException) { }
+    }
+
+    private async Task SetAsync(string key, bool value)
+    {
+        _overlays[key] = value;
+        if (_viewer is null) return;
+        try
+        {
+            await _viewer.InvokeVoidAsync("setOverlays", new Dictionary<string, bool> { [key] = value });
+            await JS.InvokeVoidAsync("slopolyViewer.save", StorageKey, _overlays);
+        }
+        catch (JSException ex) { _error = ex.Message; }
+        catch (JSDisconnectedException) { }
+    }
+
+    private async Task ResetAsync()
+    {
+        try { if (_viewer is not null) await _viewer.InvokeVoidAsync("resetView"); }
+        catch (JSDisconnectedException) { }
+    }
+
+    public async ValueTask DisposeAsync()
+    {
+        try
+        {
+            if (_viewer is not null) { await _viewer.InvokeVoidAsync("dispose"); await _viewer.DisposeAsync(); }
+            if (_module is not null) await _module.DisposeAsync();
+        }
+        catch (JSDisconnectedException) { }
+    }
+}

@@ -1,5 +1,6 @@
 @page "/concepts/{ConceptId:guid}"
 @inherits LiveComponent
+@inject PageContext PageCtx
 @inject NavigationManager Nav
 
 <PageTitle>Concept · Slopoly</PageTitle>
@@ -186,6 +187,7 @@
     protected override async Task LoadAsync()
     {
         _concept = await Api.GetAsync<ConceptImage>($"api/concepts/{ConceptId}");
+        PageCtx.Set(new ChatContext(ChatPages.Concept, _concept.PackId, _concept.AssetId, _concept.VariantId, ConceptId: ConceptId));
         _pack = await Api.GetAsync<Pack>($"api/packs/{_concept.PackId}");
         _asset = _concept.AssetId is { } assetId ? await Api.GetAsync<Asset>($"api/assets/{assetId}") : null;
         _job = _concept.JobId is { } jobId ? await Api.GetAsync<Job>($"api/jobs/{jobId}") : null;
@@ -216,18 +218,20 @@
 
     protected override Task OnJobEventAsync(JobEventMessage e) => Task.CompletedTask; // new images show in the gallery
 
-    /// <summary>The agent words the change and calls revise_concept; the user follows it in the pack's chat.</summary>
+    /// <summary>The agent words the change and calls revise_concept, in a new chat about this concept; the user can
+    /// follow it in the chat drawer.</summary>
     private Task AskAgentAsync() => Try(async () =>
     {
         var request = string.IsNullOrWhiteSpace(_change)
             ? $"Revise concept {ConceptId}: more options like it, no change. Make {_count} images."
             : $"Revise concept {ConceptId}: {_change.Trim()}. Make {_count} images.";
-        await Api.PostAsync<Job>($"api/packs/{_concept!.PackId}/chat", new ChatMessage(request));
+        var chat = await Api.PostAsync<Chat>("api/chats", new ChatCreate(PageCtx.Current));
+        await Api.PostAsync<Job>($"api/chats/{chat.Id}/messages", new ChatMessage(request, PageCtx.Current));
         _change = "";
         Snackbar.Add("Sent to the agent; the new images will appear in Concepts.", Severity.Info, o =>
         {
             o.Action = "Open chat";
-            o.OnClick = _ => { Nav.NavigateTo($"/packs/{_concept.PackId}?tab=concepts&chat=true"); return Task.CompletedTask; };
+            o.OnClick = _ => { PageCtx.OpenChat(chat.Id); return Task.CompletedTask; };
         });
     });
 

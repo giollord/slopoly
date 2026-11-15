@@ -129,9 +129,10 @@ public sealed partial class PaletteService(SlopolyDb db, Notifier notifier, Pale
     public async Task<JsonObject> RenderInputsAsync(Guid packId)
     {
         var view = await GetAsync(packId);
-        var builds = await (from a in db.Assets
-                            where a.PackId == packId && a.CurrentProgramVersionId != null
-                            select db.Builds.Where(b => b.ProgramVersionId == a.CurrentProgramVersionId && b.GlbFileId != null)
+        var builds = await (from v in db.AssetVariants
+                            join a in db.Assets on v.AssetId equals a.Id
+                            where a.PackId == packId && v.CurrentProgramVersionId != null
+                            select db.Builds.Where(b => b.ProgramVersionId == v.CurrentProgramVersionId && b.GlbFileId != null)
                                 .OrderByDescending(b => b.CreatedAt).FirstOrDefault())
             .Where(b => b != null).Select(b => new { buildId = b!.Id, glbFileId = b.GlbFileId }).ToListAsync();
         return new JsonObject

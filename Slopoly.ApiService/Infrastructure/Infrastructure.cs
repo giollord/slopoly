@@ -101,5 +101,5 @@ public sealed class Notifier(IHubContext<EventsHub> hub)
 
     public Task JobEvent(Job job, string type, System.Text.Json.Nodes.JsonObject? data = null) =>
         hub.Clients.All.SendAsync(Contracts.Realtime.JobEvent,
-            new JobEventMessage(job.Id, job.Kind, job.PackId, job.AssetId, job.State, type, data));
+            new JobEventMessage(job.Id, job.Kind, job.PackId, job.AssetId, job.State, type, data, job.ChatId));
 }

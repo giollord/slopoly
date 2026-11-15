@@ -63,7 +63,7 @@ async def build(job: Job) -> dict[str, Any]:
             views.append({"view": view["view"], "path": str(path)})
         job_file = {"source": inputs.get("source") or "", "polyBudget": inputs.get("polyBudget"),
                     "shading": inputs.get("shading"), "palette": inputs.get("palette") or [], "masks": masks,
-                    "views": views}
+                    "views": views, "noViewsReason": inputs.get("noViewsReason")}
         (folder / "job.json").write_text(json.dumps(job_file), encoding="utf-8")
         await job.progress(0.2)
 
@@ -75,13 +75,15 @@ async def build(job: Job) -> dict[str, Any]:
         await job.progress(0.9)
 
         glb = await job.upload(folder / "model.glb", "model.glb", "model/gltf-binary")
+        blend = await job.upload(folder / "model.blend", "model.blend", "application/x-blender")
         for score in report["silhouette"].get("views", []):  # renders and comparisons become files: ids, not images
             for key in ("render", "compare"):
                 if name := score.pop(key, None):
                     score[f"{key}FileId"] = await job.upload(folder / name, name, "image/png")
         roles = set(report["palette"]["roles"])
         entry_ids = [e["id"] for e in inputs.get("palette") or [] if e.get("role") in roles and e.get("id")]
-        return {"glbFileId": glb, "validated": report["validated"], "report": report, "paletteEntryIds": entry_ids}
+        return {"glbFileId": glb, "blendFileId": blend, "validated": report["validated"], "report": report,
+                "paletteEntryIds": entry_ids}
 
 
 def png(entries: list[dict]) -> bytes:

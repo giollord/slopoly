@@ -34,6 +34,7 @@ builder.Services.AddScoped<FileStore>();
 builder.Services.AddScoped<JobService>();
 builder.Services.AddScoped<StudioService>();
 builder.Services.AddScoped<GenerationService>();
+builder.Services.AddScoped<ChatService>();
 builder.Services.AddScoped<PaletteService>();
 builder.Services.AddScoped<JobEventApplier>();
 builder.Services.AddScoped<IJobResultHandler, ConceptImageResults>();

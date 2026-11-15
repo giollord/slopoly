@@ -16,7 +16,7 @@ public static class Realtime
 public sealed record ChangeEvent(string Entity, Guid Id, Guid? PackId, Guid? AssetId);
 
 /// <summary>A job changed state or emitted progress/stream output.</summary>
-public sealed record JobEventMessage(Guid JobId, string Kind, Guid? PackId, Guid? AssetId, JobState State, string Type, JsonObject? Data);
+public sealed record JobEventMessage(Guid JobId, string Kind, Guid? PackId, Guid? AssetId, JobState State, string Type, JsonObject? Data, Guid? ChatId = null);
 
 public static class JobKinds
 {

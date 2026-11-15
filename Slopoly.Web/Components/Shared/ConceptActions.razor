@@ -24,7 +24,7 @@
 
     private async Task SelectAsync(Selection selection)
     {
-        try { await Api.PutAsync<ConceptImage>($"api/concepts/{Concept.Id}/selection", new SelectionEdit(selection)); }
+        try { await HeroPick.SelectAsync(Api, Dialogs, Concept, selection); }
         catch (ApiException ex) { Snackbar.Add(ex.Message, Severity.Error); }
     }
 

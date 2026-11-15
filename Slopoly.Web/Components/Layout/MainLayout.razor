@@ -1,4 +1,6 @@
-﻿@inherits LayoutComponentBase
+@inherits LayoutComponentBase
+@implements IDisposable
+@inject PageContext PageCtx
 
 <MudThemeProvider IsDarkMode="_dark" />
 <MudPopoverProvider />
@@ -10,6 +12,7 @@
         <MudButton Href="/" Variant="Variant.Text" Color="Color.Inherit" StartIcon="@Icons.Material.Filled.ViewInAr">Slopoly</MudButton>
         <MudSpacer />
         <MudButton Href="/knowledge" Variant="Variant.Text" Color="Color.Inherit" StartIcon="@Icons.Material.Filled.MenuBook">Knowledge</MudButton>
+        <MudButton Variant="Variant.Text" Color="Color.Inherit" StartIcon="@Icons.Material.Filled.Chat" OnClick="() => Open(null)">Agent</MudButton>
         <MudToggleIconButton @bind-Toggled="_dark" Icon="@Icons.Material.Filled.DarkMode" ToggledIcon="@Icons.Material.Filled.LightMode" Color="Color.Inherit" />
     </MudAppBar>
     <MudMainContent Class="pt-14">
@@ -17,6 +20,13 @@
             @Body
         </MudContainer>
     </MudMainContent>
+    <MudDrawer @bind-Open="_chatOpen" Anchor="Anchor.End" Variant="DrawerVariant.Temporary" Width="520px" Elevation="2">
+        <MudDrawerHeader Class="pb-0"><MudText Typo="Typo.h6">Agent</MudText></MudDrawerHeader>
+        @if (_chatOpen)
+        {
+            <ChatPanel Context="PageCtx.Current" PackId="PageCtx.Current.PackId" ChatId="_chatId" Height="calc(100vh - 72px)" />
+        }
+    </MudDrawer>
 </MudLayout>
 
 <div id="blazor-error-ui">
@@ -27,4 +37,24 @@
 
 @code {
     private bool _dark = true;
+    private bool _chatOpen;
+    private Guid? _chatId;
+
+    protected override void OnInitialized()
+    {
+        PageCtx.Changed += Refresh;
+        PageCtx.OpenChatRequested += OnOpenRequested;
+    }
+
+    private void Open(Guid? chatId) { _chatId = chatId; _chatOpen = true; }
+
+    private void OnOpenRequested(Guid? chatId) => InvokeAsync(() => { Open(chatId); StateHasChanged(); });
+
+    private void Refresh() => InvokeAsync(StateHasChanged);
+
+    public void Dispose()
+    {
+        PageCtx.Changed -= Refresh;
+        PageCtx.OpenChatRequested -= OnOpenRequested;
+    }
 }

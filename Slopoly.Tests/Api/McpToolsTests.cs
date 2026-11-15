@@ -37,9 +37,9 @@ public sealed partial class McpToolsTests
         var tools = (await client.ListToolsAsync()).Select(t => t.Name).Order().ToList();
         Assert.That(tools, Is.EqualTo(new[]
         {
-            "cancel_job", "create_asset", "get_build_report", "get_job", "get_pack", "get_palette", "get_part_colors",
-            "get_scene", "get_segmentation", "list_concepts", "read_knowledge", "retry_job", "revise_concept", "save_manifest",
-            "save_scene", "search_knowledge", "start_job", "submit_program", "update_asset", "update_style",
+            "cancel_job", "create_asset", "create_variant", "get_build_report", "get_job", "get_pack", "get_palette", "get_part_colors",
+            "get_scene", "get_segmentation", "list_concepts", "list_variants", "read_knowledge", "retry_job", "revise_concept", "save_manifest",
+            "save_scene", "search_knowledge", "start_job", "submit_program", "update_asset", "update_style", "update_variant",
             "upsert_palette_entries", "upsert_palette_variant", "view_image", "write_knowledge",
         }));
 
@@ -82,15 +82,17 @@ public sealed partial class McpToolsTests
         {
             var db = scope.ServiceProvider.GetRequiredService<SlopolyDb>();
             var asset = new Asset { PackId = pack.Id, Name = "cart" };
-            var hero = new ConceptImage { PackId = pack.Id, AssetId = asset.Id, FileId = image, Kind = ConceptKind.Hero,
+            var variant = new AssetVariant { AssetId = asset.Id, Name = "default" };
+            asset.DefaultVariantId = variant.Id;
+            var hero = new ConceptImage { PackId = pack.Id, AssetId = asset.Id, FileId = image, Kind = ConceptKind.Hero, VariantId = variant.Id,
                 Selection = Selection.Picked, Width = 1024, Height = 1024, FrontYaw = 175, Front = "detected" };
             var concept = new ConceptImage { PackId = pack.Id, AssetId = asset.Id, FileId = image, Kind = ConceptKind.View, View = "front",
                 SourceConceptId = hero.Id, MaskFileId = image, Width = 768, Height = 768 };
-            var version = new ProgramVersion { AssetId = asset.Id, Number = 1, Source = "part('bed', box(1, 1, 1))" };
-            db.AddRange(asset, hero, concept, version,
+            var version = new ProgramVersion { AssetId = asset.Id, VariantId = variant.Id, Number = 1, Source = "part('bed', box(1, 1, 1))" };
+            db.AddRange(asset, variant, hero, concept, version,
                 new PartMask { ConceptImageId = concept.Id, Part = "wheel", View = "front", FileId = image, Bounds = new(10, 300, 80, 200), Area = 9000,
                     Colors = [new MeasuredColor("#6e4524", 0.8)] },
-                new Build { AssetId = asset.Id, ProgramVersionId = version.Id, GlbFileId = image, Validated = true,
+                new Build { AssetId = asset.Id, VariantId = variant.Id, ProgramVersionId = version.Id, GlbFileId = image, Validated = true,
                     Report = JsonNode.Parse($$"""{ "silhouette": { "views": [ { "view": "front", "compareFileId": "{{image}}", "renderFileId": "{{image}}", "parts": [ { "mask": "wheel", "iou": 0.81, "width_error": -0.04 } ] } ] } }""")!.AsObject() });
             await db.SaveChangesAsync();
             (assetId, conceptId) = (asset.Id, concept.Id);

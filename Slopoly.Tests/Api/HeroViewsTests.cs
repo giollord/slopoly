@@ -102,7 +102,7 @@ public sealed class HeroViewsTests
         Assert.That(all, Is.Empty);
     }
 
-    private static async Task SucceedViewsAsync(Guid jobId, double frontYaw, string front)
+    internal static async Task SucceedViewsAsync(Guid jobId, double frontYaw, string front)
     {
         var views = new JsonArray();
         foreach (var view in ViewNames.All)
@@ -115,7 +115,7 @@ public sealed class HeroViewsTests
         await WaitForJobAsync(jobId, j => j.State == JobState.Succeeded);
     }
 
-    private static async Task<ConceptImage> ConceptAsync(Guid packId, GenerateRequest request)
+    internal static async Task<ConceptImage> ConceptAsync(Guid packId, GenerateRequest request)
     {
         var job = await ReadAsync<Job>(await Http.PostAsJsonAsync($"/api/packs/{packId}/generate", request, Json));
         await TakeJobAsync(JobKinds.Comfy, job.Id);
@@ -128,7 +128,7 @@ public sealed class HeroViewsTests
         return concepts.Single(c => c.JobId == job.Id);
     }
 
-    private static async Task<ConceptImage> PickedConceptAsync(Guid packId, GenerateRequest request)
+    internal static async Task<ConceptImage> PickedConceptAsync(Guid packId, GenerateRequest request)
     {
         var concept = await ConceptAsync(packId, request);
         return await ReadAsync<ConceptImage>(await Http.PutAsJsonAsync($"/api/concepts/{concept.Id}/selection", new SelectionEdit(Selection.Picked), Json));

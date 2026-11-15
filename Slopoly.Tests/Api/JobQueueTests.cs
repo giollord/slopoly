@@ -29,7 +29,7 @@ public sealed class JobQueueTests
     {
         var pack = await CreatePackAsync();
         var image = await ReadAsync<Job>(await Client().PostAsJsonAsync($"/api/packs/{pack.Id}/generate", new GenerateRequest(Workflows.StyleAnchor, null, "scene"), Json));
-        var chat = await ReadAsync<Job>(await Client().PostAsJsonAsync($"/api/packs/{pack.Id}/chat", new ChatMessage("hello"), Json));
+        var chat = await SendChatAsync(pack.Id, "hello");
         Assert.That((await TakeJobAsync(JobKinds.Comfy, image.Id)).Operation, Is.EqualTo(Workflows.StyleAnchor));
         Assert.That((await TakeJobAsync(JobKinds.AgentTurn, chat.Id)).Inputs["message"]!.GetValue<string>(), Is.EqualTo("hello"));
     }
@@ -40,7 +40,7 @@ public sealed class JobQueueTests
         var pack = await CreatePackAsync();
         await using var hub = await HubAsync();
         var seen = new List<(string Type, JobState State)>();
-        var job = await ReadAsync<Job>(await Client().PostAsJsonAsync($"/api/packs/{pack.Id}/chat", new ChatMessage("hi"), Json));
+        var job = await SendChatAsync(pack.Id, "hi");
         hub.On<JobEventMessage>(Realtime.JobEvent, e => { if (e.JobId == job.Id) lock (seen) seen.Add((e.Type, e.State)); });
         await TakeJobAsync(JobKinds.AgentTurn, job.Id);
 
@@ -57,8 +57,8 @@ public sealed class JobQueueTests
             {
                 ("started", JobState.Running), ("progress", JobState.Running), ("stream", JobState.Running), ("succeeded", JobState.Succeeded),
             }));
-        var updated = await ReadAsync<Pack>(await Client().GetAsync($"/api/packs/{pack.Id}"));
-        Assert.That(updated.AgentSessionId, Is.EqualTo("s-1"));
+        var chat = await ReadAsync<Chat>(await Client().GetAsync($"/api/chats/{job.ChatId}"));
+        Assert.That(chat.SessionId, Is.EqualTo("s-1"));
         var events = await ReadAsync<List<JobEvent>>(await Client().GetAsync($"/api/jobs/{job.Id}/events"));
         Assert.That(events.Select(e => e.Type), Is.EqualTo(new[] { "started", "stream", "succeeded" }));
     }
@@ -67,7 +67,7 @@ public sealed class JobQueueTests
     public async Task RedeliveryCountsAnAttempt()
     {
         var pack = await CreatePackAsync();
-        var job = await ReadAsync<Job>(await Client().PostAsJsonAsync($"/api/packs/{pack.Id}/chat", new ChatMessage("hi"), Json));
+        var job = await SendChatAsync(pack.Id, "hi");
         await TakeJobAsync(JobKinds.AgentTurn, job.Id);
         await PublishEventAsync(JobKinds.AgentTurn, job.Id, "started");
         await PublishEventAsync(JobKinds.AgentTurn, job.Id, "started");
@@ -83,7 +83,7 @@ public sealed class JobQueueTests
         await channel.QueueBindAsync(control, Broker.ControlExchange, "");
 
         var pack = await CreatePackAsync();
-        var job = await ReadAsync<Job>(await Client().PostAsJsonAsync($"/api/packs/{pack.Id}/chat", new ChatMessage("hi"), Json));
+        var job = await SendChatAsync(pack.Id, "hi");
         await TakeJobAsync(JobKinds.AgentTurn, job.Id);
         await PublishEventAsync(JobKinds.AgentTurn, job.Id, "started");
         await WaitForJobAsync(job.Id, j => j.State == JobState.Running);
@@ -104,7 +104,7 @@ public sealed class JobQueueTests
     public async Task CancelledQueuedJobIsVisibleToWorkersAndCanBeRetried()
     {
         var pack = await CreatePackAsync();
-        var job = await ReadAsync<Job>(await Client().PostAsJsonAsync($"/api/packs/{pack.Id}/chat", new ChatMessage("hi"), Json));
+        var job = await SendChatAsync(pack.Id, "hi");
         await ReadAsync<Job>(await Client().PostAsync($"/api/jobs/{job.Id}/cancel", null));
         // The worker's check before running a delivered job:
         var state = await ReadAsync<Job>(await WorkerClient().GetAsync($"/worker/jobs/{job.Id}"));

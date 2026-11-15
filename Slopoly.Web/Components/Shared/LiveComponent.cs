@@ -20,6 +20,9 @@ public abstract class LiveComponent : ComponentBase, IDisposable
     /// <summary>Whether a change or job event of this pack/asset concerns the component.</summary>
     protected abstract bool Concerns(Guid? packId, Guid? assetId);
 
+    /// <summary>Whether a job event concerns the component; by default, when its pack or asset does.</summary>
+    protected virtual bool ConcernsJob(JobEventMessage e) => Concerns(e.PackId, e.AssetId);
+
     /// <summary>Job events of interest; by default lifecycle events (not progress or stream ticks) reload.</summary>
     protected virtual Task OnJobEventAsync(JobEventMessage e) =>
         e.Type is "progress" or "stream" ? Task.CompletedTask : LoadAsync();
@@ -36,7 +39,7 @@ public abstract class LiveComponent : ComponentBase, IDisposable
         Concerns(e.PackId, e.AssetId) ? InvokeAsync(() => Try(async () => { await LoadAsync(); StateHasChanged(); })) : Task.CompletedTask;
 
     private Task OnJobEvent(JobEventMessage e) =>
-        Concerns(e.PackId, e.AssetId) ? InvokeAsync(() => Try(async () => { await OnJobEventAsync(e); StateHasChanged(); })) : Task.CompletedTask;
+        ConcernsJob(e) ? InvokeAsync(() => Try(async () => { await OnJobEventAsync(e); StateHasChanged(); })) : Task.CompletedTask;
 
     /// <summary>Runs an action; API errors become an error snackbar.</summary>
     protected async Task Try(Func<Task> action)

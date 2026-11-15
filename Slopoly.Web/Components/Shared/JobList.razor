@@ -1,48 +1,59 @@
 @inherits LiveComponent
 
-<MudSimpleTable Dense="true" Hover="true">
-    <thead><tr><th>Created</th><th>Job</th><th>State</th><th style="width: 12rem">Progress</th><th>Error</th><th></th></tr></thead>
-    <tbody>
-        @foreach (var job in _jobs)
-        {
-            <tr>
-                <td>@job.CreatedAt.ToLocalTime().ToString("g")</td>
-                <td>@job.Kind @job.Operation</td>
-                <td><MudChip T="string" Size="Size.Small" Color="@StateColor(job.State)">@job.State</MudChip>@(job.Attempt > 1 ? $" (attempt {job.Attempt})" : "")</td>
-                <td>
-                    @if (job.State == JobState.Running)
-                    {
-                        <MudProgressLinear Value="@((job.Progress ?? 0) * 100)" Indeterminate="@(job.Progress is null)" Color="Color.Primary" />
-                    }
-                </td>
-                <td class="pre-wrap" style="max-width: 36rem">@job.Error</td>
-                <td>
-                    @if (job.State is JobState.Queued or JobState.Running)
-                    {
-                        <MudButton Size="Size.Small" OnClick='() => Act(job, "cancel")'>Cancel</MudButton>
-                    }
-                    else if (job.State is JobState.Failed or JobState.Cancelled)
-                    {
-                        <MudButton Size="Size.Small" OnClick='() => Act(job, "retry")'>Retry</MudButton>
-                    }
-                </td>
-            </tr>
-        }
-    </tbody>
-</MudSimpleTable>
+@* The pack's jobs, newest first, one server page at a time. *@
+<MudTable T="Job" @ref="_table" ServerData="LoadPageAsync" Dense="true" Hover="true" Elevation="0" RowsPerPage="25">
+    <HeaderContent>
+        <MudTh>Created</MudTh><MudTh>Job</MudTh><MudTh>State</MudTh><MudTh Style="width: 12rem">Progress</MudTh><MudTh>Error</MudTh><MudTh></MudTh>
+    </HeaderContent>
+    <RowTemplate>
+        <MudTd>@context.CreatedAt.ToLocalTime().ToString("g")</MudTd>
+        <MudTd>@context.Kind @context.Operation</MudTd>
+        <MudTd><MudChip T="string" Size="Size.Small" Color="@StateColor(context.State)">@context.State</MudChip>@(context.Attempt > 1 ? $" (attempt {context.Attempt})" : "")</MudTd>
+        <MudTd>
+            @if (context.State == JobState.Running)
+            {
+                <MudProgressLinear Value="@((context.Progress ?? 0) * 100)" Indeterminate="@(context.Progress is null)" Color="Color.Primary" />
+            }
+        </MudTd>
+        <MudTd Class="pre-wrap" Style="max-width: 36rem">@context.Error</MudTd>
+        <MudTd>
+            @if (context.State is JobState.Queued or JobState.Running)
+            {
+                <MudButton Size="Size.Small" OnClick='() => Act(context, "cancel")'>Cancel</MudButton>
+            }
+            else if (context.State is JobState.Failed or JobState.Cancelled)
+            {
+                <MudButton Size="Size.Small" OnClick='() => Act(context, "retry")'>Retry</MudButton>
+            }
+        </MudTd>
+    </RowTemplate>
+    <PagerContent><MudTablePager PageSizeOptions="@([10, 25, 50])" /></PagerContent>
+</MudTable>
 
 @code {
     [Parameter, EditorRequired] public Guid PackId { get; set; }
-    private List<Job> _jobs = [];
+    private MudTable<Job>? _table;
+    private List<Job> _page = [];
 
-    protected override async Task LoadAsync() => _jobs = await Api.GetAsync<List<Job>>($"api/jobs?packId={PackId}");
+    private async Task<TableData<Job>> LoadPageAsync(TableState state, CancellationToken ct)
+    {
+        try
+        {
+            var page = await Api.GetAsync<Page<Job>>($"api/packs/{PackId}/jobs?skip={state.Page * state.PageSize}&take={state.PageSize}");
+            _page = page.Items;
+            return new TableData<Job> { Items = page.Items, TotalItems = page.Total };
+        }
+        catch (ApiException ex) { Snackbar.Add(ex.Message, Severity.Error); return new TableData<Job> { Items = [], TotalItems = 0 }; }
+    }
+
+    protected override Task LoadAsync() => _table?.ReloadServerData() ?? Task.CompletedTask;
 
     protected override bool Concerns(Guid? packId, Guid? assetId) => packId == PackId;
 
     protected override Task OnJobEventAsync(JobEventMessage e)
     {
         if (e.Type == "stream") return Task.CompletedTask;
-        if (e.Type == "progress" && _jobs.FirstOrDefault(j => j.Id == e.JobId) is { } job)
+        if (e.Type == "progress" && _page.FirstOrDefault(j => j.Id == e.JobId) is { } job)
         {
             job.Progress = e.Data?["progress"]?.GetValue<double?>();
             job.State = e.State;

@@ -1,5 +1,7 @@
-﻿@page "/"
+@page "/"
 @inherits LiveComponent
+@inject PageContext PageCtx
+@inject IDialogService Dialogs
 
 <PageTitle>Packs · Slopoly</PageTitle>
 
@@ -27,7 +29,13 @@ else
             <MudItem xs="12" sm="6" md="4">
                 <MudCard Outlined="true" Style="height: 100%">
                     <MudCardContent>
-                        <MudLink Href="@($"/packs/{pack.Id}")" Typo="Typo.h6">@pack.Name</MudLink>
+                        <MudStack Row="true" AlignItems="AlignItems.Center">
+                            <MudLink Href="@($"/packs/{pack.Id}")" Typo="Typo.h6">@pack.Name</MudLink>
+                            <MudSpacer />
+                            <MudMenu Icon="@Icons.Material.Filled.MoreVert" Size="Size.Small" aria-label="@($"{pack.Name} actions")">
+                                <MudMenuItem Icon="@Icons.Material.Filled.Delete" OnClick="() => DeleteAsync(pack)">Delete pack…</MudMenuItem>
+                            </MudMenu>
+                        </MudStack>
                         <MudText Typo="Typo.body2" Class="mt-2 clamp-3">@(string.IsNullOrWhiteSpace(pack.StyleText) ? "No style yet" : pack.StyleText)</MudText>
                     </MudCardContent>
                 </MudCard>
@@ -40,7 +48,13 @@ else
     private List<Pack>? _packs;
     private string _name = "";
 
-    protected override async Task LoadAsync() => _packs = await Api.GetAsync<List<Pack>>("api/packs");
+    protected override async Task LoadAsync()
+    {
+        PageCtx.Set(new ChatContext(ChatPages.Home));
+        _packs = await Api.GetAsync<List<Pack>>("api/packs");
+    }
+
+    private Task DeleteAsync(Pack pack) => Try(async () => { if (await NameDialog.DeletePackAsync(Dialogs, Api, pack)) await LoadAsync(); });
 
     protected override bool Concerns(Guid? packId, Guid? assetId) => assetId is null;
 

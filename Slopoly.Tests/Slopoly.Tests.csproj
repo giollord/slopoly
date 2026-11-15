@@ -26,6 +26,7 @@
   <ItemGroup>
     <ProjectReference Include="..\Slopoly.AppHost\Slopoly.AppHost.csproj" />
     <ProjectReference Include="..\Slopoly.ApiService\Slopoly.ApiService.csproj" />
+    <ProjectReference Include="..\Slopoly.Web\Slopoly.Web.csproj" />
   </ItemGroup>
 
   <ItemGroup>

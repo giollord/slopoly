@@ -19,8 +19,8 @@ namespace Slopoly.ApiService.Mcp;
 public sealed class StudioTools(StudioService studio, GenerationService generation, PaletteService palette, JobService jobs,
     KnowledgeService knowledge, SlopolyDb db, FileStore files)
 {
-    /// <summary>An asset with the world bounds ([min, max], metres) of its latest build, for placing it in scenes.</summary>
-    public sealed record AssetInfo(Asset Asset, JsonNode? Bounds);
+    /// <summary>An asset with its variants and the world bounds ([min, max], metres) of its latest build, for placing it in scenes.</summary>
+    public sealed record AssetInfo(Asset Asset, List<AssetVariant> Variants, JsonNode? Bounds);
 
     public sealed record SceneInfo(Guid Id, string Name, int Placements);
 
@@ -34,10 +34,10 @@ public sealed class StudioTools(StudioService studio, GenerationService generati
 
     public sealed record PartColors(string Part, string View, List<MeasuredColor> Colors);
 
-    public sealed record BuildReport(Guid BuildId, Guid ProgramVersionId, int ProgramVersion, bool Validated, Guid? GlbFileId,
+    public sealed record BuildReport(Guid BuildId, Guid VariantId, Guid ProgramVersionId, int ProgramVersion, bool Validated, Guid? GlbFileId,
         JsonObject? Report);
 
-    [McpServerTool(Name = "get_pack", ReadOnly = true), Description("The pack (instructions, style text, default triangle budget, shading: shadingMode Flat/Smooth, hardEdgeAngle, shadeStrength), its assets (own budget, bounds of the latest build), scenes, style reference file ids and queued or running jobs.")]
+    [McpServerTool(Name = "get_pack", ReadOnly = true), Description("The pack (instructions, style text, default triangle budget, shading: shadingMode Flat/Smooth, hardEdgeAngle, shadeStrength), its assets (own budget, variants, bounds of the latest build), scenes, style reference file ids and queued or running jobs.")]
     public async Task<PackOverview> GetPack(Guid packId)
     {
         var pack = await studio.GetPackAsync(packId);
@@ -46,7 +46,7 @@ public sealed class StudioTools(StudioService studio, GenerationService generati
         foreach (var asset in assets)
         {
             var report = await db.Builds.Where(b => b.AssetId == asset.Id).OrderByDescending(b => b.CreatedAt).Select(b => b.Report).FirstOrDefaultAsync();
-            infos.Add(new(asset, report?["bounds"]?.DeepClone()));
+            infos.Add(new(asset, await studio.VariantsAsync(asset.Id), report?["bounds"]?.DeepClone()));
         }
         return new(pack, infos,
             (await db.Scenes.Where(s => s.PackId == packId).ToListAsync()).Select(s => new SceneInfo(s.Id, s.Name, s.Placements.Count)).ToList(),
@@ -71,21 +71,34 @@ public sealed class StudioTools(StudioService studio, GenerationService generati
     public Task<Asset> UpdateAsset(Guid assetId, string? name = null, string? description = null, int? polyBudget = null) =>
         studio.UpdateAssetAsync(assetId, new AssetEdit(name, description, polyBudget));
 
+    [McpServerTool(Name = "list_variants", ReadOnly = true), Description("An asset's variants (looks), each with its own reference hero, manifest, program versions, builds, current version and status. The asset's defaultVariantId is used whenever a tool gets no variantId.")]
+    public Task<List<AssetVariant>> ListVariants(Guid assetId) => studio.VariantsAsync(assetId);
+
+    [McpServerTool(Name = "create_variant"), Description("Creates a variant of an asset (only when the user asks for another look). fromVariantId copies that variant's manifest and current program (as version 1, built at once); without it the variant starts empty. Name and budget stay shared with the asset.")]
+    public Task<AssetVariant> CreateVariant(Guid assetId, string name, Guid? fromVariantId = null) =>
+        generation.CreateVariantAsync(assetId, new VariantCreate(name, fromVariantId));
+
+    [McpServerTool(Name = "update_variant"), Description("Renames a variant or makes it the asset's default variant.")]
+    public Task<AssetVariant> UpdateVariant(Guid variantId, string? name = null, bool? makeDefault = null) =>
+        studio.UpdateVariantAsync(variantId, new VariantUpdate(name, makeDefault));
+
     [McpServerTool(Name = "start_job"), Description("""
         Starts a generation job and returns it (poll get_job). operation:
         - "style-anchor": packId, description = scene description; uses the pack style text and style references.
-        - "hero": assetId (needs a picked style anchor), optional description of the object. A hero is one image of
-          the asset alone, a three-quarter front view in the pack's style; the user picks one.
+        - "hero": assetId (needs a picked style anchor), optional description of the object, optional variantId (the
+          default variant when omitted). A hero is one image of the asset alone, a three-quarter front view in the
+          pack's style; the user picks one per variant as its reference.
         - "views": conceptImageId = a picked hero. Builds a 3D splat from it and stores front, side, top and back view
           images with silhouettes (about a minute). frontYaw (degrees) remakes them from the same splat with that front.
         - "segment-parts": conceptImageId = a hero with views, parts = part names from the manifest.
         count (1-4) images per run; seed optional.
         """)]
     public Task<Job> StartJob(string operation, Guid? packId = null, Guid? assetId = null, string? description = null,
-        Guid? conceptImageId = null, List<string>? parts = null, int count = 1, long? seed = null, double? frontYaw = null) => operation switch
+        Guid? conceptImageId = null, List<string>? parts = null, int count = 1, long? seed = null, double? frontYaw = null,
+        Guid? variantId = null) => operation switch
     {
         Workflows.StyleAnchor => generation.StyleAnchorAsync(packId ?? throw new StudioException("style-anchor needs packId."), description ?? "", count, seed),
-        Workflows.Hero => generation.HeroAsync(assetId ?? throw new StudioException("hero needs assetId."), description, count, seed),
+        Workflows.Hero => generation.HeroAsync(assetId ?? throw new StudioException("hero needs assetId."), description, count, seed, variantId),
         Workflows.Views => generation.ViewsAsync(conceptImageId ?? throw new StudioException("views needs conceptImageId (the hero)."), frontYaw),
         Workflows.SegmentParts => generation.SegmentAsync(conceptImageId ?? throw new StudioException("segment-parts needs conceptImageId."),
             parts ?? throw new StudioException("segment-parts needs parts.")),
@@ -101,7 +114,7 @@ public sealed class StudioTools(StudioService studio, GenerationService generati
     [McpServerTool(Name = "retry_job"), Description("Queues a failed or cancelled job again.")]
     public Task<Job> RetryJob(Guid jobId) => jobs.RetryAsync(jobId);
 
-    [McpServerTool(Name = "list_concepts", ReadOnly = true), Description("Concept images the user has not rejected, with kind (Anchor, Hero, View), selection (Picked/None) and size. Views name their view and their hero (sourceConceptId); heroes carry frontYaw and front (detected, assumed or given). Optionally for one asset.")]
+    [McpServerTool(Name = "list_concepts", ReadOnly = true), Description("Concept images the user has not rejected, with kind (Anchor, Hero, View), selection (Picked/None), size and variantId (heroes and views). Each variant has at most one picked hero, its reference. Views name their view and their hero (sourceConceptId); heroes carry frontYaw and front (detected, assumed or given). Optionally for one asset.")]
     public Task<List<ConceptImage>> ListConcepts(Guid packId, Guid? assetId = null) => studio.ListConceptsAsync(packId, assetId);
 
     [McpServerTool(Name = "revise_concept"), Description("""
@@ -138,31 +151,37 @@ public sealed class StudioTools(StudioService studio, GenerationService generati
     public Task<VariantView> UpsertPaletteVariant(Guid packId, string name, List<VariantColorEdit> colors) => palette.UpsertVariantAsync(packId, name, colors);
 
     [McpServerTool(Name = "save_manifest"), Description("""
-        Stores the asset's part manifest: {"symmetry": ["x"], "parts": [{"name", "parent", "primitive", "mirror",
-        "connections": [{"to", "type": "fixed"|"rotate"|"slide", "axis"}]}]}. Exactly one part has no parent.
+        Stores the part manifest of an asset variant (the default variant when variantId is omitted): {"symmetry": ["x"],
+        "parts": [{"name", "parent", "primitive", "mirror", "connections": [{"to", "type": "fixed"|"rotate"|"slide",
+        "axis"}]}]}. Exactly one part has no parent.
         """)]
-    public Task<Manifest> SaveManifest(Guid assetId, JsonObject manifest) => studio.SaveManifestAsync(assetId, manifest);
+    public Task<Manifest> SaveManifest(Guid assetId, JsonObject manifest, Guid? variantId = null) => studio.SaveManifestAsync(assetId, variantId, manifest);
 
-    [McpServerTool(Name = "submit_program"), Description("Stores a new slopoly_model part program version for the asset, makes it current and starts its build job (poll get_job, then get_build_report).")]
-    public async Task<Job> SubmitProgram(Guid assetId, string source, string? note = null) =>
-        (await generation.SubmitProgramAsync(assetId, source, note ?? "")).Job;
+    [McpServerTool(Name = "submit_program"), Description("Stores a new slopoly_model part program version for an asset variant (the default variant when variantId is omitted; versions are numbered per variant), makes it the variant's current version and starts its build job (poll get_job, then get_build_report).")]
+    public async Task<Job> SubmitProgram(Guid assetId, string source, string? note = null, Guid? variantId = null) =>
+        (await generation.SubmitProgramAsync(assetId, variantId, source, note ?? "")).Job;
 
-    [McpServerTool(Name = "get_build_report", ReadOnly = true), Description("The latest build of the asset (or a given build): validated flag, validator results, silhouette scores per part and view, colour likeness, palette roles and export stats (vertices, shading). Each scored view has compareFileId (reference view | model render | silhouette difference: red = model only, blue = view only) and renderFileId: look at them with view_image when a view scores below the bar.")]
-    public async Task<BuildReport> GetBuildReport(Guid assetId, Guid? buildId = null)
+    [McpServerTool(Name = "get_build_report", ReadOnly = true), Description("The latest build of an asset variant (the default variant when variantId is omitted), or a given build: validated flag, validator results, silhouette scores per part and view, colour likeness, palette roles, export stats (vertices) and shading defects (merged/removed/flipped counts and, per part, openEdges, inward and bent faces still to fix). Each scored view has compareFileId (reference view | model render | silhouette difference: red = model only, blue = view only) and renderFileId: look at them with view_image when a view scores below the bar.")]
+    public async Task<BuildReport> GetBuildReport(Guid assetId, Guid? buildId = null, Guid? variantId = null)
     {
-        var build = await db.Builds.Where(b => b.AssetId == assetId && (buildId == null || b.Id == buildId))
+        Guid? variant = buildId is null ? (await studio.VariantOfAsync(assetId, variantId)).Id : null;
+        var build = await db.Builds.Where(b => b.AssetId == assetId && (buildId == null || b.Id == buildId) && (variant == null || b.VariantId == variant))
             .OrderByDescending(b => b.CreatedAt).FirstOrDefaultAsync() ?? throw StudioException.NotFound("Build");
         var version = await db.ProgramVersions.FindAsync(build.ProgramVersionId);
-        return new(build.Id, build.ProgramVersionId, version?.Number ?? 0, build.Validated, build.GlbFileId, build.Report);
+        return new(build.Id, build.VariantId, build.ProgramVersionId, version?.Number ?? 0, build.Validated, build.GlbFileId, build.Report);
     }
 
     [McpServerTool(Name = "save_scene"), Description("""
         Creates or replaces a scene (by name) of built pack assets and starts its build (poll get_job, then get_scene).
-        placements: [{"name": "cart 1", "assetId", "at": [x, y, z], "rot": [x, y, z] (degrees, optional), "scale": 1}],
-        metres, Y up, ground at y = 0, assets face +Z. Every asset needs a build of its current program.
+        placements: [{"name": "cart 1", "assetId", "variantId" (optional, default variant), "at": [x, y, z], "rot": [x,
+        y, z] (degrees, optional), "scale": 1}], metres, Y up, ground at y = 0, assets face +Z. versions (optional):
+        [{"assetId", "variantId", "programVersionId"}] picks one version for all placements of that variant; omitted
+        variants (or omitting versions) use the current version, and the existing choices are kept when versions is
+        null. Every placed version needs a build.
         """)]
-    public Task<Scene> SaveScene(Guid packId, string name, List<ScenePlacement> placements, string? description = null) =>
-        generation.SaveSceneAsync(packId, new SceneEdit(name, description, placements));
+    public Task<Scene> SaveScene(Guid packId, string name, List<ScenePlacement> placements, string? description = null,
+        List<SceneVersion>? versions = null) =>
+        generation.SaveSceneAsync(packId, new SceneEdit(name, description, placements, versions));
 
     [McpServerTool(Name = "get_scene", ReadOnly = true), Description("A scene's placements and its build report: per placement world bounds and grounded, plus overlapping pairs.")]
     public async Task<Scene> GetScene(Guid sceneId) => await db.Scenes.FindAsync(sceneId) ?? throw StudioException.NotFound("Scene");

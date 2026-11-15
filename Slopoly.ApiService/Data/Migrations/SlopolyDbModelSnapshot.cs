@@ -15,7 +15,7 @@ partial class SlopolyDbModelSnapshot : ModelSnapshot
     // If you encounter a merge conflict in the line below, it means you need to
     // discard one of the migration branches and recreate its migrations on top of
     // the other branch. See https://aka.ms/efcore-docs-migrations-conflicts for more info.
-    public override string LastMigrationId => "20261114230220_PackShading";
+    public override string LastMigrationId => "20261115001328_VariantsAndChats";
 
     protected override void BuildModel(ModelBuilder modelBuilder)
     {
@@ -31,7 +31,7 @@ partial class SlopolyDbModelSnapshot : ModelSnapshot
                 b.Property<long>("CreatedAt")
                     .HasColumnType("INTEGER");
 
-                b.Property<Guid?>("CurrentProgramVersionId")
+                b.Property<Guid>("DefaultVariantId")
                     .HasColumnType("TEXT");
 
                 b.Property<string>("Description")
@@ -59,6 +59,37 @@ partial class SlopolyDbModelSnapshot : ModelSnapshot
                 b.ToTable("Assets");
             });
 
+        modelBuilder.Entity("Slopoly.Contracts.AssetVariant", b =>
+            {
+                b.Property<Guid>("Id")
+                    .ValueGeneratedOnAdd()
+                    .HasColumnType("TEXT");
+
+                b.Property<Guid>("AssetId")
+                    .HasColumnType("TEXT");
+
+                b.Property<long>("CreatedAt")
+                    .HasColumnType("INTEGER");
+
+                b.Property<Guid?>("CurrentProgramVersionId")
+                    .HasColumnType("TEXT");
+
+                b.Property<string>("Name")
+                    .IsRequired()
+                    .HasColumnType("TEXT");
+
+                b.Property<string>("Status")
+                    .IsRequired()
+                    .HasColumnType("TEXT");
+
+                b.HasKey("Id");
+
+                b.HasIndex("AssetId", "Name")
+                    .IsUnique();
+
+                b.ToTable("AssetVariants");
+            });
+
         modelBuilder.Entity("Slopoly.Contracts.Build", b =>
             {
                 b.Property<Guid>("Id")
@@ -66,6 +97,9 @@ partial class SlopolyDbModelSnapshot : ModelSnapshot
                     .HasColumnType("TEXT");
 
                 b.Property<Guid>("AssetId")
+                    .HasColumnType("TEXT");
+
+                b.Property<Guid?>("BlendFileId")
                     .HasColumnType("TEXT");
 
                 b.Property<long>("CreatedAt")
@@ -90,13 +124,64 @@ partial class SlopolyDbModelSnapshot : ModelSnapshot
                 b.Property<bool>("Validated")
                     .HasColumnType("INTEGER");
 
+                b.Property<Guid>("VariantId")
+                    .HasColumnType("TEXT");
+
                 b.HasKey("Id");
 
                 b.HasIndex("AssetId");
 
                 b.HasIndex("JobId");
 
+                b.HasIndex("VariantId");
+
                 b.ToTable("Builds");
+            });
+
+        modelBuilder.Entity("Slopoly.Contracts.Chat", b =>
+            {
+                b.Property<Guid>("Id")
+                    .ValueGeneratedOnAdd()
+                    .HasColumnType("TEXT");
+
+                b.Property<Guid?>("AssetId")
+                    .HasColumnType("TEXT");
+
+                b.Property<string>("Context")
+                    .IsRequired()
+                    .HasColumnType("TEXT");
+
+                b.Property<long>("CreatedAt")
+                    .HasColumnType("INTEGER");
+
+                b.Property<Guid?>("PackId")
+                    .HasColumnType("TEXT");
+
+                b.Property<Guid?>("SceneId")
+                    .HasColumnType("TEXT");
+
+                b.Property<string>("SessionId")
+                    .HasColumnType("TEXT");
+
+                b.Property<string>("Title")
+                    .IsRequired()
+                    .HasColumnType("TEXT");
+
+                b.Property<long>("UpdatedAt")
+                    .HasColumnType("INTEGER");
+
+                b.Property<Guid?>("VariantId")
+                    .HasColumnType("TEXT");
+
+                b.HasKey("Id");
+
+                b.HasIndex("AssetId");
+
+                b.HasIndex("PackId");
+
+                b.HasIndex("SceneId");
+
+                b.ToTable("Chats");
             });
 
         modelBuilder.Entity("Slopoly.Contracts.ConceptImage", b =>
@@ -146,6 +231,9 @@ partial class SlopolyDbModelSnapshot : ModelSnapshot
                 b.Property<Guid?>("SourceConceptId")
                     .HasColumnType("TEXT");
 
+                b.Property<Guid?>("VariantId")
+                    .HasColumnType("TEXT");
+
                 b.Property<string>("View")
                     .HasColumnType("TEXT");
 
@@ -163,6 +251,8 @@ partial class SlopolyDbModelSnapshot : ModelSnapshot
 
                 b.HasIndex("SourceConceptId");
 
+                b.HasIndex("VariantId");
+
                 b.ToTable("ConceptImages");
             });
 
@@ -177,6 +267,9 @@ partial class SlopolyDbModelSnapshot : ModelSnapshot
 
                 b.Property<int>("Attempt")
                     .HasColumnType("INTEGER");
+
+                b.Property<Guid?>("ChatId")
+                    .HasColumnType("TEXT");
 
                 b.Property<long>("CreatedAt")
                     .HasColumnType("INTEGER");
@@ -221,6 +314,8 @@ partial class SlopolyDbModelSnapshot : ModelSnapshot
 
                 b.HasIndex("AssetId");
 
+                b.HasIndex("ChatId");
+
                 b.HasIndex("PackId");
 
                 b.ToTable("Jobs");
@@ -254,8 +349,11 @@ partial class SlopolyDbModelSnapshot : ModelSnapshot
 
         modelBuilder.Entity("Slopoly.Contracts.Manifest", b =>
             {
-                b.Property<Guid>("AssetId")
+                b.Property<Guid>("VariantId")
                     .ValueGeneratedOnAdd()
+                    .HasColumnType("TEXT");
+
+                b.Property<Guid>("AssetId")
                     .HasColumnType("TEXT");
 
                 b.Property<string>("Content")
@@ -265,7 +363,9 @@ partial class SlopolyDbModelSnapshot : ModelSnapshot
                 b.Property<long>("UpdatedAt")
                     .HasColumnType("INTEGER");
 
-                b.HasKey("AssetId");
+                b.HasKey("VariantId");
+
+                b.HasIndex("AssetId");
 
                 b.ToTable("Manifests");
             });
@@ -274,9 +374,6 @@ partial class SlopolyDbModelSnapshot : ModelSnapshot
             {
                 b.Property<Guid>("Id")
                     .ValueGeneratedOnAdd()
-                    .HasColumnType("TEXT");
-
-                b.Property<string>("AgentSessionId")
                     .HasColumnType("TEXT");
 
                 b.Property<long>("CreatedAt")
@@ -460,9 +557,14 @@ partial class SlopolyDbModelSnapshot : ModelSnapshot
                     .IsRequired()
                     .HasColumnType("TEXT");
 
+                b.Property<Guid>("VariantId")
+                    .HasColumnType("TEXT");
+
                 b.HasKey("Id");
 
-                b.HasIndex("AssetId", "Number")
+                b.HasIndex("AssetId");
+
+                b.HasIndex("VariantId", "Number")
                     .IsUnique();
 
                 b.ToTable("ProgramVersions");
@@ -497,6 +599,10 @@ partial class SlopolyDbModelSnapshot : ModelSnapshot
 
                 b.Property<long>("UpdatedAt")
                     .HasColumnType("INTEGER");
+
+                b.Property<string>("Versions")
+                    .IsRequired()
+                    .HasColumnType("TEXT");
 
                 b.HasKey("Id");
 

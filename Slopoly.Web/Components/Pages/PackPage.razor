@@ -1,6 +1,8 @@
 @page "/packs/{PackId:guid}"
 @inherits LiveComponent
 @inject NavigationManager Nav
+@inject PageContext PageCtx
+@inject IDialogService Dialogs
 
 <PageTitle>@(_pack?.Name ?? "Pack") · Slopoly</PageTitle>
 
@@ -14,7 +16,8 @@ else
     <MudStack Row="true" AlignItems="AlignItems.Center" Class="mb-2">
         <MudText Typo="Typo.h5">@_pack.Name</MudText>
         <MudSpacer />
-        <MudButton Variant="Variant.Filled" Color="Color.Secondary" StartIcon="@Icons.Material.Filled.Chat" OnClick="() => _chatOpen = true">Agent</MudButton>
+        <MudButton Variant="Variant.Filled" Color="Color.Secondary" StartIcon="@Icons.Material.Filled.Chat" OnClick="() => PageCtx.OpenChat()">Agent</MudButton>
+        <MudButton Variant="Variant.Outlined" StartIcon="@Icons.Material.Filled.Delete" OnClick="DeleteAsync">Delete</MudButton>
     </MudStack>
 
     <MudTabs Outlined="true" Rounded="true" TabPanelsClass="pa-4" KeepPanelsAlive="true" ActivePanelIndex="_tab" ActivePanelIndexChanged="TabChanged">
@@ -25,14 +28,6 @@ else
         <MudTabPanel Text="Palette"><PaletteEditor PackId="PackId" /></MudTabPanel>
         <MudTabPanel Text="Jobs"><JobList PackId="PackId" /></MudTabPanel>
     </MudTabs>
-
-    <MudDrawer @bind-Open="_chatOpen" Anchor="Anchor.End" Variant="DrawerVariant.Temporary" Width="520px" Elevation="2">
-        <MudDrawerHeader><MudText Typo="Typo.h6">Agent · @_pack.Name</MudText></MudDrawerHeader>
-        @if (_chatOpen)
-        {
-            <ChatPanel PackId="PackId" />
-        }
-    </MudDrawer>
 }
 
 @code {
@@ -40,28 +35,39 @@ else
     public static readonly string[] Tabs = ["style", "concepts", "assets", "scenes", "palette", "jobs"];
     [Parameter] public Guid PackId { get; set; }
     [SupplyParameterFromQuery(Name = "tab")] public string? Tab { get; set; }
-    /// <summary><c>?chat=1</c> opens the agent chat (e.g. after sending it a request from another page).</summary>
-    [SupplyParameterFromQuery(Name = "chat")] public bool Chat { get; set; }
     private Pack? _pack;
-    private bool _chatOpen;
     private int _tab;
+    private bool _deleted;
 
     protected override async Task OnParametersSetAsync()
     {
         _tab = Math.Max(0, Array.IndexOf(Tabs, Tab ?? ""));
-        _chatOpen |= Chat;
+        Publish();
         await base.OnParametersSetAsync();
     }
 
-    protected override async Task LoadAsync() => _pack = await Api.GetAsync<Pack>($"api/packs/{PackId}");
+    private void Publish() => PageCtx.Set(new ChatContext(ChatPages.Pack, PackId, Tab: Tabs[_tab]));
 
-    protected override bool Concerns(Guid? packId, Guid? assetId) => packId == PackId && assetId is null;
+    protected override async Task LoadAsync()
+    {
+        if (!_deleted) _pack = await Api.GetAsync<Pack>($"api/packs/{PackId}");
+    }
+
+    protected override bool Concerns(Guid? packId, Guid? assetId) => !_deleted && packId == PackId && assetId is null;
 
     protected override Task OnJobEventAsync(JobEventMessage e) => Task.CompletedTask; // the tabs follow their own jobs
 
     private void TabChanged(int index)
     {
         _tab = index;
-        Nav.NavigateTo(Nav.GetUriWithQueryParameters(new Dictionary<string, object?> { ["tab"] = Tabs[index], ["chat"] = null }), replace: true);
+        Publish();
+        Nav.NavigateTo(Nav.GetUriWithQueryParameters(new Dictionary<string, object?> { ["tab"] = Tabs[index] }), replace: true);
     }
+
+    private Task DeleteAsync() => Try(async () =>
+    {
+        _deleted = true;
+        if (await NameDialog.DeletePackAsync(Dialogs, Api, _pack!)) Nav.NavigateTo("/");
+        else _deleted = false;
+    });
 }

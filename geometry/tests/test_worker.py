@@ -167,4 +167,11 @@ def test_views_get_render_and_comparison_file_ids(tmp_path, cart_source):
 def test_build_without_views_has_no_renders(cart_source):
     job, outputs = run({"source": cart_source, "polyBudget": 2000, "palette": PALETTE})
     assert outputs["report"]["silhouette"]["renders"].startswith("missing")
-    assert set(job.uploads) == {"model.glb"}
+    assert set(job.uploads) == {"model.glb", "model.blend"}  # no renders or comparisons
+    assert outputs["blendFileId"] == "file-model.blend"
+
+
+def test_build_without_reference_says_why():
+    _, outputs = run({"source": "part('a', box(1, 1, 1, tag='wood'))", "palette": PALETTE,
+                      "noViewsReason": "no reference hero for this variant"})
+    assert outputs["report"]["silhouette"]["renders"] == "missing: no reference hero for this variant"

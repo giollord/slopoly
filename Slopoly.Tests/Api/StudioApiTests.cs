@@ -126,7 +126,7 @@ public sealed class StudioApiTests
 
         Assert.That((await client.DeleteAsync($"/api/assets/{gnome.Id}")).IsSuccessStatusCode);
         Assert.That((await client.GetAsync($"/api/assets/{gnome.Id}")).StatusCode, Is.EqualTo(HttpStatusCode.NotFound));
-        Assert.That(await ReadAsync<List<ProgramVersion>>(await client.GetAsync($"/api/assets/{gnome.Id}/programs")), Is.Empty);
+        Assert.That((await client.GetAsync($"/api/assets/{gnome.Id}/programs")).StatusCode, Is.EqualTo(HttpStatusCode.NotFound));
     }
 
     [Test]
@@ -195,9 +195,9 @@ public sealed class StudioApiTests
         await PublishEventAsync(JobKinds.Build, secondJob, "failed", error: "line 1: Exception");
         await WaitForJobAsync(secondJob, j => j.State == JobState.Failed);
 
-        var versions = await ReadAsync<List<ProgramVersion>>(await client.GetAsync($"/api/assets/{asset.Id}/programs"));
+        var versions = (await ReadAsync<Page<ProgramVersion>>(await client.GetAsync($"/api/assets/{asset.Id}/programs"))).Items;
         Assert.That(versions.Select(v => v.Number), Is.EqualTo(new[] { 2, 1 }));
-        var current = await ReadAsync<Asset>(await client.PutAsJsonAsync($"/api/assets/{asset.Id}/current-version", new CurrentVersionEdit(firstVersion), Json));
+        var current = await ReadAsync<AssetVariant>(await client.PutAsJsonAsync($"/api/assets/{asset.Id}/current-version", new CurrentVersionEdit(firstVersion), Json));
         Assert.That(current.CurrentProgramVersionId, Is.EqualTo(firstVersion));
     }
 

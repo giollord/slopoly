@@ -60,16 +60,18 @@ def test_turn_resumes_session_streams_and_returns_new_session(monkeypatch):
         sdk.AssistantMessage(content=[sdk.TextBlock(text="Style anchor started.")], model="claude"),
         result(),
     ])
-    job, outputs = run({"message": "low-poly gnome village", "sessionId": "session-1"})
+    prompt = "[Context]\nThe user is on the pack page.\n[/Context]\n\nlow-poly gnome village"
+    job, outputs = run({"message": "low-poly gnome village", "prompt": prompt, "sessionId": "session-1"})
 
     options = seen["options"]
-    assert seen["prompt"] == "[Pack pack-1]\nlow-poly gnome village"
+    assert seen["prompt"] == prompt
     assert options.resume == "session-1" and options.tools == [] and options.allowed_tools == ["mcp__slopoly"]
     assert options.strict_mcp_config and options.max_turns == agent_worker.MAX_TURNS
     assert options.mcp_servers["slopoly"] == {"type": "http", "url": "http://api:5000/mcp", "headers": {"X-Worker-Key": "key"}}
     assert outputs == {"sessionId": "session-2", "reply": "Writing the style.\n\nStyle anchor started."}
-    assert [e["kind"] for e in job.streamed] == ["text", "tool_use", "tool_result", "text", "result"]
-    assert job.streamed[1]["name"] == "update_style" and job.streamed[2]["text"] == '{"id": "p"}'
+    assert [e["kind"] for e in job.streamed] == ["session", "text", "tool_use", "tool_result", "text", "result"]
+    assert job.streamed[0] == {"kind": "session", "sessionId": "session-2"}
+    assert job.streamed[2]["name"] == "update_style" and job.streamed[3]["text"] == '{"id": "p"}'
 
 
 @pytest.mark.parametrize("message", [
@@ -88,6 +90,42 @@ def test_missing_token_is_an_auth_error(monkeypatch):
     with pytest.raises(JobFailed) as failure:
         run({"message": "hi"})
     assert failure.value.code == "auth"
+
+
+def test_message_without_prompt_is_sent_as_it_is(monkeypatch):
+    seen = stub(monkeypatch, [result()])
+    run({"message": "hi"})
+    assert seen["prompt"] == "hi"
+
+
+def test_cancel_closes_the_query(monkeypatch):
+    """Stop cancels the handler task; the SDK generator must be closed so Claude Code ends at once."""
+    state = {"closed": False}
+
+    async def main():
+        started = asyncio.Event()
+
+        async def query(prompt, options):
+            try:
+                yield sdk.SystemMessage(subtype="init", data={"session_id": "session-9"})
+                started.set()
+                await asyncio.sleep(3600)
+                yield result()
+            finally:
+                state["closed"] = True
+
+        monkeypatch.setattr(agent_worker, "query", query)
+        job = FakeJob({"message": "model the cart"})
+        task = asyncio.create_task(agent_worker.turn(job))
+        await started.wait()
+        task.cancel()
+        with pytest.raises(asyncio.CancelledError):
+            await task
+        return job
+
+    job = asyncio.run(main())
+    assert state["closed"]
+    assert job.streamed == [{"kind": "session", "sessionId": "session-9"}]
 
 
 def test_max_turns_ends_the_turn_without_failing(monkeypatch):

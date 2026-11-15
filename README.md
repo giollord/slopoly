@@ -39,6 +39,22 @@ aspire start
 
 Open the `webfrontend` URL from the dashboard.
 
+**Upgrading:** the API migrates its database on start, and some upgrades move data between tables. Copy
+`<data-dir>` (the `slopoly.db` file and `files/`) before starting a new version on data you want to keep.
+
+## Working in the studio
+
+- **Variants.** An asset can have several variants (looks, such as an empty and a loaded cart). Each variant has its
+  own reference hero with views, manifest, program versions, builds and current version; the name and triangle
+  budget belong to the asset. Pick the variant at the top of the asset page. Picking a second hero for a variant asks
+  whether it replaces the reference or starts a new variant.
+- **Chats.** The Agent button opens a chat on any page, and the asset and scene pages show one next to the model.
+  A new chat remembers the page it was started on and tells the agent about it with the first message; later
+  messages say which page you are on. Stop ends a running turn; the chat continues where it stopped.
+- **Viewer.** Toggle wireframe, the 1-metre ground grid, the origin axes, vertex normals and the baked shade under the
+  model. **Export** downloads the GLB with the palette textures; **Blender** downloads the build's `.blend` with the
+  current palette textures (open it from the unzipped folder).
+
 ## Authorising the agent
 
 The agent runs Claude Code on your subscription, not on API keys.

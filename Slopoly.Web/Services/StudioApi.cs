@@ -6,8 +6,12 @@ using Microsoft.AspNetCore.Mvc;
 
 namespace Slopoly.Web.Services;
 
-/// <summary>An API call failed; the message is the API's problem title, fit to show to the user.</summary>
-public sealed class ApiException(string message) : Exception(message);
+/// <summary>An API call failed; the message is the API's problem title, fit to show to the user. Code names a
+/// specific refusal (e.g. "reference_exists").</summary>
+public sealed class ApiException(string message, string? code = null) : Exception(message)
+{
+    public string? Code { get; } = code;
+}
 
 /// <summary>Typed access to the Slopoly API (service discovery name "apiservice").</summary>
 public sealed class StudioApi(HttpClient http)
@@ -58,8 +62,14 @@ public sealed class StudioApi(HttpClient http)
     private static async Task EnsureAsync(HttpResponseMessage response)
     {
         if (response.IsSuccessStatusCode) return;
-        string? title = null;
-        try { title = (await response.Content.ReadFromJsonAsync<ProblemDetails>(Json))?.Title; } catch (JsonException) { }
-        throw new ApiException(title ?? $"The API answered {(int)response.StatusCode} {response.ReasonPhrase}.");
+        string? title = null, code = null;
+        try
+        {
+            var problem = await response.Content.ReadFromJsonAsync<ProblemDetails>(Json);
+            title = problem?.Title;
+            code = problem?.Extensions.TryGetValue("code", out var value) == true ? value?.ToString() : null;
+        }
+        catch (JsonException) { }
+        throw new ApiException(title ?? $"The API answered {(int)response.StatusCode} {response.ReasonPhrase}.", code);
     }
 }

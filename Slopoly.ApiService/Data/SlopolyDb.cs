@@ -11,6 +11,8 @@ public sealed class SlopolyDb(DbContextOptions<SlopolyDb> options) : DbContext(o
     public DbSet<Pack> Packs => Set<Pack>();
     public DbSet<StyleReference> StyleReferences => Set<StyleReference>();
     public DbSet<Asset> Assets => Set<Asset>();
+    public DbSet<AssetVariant> AssetVariants => Set<AssetVariant>();
+    public DbSet<Chat> Chats => Set<Chat>();
     public DbSet<ConceptImage> ConceptImages => Set<ConceptImage>();
     public DbSet<PartMask> PartMasks => Set<PartMask>();
     public DbSet<PaletteEntry> PaletteEntries => Set<PaletteEntry>();
@@ -37,16 +39,18 @@ public sealed class SlopolyDb(DbContextOptions<SlopolyDb> options) : DbContext(o
         b.Entity<Pack>().HasIndex(p => p.Name);
         b.Entity<StyleReference>().HasIndex(r => r.PackId);
         b.Entity<Asset>().HasIndex(a => a.PackId);
-        b.Entity<ConceptImage>(e => { e.HasIndex(c => c.PackId); e.HasIndex(c => c.AssetId); e.HasIndex(c => c.SourceConceptId); });
+        b.Entity<AssetVariant>().HasIndex(v => new { v.AssetId, v.Name }).IsUnique();
+        b.Entity<ConceptImage>(e => { e.HasIndex(c => c.PackId); e.HasIndex(c => c.AssetId); e.HasIndex(c => c.VariantId); e.HasIndex(c => c.SourceConceptId); });
         b.Entity<PartMask>(e => { e.HasIndex(m => m.ConceptImageId); e.Json(m => m.Bounds); e.Json(m => m.Colors); });
         b.Entity<PaletteEntry>().HasIndex(p => new { p.PackId, p.Role }).IsUnique();
         b.Entity<PaletteVariant>().HasIndex(p => new { p.PackId, p.Name }).IsUnique();
         b.Entity<PaletteVariantColor>().HasKey(c => new { c.VariantId, c.EntryId });
-        b.Entity<Manifest>(e => { e.HasKey(m => m.AssetId); e.Json(m => m.Content); });
-        b.Entity<ProgramVersion>().HasIndex(v => new { v.AssetId, v.Number }).IsUnique();
-        b.Entity<Build>(e => { e.HasIndex(x => x.AssetId); e.HasIndex(x => x.JobId); e.Json(x => x.Report); });
-        b.Entity<Scene>(e => { e.HasIndex(x => new { x.PackId, x.Name }).IsUnique(); e.Json(x => x.Placements); e.Json(x => x.Report); });
-        b.Entity<Job>(e => { e.HasIndex(j => j.PackId); e.HasIndex(j => j.AssetId); e.Json(j => j.Inputs); e.Json(j => j.Outputs); });
+        b.Entity<Manifest>(e => { e.HasKey(m => m.VariantId); e.HasIndex(m => m.AssetId); e.Json(m => m.Content); });
+        b.Entity<ProgramVersion>(e => { e.HasIndex(v => new { v.VariantId, v.Number }).IsUnique(); e.HasIndex(v => v.AssetId); });
+        b.Entity<Build>(e => { e.HasIndex(x => x.AssetId); e.HasIndex(x => x.VariantId); e.HasIndex(x => x.JobId); e.Json(x => x.Report); });
+        b.Entity<Scene>(e => { e.HasIndex(x => new { x.PackId, x.Name }).IsUnique(); e.Json(x => x.Placements); e.Json(x => x.Versions); e.Json(x => x.Report); });
+        b.Entity<Job>(e => { e.HasIndex(j => j.PackId); e.HasIndex(j => j.AssetId); e.HasIndex(j => j.ChatId); e.Json(j => j.Inputs); e.Json(j => j.Outputs); });
+        b.Entity<Chat>(e => { e.HasIndex(c => c.PackId); e.HasIndex(c => c.AssetId); e.HasIndex(c => c.SceneId); e.Json(c => c.Context); });
         b.Entity<JobEvent>(e => { e.HasIndex(x => x.JobId); e.Json(x => x.Data); });
     }
 }
