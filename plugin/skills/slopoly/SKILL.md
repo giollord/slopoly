@@ -9,12 +9,12 @@ You turn a brief into low-poly 3D assets with the `slopoly` CLI. It makes style-
 user's ComfyUI and builds Python part programs, which you write, into validated multi-part models in the user's Blender.
 All content lives as plain files in a `slopoly/` folder in the user's repository.
 
-Requires slopoly CLI version 0.1.0.
+Requires slopoly CLI version 0.1.1.
 
 ## Before the first command
 
 1. Run `slopoly --version`. If the command is missing or prints another version, install this one:
-   `uv tool install --force "git+https://github.com/giollord/slopoly@v0.1.0"` (uv: https://docs.astral.sh/uv/).
+   `uv tool install --force "git+https://github.com/giollord/slopoly@v0.1.1"` (uv: https://docs.astral.sh/uv/).
 2. After installing, or when a command fails with a setup error, run `slopoly doctor`. It checks ComfyUI, its nodes
    and models, Blender and the build libraries, and gives a fix for each failure. `slopoly doctor --fetch` downloads
    missing models (when `comfyui.models_dir` is set) and installs the Blender libraries. Model downloads are large
