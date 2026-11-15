@@ -1,0 +1,16 @@
+{
+  "name": "slopoly",
+  "version": "0.1.0",
+  "description": "Make low-poly 3D game asset packs with ComfyUI concept images and Blender part programs, through the slopoly CLI",
+  "author": {
+    "name": "giollord"
+  },
+  "repository": "https://github.com/giollord/slopoly",
+  "keywords": [
+    "low-poly",
+    "3d",
+    "game-assets",
+    "blender",
+    "comfyui"
+  ]
+}

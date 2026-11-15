@@ -1,79 +1,122 @@
 # Slopoly
 
-A local browser app that turns a short brief into low-poly 3D game assets: style-consistent concept images
-(ComfyUI), part programs written by a Claude agent, validated multi-part geometry (Blender) coloured through a shared
-palette texture, exported as GLB.
+Slopoly makes low-poly 3D game assets in style-consistent packs, driven by your coding agent. It works in three steps:
+
+1. **Concept images.** ComfyUI makes style anchors, then hero images of each asset, then orthographic views of each
+   hero (from a 3D splat).
+2. **Part programs.** Your agent writes Python programs that build each asset from named parts.
+3. **Builds.** Blender builds a program into validated multi-part geometry, coloured through a shared palette
+   texture, scored against the views, and exported as GLB and .blend.
+
+Slopoly is:
+
+- **a CLI**, `slopoly`;
+- **an agent skill**, shipped from this repository as a plugin marketplace for Claude Code, GitHub Copilot CLI and
+  other agents with plugin marketplaces or Agent Skills.
+
+Everything lives as plain files in a `slopoly/` folder in your own repository.
 
 ## Requirements
 
-- Docker Desktop (WSL 2 backend) with the [NVIDIA Container Toolkit](https://docs.nvidia.com/datacenter/cloud-native/container-toolkit/install-guide.html)
-- An NVIDIA GPU (designed for 12 GB VRAM)
-- .NET SDK 11 and the [Aspire CLI](https://aspire.dev)
-- A Claude subscription (Pro or Max) for the agent
+- [uv](https://docs.astral.sh/uv/), which installs the CLI and its Python.
+- [Blender](https://www.blender.org/download/) 5.0 or newer. It is found automatically in the usual install
+  folders, or set with `slopoly config set blender.path <path>`.
+- A [ComfyUI](https://github.com/comfyanonymous/ComfyUI) you can reach over HTTP. It has to be a recent version
+  (tested with 0.45.3), running on an NVIDIA GPU (designed for 12 GB of VRAM). It can run on another machine.
+- A coding agent with plugin or skill support (Claude Code, GitHub Copilot CLI, ...).
 
-Nothing else is installed on the host: Python, ComfyUI, Blender, RabbitMQ and the agent run in containers.
+## Install
 
-## Configuration
-
-Machine-specific values are AppHost parameters. Set them once in user secrets (stored outside the repository), or
-enter them when the Aspire dashboard asks for them:
-
-```sh
-cd Slopoly.AppHost
-dotnet user-secrets set "Parameters:comfyui-models-dir" "<models-dir>"     # host folder with ComfyUI models
-dotnet user-secrets set "Parameters:claude-oauth-token" "<token>"          # see "Authorising the agent"
-dotnet user-secrets set "Parameters:data-dir" "<data-dir>"                 # optional; default: .data in the repo
-```
-
-- `comfyui-models-dir` is mounted **writable** into the ComfyUI container, so models downloaded there land in your
-  folder and can be shared with other ComfyUI installs. The required models are listed in `comfyui/README.md`.
-- `worker-key` (the workers' and agent's API key) and the RabbitMQ credentials are generated automatically.
-
-After changing `comfyui-models-dir`, restart the AppHost: the folder is mounted when the container is created.
-
-## Run
+Add the marketplace and install the plugin in your agent:
 
 ```sh
-aspire start
+# Claude Code
+/plugin marketplace add giollord/slopoly
+/plugin install slopoly@slopoly
+
+# GitHub Copilot CLI
+copilot plugin marketplace add giollord/slopoly
+copilot plugin install slopoly@slopoly
 ```
 
-Open the `webfrontend` URL from the dashboard.
+Agents that read [Agent Skills](https://agentskills.io) folders can use `plugin/skills/slopoly/` directly.
 
-**Upgrading:** the API migrates its database on start, and some upgrades move data between tables. Copy
-`<data-dir>` (the `slopoly.db` file and `files/`) before starting a new version on data you want to keep.
-
-## Working in the studio
-
-- **Variants.** An asset can have several variants (looks, such as an empty and a loaded cart). Each variant has its
-  own reference hero with views, manifest, program versions, builds and current version; the name and triangle
-  budget belong to the asset. Pick the variant at the top of the asset page. Picking a second hero for a variant asks
-  whether it replaces the reference or starts a new variant.
-- **Chats.** The Agent button opens a chat on any page, and the asset and scene pages show one next to the model.
-  A new chat remembers the page it was started on and tells the agent about it with the first message; later
-  messages say which page you are on. Stop ends a running turn; the chat continues where it stopped.
-- **Viewer.** Toggle wireframe, the 1-metre ground grid, the origin axes, vertex normals and the baked shade under the
-  model. **Export** downloads the GLB with the palette textures; **Blender** downloads the build's `.blend` with the
-  current palette textures (open it from the unzipped folder).
-
-## Authorising the agent
-
-The agent runs Claude Code on your subscription, not on API keys.
-
-1. Run `claude setup-token` and complete the sign-in in your browser. It can run in the agent container
-   (`docker exec -it <agent container> claude setup-token`; find the container with `docker ps`) or on any machine
-   with Claude Code.
-2. Store the printed token: `dotnet user-secrets set "Parameters:claude-oauth-token" "<token>" --project Slopoly.AppHost`,
-   then restart the AppHost (`aspire stop`, `aspire start`).
-3. Until a token is set, and whenever it expires or is revoked, each chat message fails with an authorisation error
-   that repeats these steps.
-
-The subscription is for your own use of this local app; a hosted, multi-user deployment would need API-key auth.
-
-## Tests
+The skill installs the matching CLI itself the first time it's used. To install it by hand:
 
 ```sh
-dotnet test Slopoly.Tests                                       # .NET (starts containers through Aspire testing)
-docker compose -f workers/compose.test.yaml run --rm tests            # Python workers, in a container
-docker compose -f workers/compose.test.yaml run --rm geometry-tests   # geometry (bpy)
-docker compose -f workers/compose.test.yaml run --rm agent-tests      # agent worker (stubbed SDK)
+uv tool install "git+https://github.com/giollord/slopoly@v0.1.0"
+slopoly --version
 ```
+
+## Configure
+
+Machine settings are stored in your user config folder, never in a workspace or this repository:
+
+```sh
+slopoly config set comfyui.url http://127.0.0.1:8188           # default
+slopoly config set comfyui.models_dir <models-dir>              # your ComfyUI's models folder (for --fetch)
+slopoly config set blender.path <path to blender>               # only if it isn't found
+slopoly config show
+slopoly doctor            # checks ComfyUI (reachable, nodes, models), Blender (version, libraries) and settings
+slopoly doctor --fetch    # downloads missing models (about 37 GB in all) and installs Blender's build libraries
+```
+
+`doctor --fetch` installs Pillow, scikit-image and manifold3d for Blender's own Python into a Slopoly-managed folder.
+Blender's installation is not changed. The required models and their licences are listed in `comfyui/README.md`.
+
+## Use
+
+Ask your agent for assets, for example "make a low-poly gnome village pack: a wooden cart, a well and a mushroom
+house". The skill takes it through these steps:
+
+1. `slopoly init` creates the workspace.
+2. Style anchors are generated, and you pick the ones you like.
+3. Heroes of each asset are generated, and you pick one (or several: each becomes its own variant).
+4. Views and part masks are made from the picked hero.
+5. The agent writes the palette, the manifest and the part program.
+6. The agent builds and compares with the views until the model looks right.
+
+A small window (or a browser tab) opens whenever you need to choose, and `slopoly view <pack>/<asset>` opens a 3D
+viewer with the build's comparison images.
+
+Each pack is a folder:
+
+```
+slopoly/
+  slopoly.yaml
+  knowledge/                      notes the agent writes (techniques, objects)
+  my-cool-gnome-pack/
+    pack.yaml  style.md  palette.yaml  palette/  style/  anchors/  scenes/  jobs/  .gitignore
+    assets/cart/
+      asset.yaml
+      heroes/  views/  masks/       concept images of the asset, and the views and part masks of picked ones
+      variants/default/
+        variant.yaml  manifest.yaml  program.py
+        builds/0001/  program.py  report.json  model.glb  model.blend  render_*.png  compare_*.png
+```
+
+Slopoly never runs git, so commit what you want to keep. Each pack's generated `.gitignore` keeps the sources, every
+build's program and report, and the current builds' models. It ignores job files, the binaries of older builds, and
+the `rejected/` folders, where images you didn't pick and failed builds are set aside.
+Lines you add outside its marked section are kept.
+
+Export a build for your game with `slopoly export <pack>/<asset> --to <dir> [--blend]`. Run `slopoly --help` to see
+every command.
+
+**Trust:** a build runs the agent-written `program.py` in your Blender with your user rights. That is the same trust
+you give an agent that edits and runs code in your repository.
+
+## Develop
+
+```sh
+uv run slopoly --version                  # the CLI from this checkout
+uv run pytest                             # host tests (Blender-backed tests skip without Blender)
+uv run slopoly dev test-blender           # geometry tests inside your Blender
+uv tool install --force .                 # put this checkout's CLI on the PATH
+```
+
+- **Workflows** are edited with the `comfy` CLI (see `comfyui/README.md`).
+- **Planning** lives in `openspec/`.
+- **Versions:** the version is in `pyproject.toml`, `plugin/.claude-plugin/plugin.json`,
+  `.claude-plugin/marketplace.json` and the skill. A test keeps them equal. Tag releases `v<version>`, because the
+  skill installs from that tag.

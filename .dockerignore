@@ -1,7 +1,0 @@
-# Build context is the repo root; send only what images COPY.
-**
-!workers/pyproject.toml
-!workers/slopoly_worker/**
-!containers/**
-!geometry/**
-!agent/**

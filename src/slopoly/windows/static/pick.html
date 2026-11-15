@@ -1,0 +1,168 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Slopoly pick</title>
+<link rel="stylesheet" href="static/style.css">
+<style>
+  .grid { display: grid; grid-template-columns: repeat(auto-fill, minmax(260px, 1fr)); gap: 12px; align-items: start; }
+  .card { background: var(--panel); border: 2px solid var(--line); border-radius: 8px; overflow: hidden; }
+  .card.picked { border-color: var(--good); }
+  .card.rejected-before { opacity: .6; }
+  .card img { display: block; width: 100%; aspect-ratio: 1; object-fit: contain; background: #888; cursor: zoom-in; }
+  .card .info { padding: 8px 10px 10px; display: flex; flex-direction: column; gap: 6px; }
+  .card .name { font-weight: 600; }
+  .card .prompt { color: var(--muted); font-size: 12px; line-height: 1.4; display: -webkit-box; -webkit-box-orient: vertical;
+    -webkit-line-clamp: 3; line-clamp: 3; overflow: hidden; cursor: pointer; }
+  .card .prompt.open { -webkit-line-clamp: unset; line-clamp: unset; }
+  .card .variant { display: none; gap: 6px; align-items: center; }
+  .card.picked .variant { display: flex; }
+  .card .variant input { flex: 1; min-width: 0; }
+  .card .hint { font-size: 12px; color: var(--muted); }
+  .options label { display: block; margin: 4px 0; }
+  .refs { display: flex; gap: 10px; flex-wrap: wrap; margin-bottom: 16px; }
+  .refs figure { margin: 0; width: 120px; font-size: 12px; color: var(--muted); }
+  .refs img { width: 120px; aspect-ratio: 1; object-fit: contain; background: #888; border-radius: 6px; display: block; }
+  footer { position: sticky; bottom: 0; padding: 12px 16px; border-top: 1px solid var(--line); background: var(--panel);
+    display: flex; flex-direction: column; gap: 8px; }
+  footer textarea { width: 100%; min-height: 48px; }
+  .warning { color: var(--bad); display: none; }
+  #zoom { position: fixed; inset: 0; background: rgba(0,0,0,.85); display: none; align-items: center; justify-content: center; }
+  #zoom img { max-width: 95vw; max-height: 95vh; }
+  .done { padding: 48px; text-align: center; font-size: 18px; }
+</style>
+</head>
+<body>
+<header><h1 id="title">Pick</h1><p id="question"></p></header>
+<main>
+  <div class="options" id="options"></div>
+  <div id="refs-box" style="display:none"><p class="muted">Current references (kept):</p><div class="refs" id="refs"></div></div>
+  <div class="grid" id="grid"></div>
+</main>
+<footer id="footer">
+  <div class="warning" id="warning"></div>
+  <textarea id="note" placeholder="Optional note for the agent (e.g. 'make the wheels bigger')"></textarea>
+  <div class="bar">
+    <button class="primary" id="confirm">Confirm</button>
+    <span id="status" class="muted"></span>
+  </div>
+</footer>
+<div id="zoom"><img alt=""></div>
+<script>
+const state = { picked: new Map(), data: null }; // path -> variant name ("" for anchors)
+const $ = id => document.getElementById(id);
+
+function card(item) {
+  const el = document.createElement("div");
+  el.className = "card" + (item.state === "rejected" ? " rejected-before" : "");
+  el.innerHTML = `<img alt=""><div class="info"><div class="name"></div><div class="prompt"></div>
+    <label class="variant">Variant <input type="text" spellcheck="false"></label><div class="hint"></div>
+    <div class="bar"><button data-act="pick">Pick</button></div></div>`;
+  el.querySelector("img").src = item.url;
+  el.querySelector(".name").textContent = item.name + (item.state === "rejected" ? " (rejected before)" : "") +
+    (item.seed != null ? `  seed ${item.seed}` : "");
+  const prompt = el.querySelector(".prompt");
+  prompt.textContent = item.prompt || "";
+  prompt.title = "Click to show all";
+  prompt.onclick = () => prompt.classList.toggle("open");
+  el.querySelector("img").onclick = () => { $("zoom").querySelector("img").src = item.url; $("zoom").style.display = "flex"; };
+  el.querySelector("[data-act=pick]").onclick = () => toggle(item.path);
+  el.querySelector(".variant input").oninput = e => { state.picked.set(item.path, e.target.value.trim()); render(); };
+  el.dataset.path = item.path;
+  return el;
+}
+
+function suggestion() {
+  const used = new Set(state.picked.values());
+  return state.data.suggested.find(n => !used.has(n)) || "";
+}
+
+function toggle(path) {
+  if (state.picked.has(path)) state.picked.delete(path);
+  else {
+    state.picked.set(path, state.data.heroes ? suggestion() : "");
+    const limit = state.data.limit;
+    if (limit && state.picked.size > limit) state.picked.delete([...state.picked.keys()][0]);
+  }
+  render();
+}
+
+function render() {
+  const heroes = state.data.heroes;
+  for (const el of $("grid").children) {
+    const picked = state.picked.has(el.dataset.path);
+    el.classList.toggle("picked", picked);
+    el.querySelector("[data-act=pick]").textContent = picked ? "Picked ✓" : "Pick";
+    el.querySelector("[data-act=pick]").classList.toggle("on", picked);
+    const input = el.querySelector(".variant input"), hint = el.querySelector(".hint");
+    hint.textContent = "";
+    if (heroes && picked) {
+      if (document.activeElement !== input) input.value = state.picked.get(el.dataset.path);
+      const name = state.picked.get(el.dataset.path);
+      const existing = state.data.references.find(r => r.variant === name);
+      if (existing) hint.textContent = `Replaces the reference of "${name}" (${existing.name}).`;
+      else if (state.data.variants.includes(name)) hint.textContent = `Becomes the reference of "${name}".`;
+      else if (name) hint.textContent = `Creates the variant "${name}".`;
+    }
+  }
+  const warnings = [];
+  if (heroes && state.picked.size > 1)
+    warnings.push(`You picked ${state.picked.size} heroes: each one creates (or replaces the reference of) its own variant.`);
+  const names = [...state.picked.values()];
+  if (heroes && names.some(n => !n)) warnings.push("Name the variant of every picked hero.");
+  if (heroes && new Set(names).size !== names.length) warnings.push("Each picked hero needs its own variant name.");
+  $("warning").textContent = warnings.join(" ");
+  $("warning").style.display = warnings.length ? "block" : "none";
+}
+
+async function load() {
+  const data = await (await fetch("api/state")).json();
+  state.data = data;
+  $("title").textContent = data.title;
+  const rest = data.images.length ? " Images you don't pick are rejected: moved to a rejected/ folder that git ignores." : "";
+  $("question").textContent = (data.question ? data.question + " " : "") + (data.limit ? `Pick up to ${data.limit}.` : "") +
+    (data.heroes ? " Pick one hero per variant you want." : "") + rest;
+  document.title = data.title;
+  for (const item of data.images) {
+    if (item.state === "picked") state.picked.set(item.path, "");
+    $("grid").appendChild(card(item));
+  }
+  for (const ref of data.references || []) {
+    const fig = document.createElement("figure");
+    fig.innerHTML = `<img alt=""><figcaption></figcaption>`;
+    fig.querySelector("img").src = ref.url;
+    fig.querySelector("figcaption").textContent = `${ref.variant}: ${ref.name}`;
+    $("refs").appendChild(fig);
+  }
+  $("refs-box").style.display = (data.references || []).length ? "block" : "none";
+  for (const option of data.options) {
+    const label = document.createElement("label");
+    label.innerHTML = `<input type="radio" name="option"> <span></span>`;
+    label.querySelector("input").value = option;
+    label.querySelector("span").textContent = option;
+    $("options").appendChild(label);
+  }
+  render();
+}
+
+$("zoom").onclick = () => { $("zoom").style.display = "none"; };
+$("confirm").onclick = async () => {
+  const picked = [...state.picked].map(([path, variant]) => state.data.heroes ? { path, variant } : path);
+  const body = { picked, note: $("note").value };
+  const option = document.querySelector("input[name=option]:checked");
+  if (option) body.option = option.value;
+  const unpicked = state.data.images.length - state.picked.size;
+  if (state.data.images.length && !state.picked.size &&
+      !confirm(`Nothing is picked: all ${unpicked} images will be rejected. Continue?`)) return;
+  $("confirm").disabled = true;
+  const response = await fetch("api/choice", { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify(body) });
+  const result = await response.json();
+  if (!response.ok) { $("status").textContent = result.error; $("status").className = "error"; $("confirm").disabled = false; return; }
+  document.body.innerHTML = `<div class="done">Saved. You can close this window or tab.</div>`;
+};
+setInterval(() => fetch("api/state").catch(() => {}), 5000); // keeps a browser-tab window alive
+load();
+</script>
+</body>
+</html>

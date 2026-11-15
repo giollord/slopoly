@@ -1,0 +1,64 @@
+# Models the shipped workflows need. All are free to download (no sign-in) and allow commercial use of their outputs.
+# `slopoly doctor` checks them against your ComfyUI; `slopoly doctor --fetch` downloads missing ones into
+# <models-dir>/<subfolder>/<file> when comfyui.models_dir is configured.
+models:
+  - file: flux2-vae.safetensors
+    subfolder: vae
+    url: https://huggingface.co/Comfy-Org/flux2-dev/resolve/main/split_files/vae/flux2-vae.safetensors
+    size_gb: 0.3
+    licence: Apache 2.0
+    workflows: [views]
+  - file: qwen_image_edit_2511_fp8mixed.safetensors
+    subfolder: diffusion_models
+    url: https://huggingface.co/Comfy-Org/Qwen-Image-Edit_ComfyUI/resolve/main/split_files/diffusion_models/qwen_image_edit_2511_fp8mixed.safetensors
+    size_gb: 20.5
+    licence: Apache 2.0
+    workflows: [style-anchor, hero]
+  - file: qwen_2.5_vl_7b_fp8_scaled.safetensors
+    subfolder: text_encoders
+    url: https://huggingface.co/Comfy-Org/HunyuanVideo_1.5_repackaged/resolve/main/split_files/text_encoders/qwen_2.5_vl_7b_fp8_scaled.safetensors
+    size_gb: 9.4
+    licence: Apache 2.0
+    workflows: [style-anchor, hero]
+  - file: qwen_image_vae.safetensors
+    subfolder: vae
+    url: https://huggingface.co/Comfy-Org/Qwen-Image_ComfyUI/resolve/main/split_files/vae/qwen_image_vae.safetensors
+    size_gb: 0.3
+    licence: Apache 2.0
+    workflows: [style-anchor, hero]
+  - file: Qwen-Image-Edit-2511-Lightning-4steps-V1.0-bf16.safetensors
+    subfolder: loras
+    url: https://huggingface.co/lightx2v/Qwen-Image-Edit-2511-Lightning/resolve/main/Qwen-Image-Edit-2511-Lightning-4steps-V1.0-bf16.safetensors
+    size_gb: 0.8
+    licence: Apache 2.0
+    workflows: [style-anchor, hero]
+  - file: idol_fp16.safetensors
+    subfolder: diffusion_models
+    url: https://huggingface.co/Comfy-Org/Idol/resolve/main/diffusion_models/idol_fp16.safetensors
+    size_gb: 0.7
+    licence: Apache 2.0
+    workflows: [views]
+  - file: idol_decoder_fp16.safetensors
+    subfolder: vae
+    url: https://huggingface.co/Comfy-Org/Idol/resolve/main/vae/idol_decoder_fp16.safetensors
+    size_gb: 0.6
+    licence: Apache 2.0
+    workflows: [views]
+  - file: dino_v3_vit_h_bf16.safetensors
+    subfolder: clip_vision
+    url: https://huggingface.co/Comfy-Org/Idol/resolve/main/clip_vision/dino_v3_vit_h_bf16.safetensors
+    size_gb: 1.7
+    licence: DINOv3 License
+    workflows: [views]
+  - file: birefnet.safetensors
+    subfolder: background_removal
+    url: https://huggingface.co/Comfy-Org/BiRefNet/resolve/main/background_removal/birefnet.safetensors
+    size_gb: 0.4
+    licence: MIT
+    workflows: [views]
+  - file: sam3.1_multiplex_fp16.safetensors
+    subfolder: checkpoints
+    url: https://huggingface.co/Comfy-Org/sam3.1/resolve/main/checkpoints/sam3.1_multiplex_fp16.safetensors
+    size_gb: 1.7
+    licence: SAM License
+    workflows: [segment-parts]

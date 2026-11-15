@@ -6,11 +6,18 @@ Produces the 2D material the modelling pipeline needs, using versioned ComfyUI w
 ## Requirements
 
 ### Requirement: Workflows as repository files
-Each image operation SHALL be defined by a ComfyUI workflow file in the repository, with named inputs the app fills per job. Changing or replacing a workflow file SHALL NOT require application code changes as long as its named inputs stay the same.
+Each image operation SHALL be defined by a ComfyUI workflow file shipped with the CLI, with named inputs the CLI fills
+per job, and SHALL run on the user's configured ComfyUI through its HTTP API. Input and output images SHALL be
+transferred through that API, so ComfyUI may run on another machine. Changing or replacing a workflow file SHALL NOT
+require code changes as long as its named inputs stay the same.
 
 #### Scenario: Swap a model
-- **WHEN** a developer edits the turnaround workflow to use a different checkpoint, keeping its named inputs
-- **THEN** turnaround jobs use the new checkpoint with no code change
+- **WHEN** a developer edits the hero workflow to use a different checkpoint, keeping its named inputs
+- **THEN** hero jobs use the new checkpoint with no code change
+
+#### Scenario: Remote ComfyUI
+- **WHEN** the configured ComfyUI URL points to another machine on the network
+- **THEN** a hero job uploads its references there and writes the resulting images into the workspace
 
 ### Requirement: Style anchor generation
 The system SHALL generate a scene image for a pack from the pack's style guide and a scene description. It SHALL use the pack's picked reference images as style references when present.
@@ -18,7 +25,7 @@ The system SHALL generate a scene image for a pack from the pack's style guide a
 #### Scenario: Anchor with references
 - **GIVEN** a pack with style text and one picked reference image
 - **WHEN** a style anchor job runs with a scene description
-- **THEN** one or more scene images are stored as concept images of the pack
+- **THEN** one or more scene images are stored in the pack's anchors folder with their metadata
 
 ### Requirement: Part segmentation
 The system SHALL produce, for the view images of a hero and a list of part names, one mask per found part per view, with the mask's bounding box and area. The whole-object mask of each view SHALL come from the view's render silhouette. Parts that are not found SHALL be reported as missing rather than failing the job.

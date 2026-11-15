@@ -1,0 +1,124 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Slopoly view</title>
+<link rel="stylesheet" href="static/style.css">
+<script type="importmap">
+{ "imports": { "three": "./static/three/build/three.module.min.js", "three/addons/": "./static/three/examples/jsm/" } }
+</script>
+<style>
+  body { height: 100vh; display: flex; flex-direction: column; }
+  .layout { flex: 1; display: grid; grid-template-columns: minmax(0, 1fr) 360px; min-height: 0; }
+  @media (max-width: 900px) { .layout { grid-template-columns: 1fr; grid-template-rows: 60vh auto; } }
+  .stage { position: relative; min-height: 0; display: flex; flex-direction: column; }
+  #canvas { flex: 1; min-height: 0; }
+  .toolbar { padding: 8px 12px; border-top: 1px solid var(--line); background: var(--panel); }
+  aside { overflow: auto; border-left: 1px solid var(--line); background: var(--panel); padding: 12px; }
+  aside h2 { font-size: 13px; text-transform: uppercase; letter-spacing: .04em; color: var(--muted); margin: 16px 0 6px; }
+  aside img { width: 100%; border: 1px solid var(--line); border-radius: 4px; display: block; }
+  .compare { margin-bottom: 12px; }
+  .ok { color: var(--good); } .bad { color: var(--bad); }
+  table { border-collapse: collapse; width: 100%; font-size: 12px; }
+  td { padding: 2px 4px; border-bottom: 1px solid var(--line); }
+  #error { position: absolute; top: 8px; left: 8px; }
+</style>
+</head>
+<body>
+<header><h1 id="title">Loading...</h1></header>
+<div class="layout">
+  <div class="stage">
+    <div id="canvas"></div>
+    <div id="error" class="error"></div>
+    <div class="toolbar bar" id="toolbar">
+      <button data-overlay="wireframe" title="Every triangle edge">Wireframe</button>
+      <button data-overlay="grid" title="Ground grid at y = 0, 1-metre cells">Grid</button>
+      <button data-overlay="axes" title="Origin axes: x red, y green, z blue">Axes</button>
+      <button data-overlay="normals" title="Vertex normals">Normals</button>
+      <button data-overlay="shade" title="Baked shade (off: palette colours only)">Shade</button>
+      <button id="reset">Reset view</button>
+      <label class="muted">Palette <select id="palette"><option value="">embedded</option></select></label>
+    </div>
+  </div>
+  <aside id="side"></aside>
+</div>
+<script type="module">
+import { create } from "./static/viewer3d.js";
+
+const $ = id => document.getElementById(id);
+const viewer = create($("canvas"));
+const overlays = { wireframe: false, grid: false, axes: false, normals: false, shade: true };
+let model = null;
+
+const prefs = await (await fetch("api/prefs")).json().catch(() => ({}));
+Object.assign(overlays, prefs.overlays || {});
+function paintToolbar() {
+  for (const b of document.querySelectorAll("[data-overlay]")) b.classList.toggle("on", !!overlays[b.dataset.overlay]);
+}
+for (const b of document.querySelectorAll("[data-overlay]")) b.onclick = () => {
+  overlays[b.dataset.overlay] = !overlays[b.dataset.overlay];
+  viewer.setOverlays(overlays);
+  paintToolbar();
+  fetch("api/prefs", { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ ...prefs, overlays }) });
+};
+$("reset").onclick = () => viewer.resetView();
+$("palette").onchange = () => viewer.setPalette($("palette").value || null).catch(e => { $("error").textContent = e.message; });
+paintToolbar();
+viewer.setOverlays(overlays);
+
+const fmt = v => v == null ? "-" : (typeof v === "number" ? (Math.round(v * 1000) / 1000) : v);
+function esc(s) { return String(s).replace(/[&<>"]/g, c => ({ "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;" }[c])); }
+
+function side(s) {
+  if (s.kind === "scene") {
+    const r = s.report || {};
+    return `<h2>Placements</h2><table>${(r.placements || []).map(p =>
+      `<tr><td>${esc(p.name)}</td><td class="${p.grounded ? "ok" : "bad"}">${p.grounded ? "grounded" : "floating"}</td></tr>`).join("")}</table>
+      <h2>Overlaps</h2>${(r.overlaps || []).length ? `<table>${r.overlaps.map(o => `<tr><td>${esc(o.a)} / ${esc(o.b)}</td><td>${fmt(o.fraction)}</td></tr>`).join("")}</table>` : "<p class='muted'>none</p>"}`;
+  }
+  const failing = s.failing || {};
+  const issues = [...(s.issues || []).map(i => i.message || i.issue),
+    ...(failing.intersections || []).map(i => `intersection ${i.a} / ${i.b}: ${fmt(i.fraction)}`),
+    ...(failing.contacts || []).map(c => `gap ${c.part} to ${c.parent}: ${fmt(c.gap)} m`),
+    ...(failing.disconnected || []).map(d => `disconnected: ${d}`)];
+  const shadingRows = (s.shading?.parts || []).filter(p => p.openEdges || p.inward || p.bent)
+    .map(p => `<tr><td>${esc(p.part)}</td><td>open ${p.openEdges}</td><td>inward ${p.inward}</td><td>bent ${p.bent}</td></tr>`).join("");
+  return `<p><span class="${s.validated ? "ok" : "bad"}">${s.validated ? "validated" : "not validated"}</span>,
+      ${s.triangles} / ${s.budget} triangles, mean object IoU ${fmt(s.mean_object_iou)}</p>
+    ${issues.length ? `<h2>Issues</h2><ul>${issues.map(i => `<li>${esc(i)}</li>`).join("")}</ul>` : ""}
+    <h2>Shading</h2><p class="muted">fixed: merged ${fmt(s.shading?.merged)}, removed ${fmt(s.shading?.removed)}, flipped ${fmt(s.shading?.flipped)}</p>
+    ${shadingRows ? `<table>${shadingRows}</table>` : "<p class='muted'>no unfixed defects</p>"}
+    <h2>Comparison with the views</h2>
+    ${s.renders_note ? `<p class="muted">${esc(s.renders_note)}</p>` : ""}
+    ${(s.comparisons || []).map(c => `<div class="compare"><div>${esc(c.view)}: object IoU ${fmt(c.object_iou)}</div>
+      ${c.compare ? `<img src="${c.compare}" alt="${esc(c.view)} comparison">` : ""}</div>`).join("")}
+    <h2>Parts</h2><p class="muted">${(s.parts || []).map(esc).join(", ")}</p>`;
+}
+
+async function refresh() {
+  try {
+    const response = await fetch("api/state");
+    const s = await response.json();
+    if (!response.ok) { $("error").textContent = s.error; return; }
+    $("error").textContent = "";
+    $("title").textContent = s.title;
+    document.title = s.title;
+    if (s.model !== model) {
+      const first = model === null;
+      model = s.model;
+      await viewer.load(s.model, !first);
+      $("side").innerHTML = side(s);
+      const select = $("palette"), chosen = select.value;
+      select.innerHTML = `<option value="">embedded</option>` + Object.entries(s.textures || {})
+        .map(([name, url]) => `<option value="${url}">${esc(name)}</option>`).join("");
+      select.value = chosen;
+      if (chosen) await viewer.setPalette(chosen);
+    }
+  } catch (e) { $("error").textContent = e.message; }
+}
+await refresh();
+setInterval(refresh, 2000); // a new current build loads without reopening the window
+</script>
+</body>
+</html>

@@ -1,0 +1,35 @@
+[project]
+name = "slopoly"
+version = "0.1.0"
+description = "Low-poly 3D game asset packs from ComfyUI concepts and Blender part programs, driven by your coding agent"
+readme = "README.md"
+requires-python = ">=3.11"
+dependencies = [
+    "typer>=0.16",
+    "pydantic>=2.11,<3",
+    "pyyaml>=6.0",
+    "httpx>=0.28,<1",
+    "platformdirs>=4.3",
+    "psutil>=7.0",
+    "pywebview>=5.4",
+    "numpy>=2",
+    "pillow>=11",
+    "scikit-image>=0.25",
+    "websockets>=15",
+]
+
+[project.scripts]
+slopoly = "slopoly.cli:main"
+
+[dependency-groups]
+dev = ["pytest>=8.4", "respx>=0.22"]
+
+[build-system]
+requires = ["hatchling>=1.27"]
+build-backend = "hatchling.build"
+
+[tool.hatch.build.targets.wheel]
+packages = ["src/slopoly"]
+
+[tool.pytest.ini_options]
+testpaths = ["tests"]

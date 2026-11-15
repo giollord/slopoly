@@ -1,6 +1,0 @@
-# Test image for the shared worker package and the light worker code; compose.test.yaml mounts the sources read-only
-# and sets PYTHONPATH and the test command.
-FROM python:3.13-slim
-RUN pip install --no-cache-dir "aio-pika>=10.2,<11" "httpx>=0.28,<1" "pydantic>=2.14,<3" "pytest>=9.2" "pytest-asyncio>=1.5" "respx>=0.23" "pillow>=11" "numpy>=2" "websockets>=14"
-ENV PYTHONDONTWRITEBYTECODE=1
-WORKDIR /src

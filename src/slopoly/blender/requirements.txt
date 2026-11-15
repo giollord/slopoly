@@ -1,0 +1,4 @@
+# Libraries the build needs inside Blender's Python (installed by slopoly doctor --fetch).
+pillow>=11,<13
+scikit-image>=0.25,<0.27
+manifold3d>=3.5,<4

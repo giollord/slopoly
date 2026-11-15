@@ -1,13 +1,13 @@
 # ComfyUI workflows
 
-The comfy worker (`containers/comfyui`) runs these workflows on the ComfyUI inside its container. The models are not
-in the image: the AppHost bind-mounts your models folder (`comfyui-models-dir`, see the root README) at
-`/opt/ComfyUI/models`.
+Development sources of the ComfyUI workflows that the `slopoly` CLI ships in `src/slopoly/comfy/workflows/` and runs
+on the user's ComfyUI over its HTTP API. The required models are listed in `src/slopoly/comfy/models.yaml` (which
+`slopoly doctor --fetch` downloads from) and below.
 
 ## Required models
 
 All are free to download (no Hugging Face sign-in) and allow commercial use of their outputs; the licence check is in
-`openspec/changes/hero-image-and-splat-views/notes.md`. Put each file in its subfolder of `<models-dir>`:
+`openspec/changes/archive/2026-11-14-hero-image-and-splat-views/notes.md`. Put each file in its subfolder of `<models-dir>`:
 
 | File | Subfolder | Size | Used by | Licence |
 |---|---|---|---|---|
@@ -23,7 +23,8 @@ All are free to download (no Hugging Face sign-in) and allow commercial use of t
 | [sam3.1_multiplex_fp16.safetensors](https://huggingface.co/Comfy-Org/sam3.1/resolve/main/checkpoints/sam3.1_multiplex_fp16.safetensors) | `checkpoints` | 1.7 GB | segment-parts | SAM License |
 
 Download each with `curl -L -o <subfolder>/<file> <url>` from `<models-dir>`. A job whose model is missing fails with a
-`missing_model` error that names the file.
+`missing_model` error that names the file; `slopoly doctor --fetch` downloads missing models into
+`comfyui.models_dir`.
 
 ## Workflows
 
@@ -39,17 +40,16 @@ The reference wiring follows the gallery template `image_qwen_image_edit_2511`: 
 negative; the image is sampled from an empty latent at the workflow's size. Each slot sits behind a `ComfySwitchNode`
 driven by `use_reference_<n>` whose `on_false` is unconnected, so an empty slot passes no image (it still needs an
 existing file, a placeholder). Qwen won the bake-off against FLUX.2 klein 4B (see
-`openspec/changes/hero-image-and-splat-views/notes.md`). The `views` wiring follows the gallery template `3d_idol_image_to_gaussian_splat` (BiRefNet background removal,
+`openspec/changes/archive/2026-11-14-hero-image-and-splat-views/notes.md`). The `views` wiring follows the gallery template `3d_idol_image_to_gaussian_splat` (BiRefNet background removal,
 DINOv3 conditioning, Idol sampling and decoding), with native `RenderSplat` turntables in place of its video. The
 segmentation wiring follows `utility_image_segment_sam3`.
 
 ## Editing workflows (development)
 
-Workflows are built with the `comfy` CLI against the container's ComfyUI, never in the ComfyUI GUI. The container
-publishes ComfyUI on `http://127.0.0.1:8288`, so start the stack and point the CLI there:
+Workflows are built with the `comfy` CLI against a running ComfyUI, never in the ComfyUI GUI. Point the CLI at it:
 
 ```sh
-export COMFY_LOCAL_URL=http://127.0.0.1:8288
+export COMFY_LOCAL_URL=http://127.0.0.1:8188
 ```
 
 - `source/<name>.json` holds the editable (UI-format) graphs. Change them with structured edits, for example
@@ -59,12 +59,12 @@ export COMFY_LOCAL_URL=http://127.0.0.1:8288
     `comfy workflow apply source/hero.json --ops recipes/qwen-image-edit-references.recipe.json --param width=1024 --param height=1024 --param prefix=slopoly/hero`;
   - `recipes/idol-views.recipe.json` builds `views`:
     `comfy workflow apply source/views.json --ops recipes/idol-views.recipe.json`.
-- `./export.sh` compiles every source into the API-format `workflows/<name>.json` that the worker runs. Run it after
-  every change. The workflows folder is mounted into the container, so no rebuild is needed.
+- `./export.sh` compiles every source into the API-format `src/slopoly/comfy/workflows/<name>.json` that the CLI runs.
+  Run it after every change, and keep the model list in `src/slopoly/comfy/models.yaml` in step.
 - `reference/` holds the gallery templates the graphs were derived from.
 
 The conventions:
 
 - Nodes titled `in:<name>` receive job values in their main widget.
 - Save nodes titled `out:<name>` are the outputs.
-- Keep the names in the table above, because the worker relies on them.
+- Keep the names in the table above, because the CLI relies on them.
