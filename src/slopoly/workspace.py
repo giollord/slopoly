@@ -10,7 +10,7 @@ from dataclasses import dataclass
 from pathlib import Path
 
 from . import models as m
-from .core import SlopolyError, load, write_atomic, write_yaml
+from .core import SlopolyError, load, record_version, write_atomic, write_yaml
 
 FOLDER = "slopoly"
 MARKER = "slopoly.yaml"
@@ -27,6 +27,12 @@ def check_name(name: str, what: str) -> str:
 
 
 def find(start: Path | None = None) -> Workspace:
+    workspace = locate(start)
+    record_version(workspace.root)
+    return workspace
+
+
+def locate(start: Path | None = None) -> Workspace:
     if env := os.environ.get("SLOPOLY_WORKSPACE"):
         root = Path(env).resolve()
         if not (root / MARKER).exists():
@@ -47,6 +53,7 @@ def init(where: Path | None = None) -> Workspace:
     if (root / MARKER).exists():
         raise SlopolyError("exists", f"{root.as_posix()} is already a workspace")
     write_yaml(root / MARKER, m.Workspace())
+    record_version(root)
     for sub in ("techniques", "objects"):
         (root / "knowledge" / sub).mkdir(parents=True, exist_ok=True)
     return Workspace(root)

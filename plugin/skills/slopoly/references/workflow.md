@@ -106,7 +106,8 @@ a machine), use **fewer, coarser names** first (`boiler, cab, chimney, wheels, c
 - the image size, the silhouette bounds and `m_per_px`;
 - the part masks (bounds, area, measured colours), including a mask named `object` for the view's exact silhouette;
 - `regions`: each part's region on the reference mesh, voted from several renders, with `bounds` in metres,
-  `agreement` and `uncertain` (agreement below 0.6). Use these bounds to size and place parts.
+  `agreement` and `uncertain` (agreement below 0.6). Use these bounds to size and place parts. A region marked
+  `implausible` spans most of the object, so it is not that part: `look --region` refuses it; use `--box` instead.
 
 Parts listed as missing (`not_found`, or `whole_object` when the detector returned the whole object) and masks marked
 `implausible` (too large, or nearly the same box as another part) are not trusted. Narrow them down:
@@ -233,7 +234,9 @@ plough built as a flat bar, a missing part behind another):
 - `volume_iou`: the overlap of the two solids (0-1);
 - `distance`: `mean` and `p90` surface distance in metres, both ways;
 - `missing`: regions where the reference has surface the build lacks, each with `bounds` in metres, its `share` of the
-  surface and the build `parts` nearby; `extra`: the reverse.
+  surface and the build `parts` nearby; `extra`: the reverse;
+- `inside_build`: reference surfaces inside the build's closed volume (the rough mesh's inner walls), with the
+  `parts` that enclose them. They are not missing; ignore them unless the part should be hollow.
 
 Treat a large `missing` or `extra` region like a `detail` region: fix it, or explain it (the reference mesh is rough,
 and its hidden sides are guesses).
@@ -255,7 +258,9 @@ the user if no window appeared. In the window the user sees the reference (the h
 beside the build, locks the cameras, paints over what is wrong on either side and writes a comment, as many notes as
 they like, then sends them. The job result lists the notes:
 
-- `number`, `comment` and the pane `images` (the paint is drawn on them; open them);
+- `number`, `comment` and the pane `images` (open them): the painted area is shown as it was, inside a yellow and
+  black border, and the rest is dimmed. The border and the dimming are not part of the design. A pane without paint
+  is the plain view;
 - `hits`: the build parts under the paint, each with its `share` of the paint and its `centre` in metres;
 - `empty`: the share of paint over empty space (something missing), and `region`: the painted bounds on the
   reference mesh, in metres.
@@ -264,8 +269,12 @@ they like, then sends them. The job result lists the notes:
 is about, even when another part has some share. Work through the notes in order. After the build that addresses a
 note, run `slopoly note <pack>/<asset>[:<variant>] <number> addressed --by <build> --reason "what you changed"`. A note
 you can't fix gets `wontfix` with the reason, and you tell the user. `slopoly notes <target>` lists the open and
-addressed notes. The next review shows addressed notes for the user to confirm or reopen; a reopened note comes back
-`open` with the user's new comment.
+addressed notes (`--brief`: only number, status and comment). The next review shows addressed notes for the user to
+confirm or reopen; a reopened note comes back `open` with the user's new comment. `slopoly status` counts addressed
+notes the user hasn't confirmed yet as `unconfirmed`: they are not done until a review closes them.
+
+If the user closes the window with unsent notes, the window asks whether to send them. A review closed without
+sending ends `cancelled`, with no notes.
 
 After a review, stop only when the build is validated, the variant has no open notes (`slopoly status` counts them),
 and every IoU drop since the review is explained in your report. A drop caused by a change the user asked for is

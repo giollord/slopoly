@@ -37,8 +37,11 @@ WHOLE_OBJECT_IOU = 0.9
 MAX_INSTANCES = 8
 HERO_IMAGE = ("ONE object only, whole and centred: {0}. Three-quarter front view from the front-left, slightly from "
               "above, with the whole object in frame. No smoke, steam, fire, sparks, dust or other particles. Plain "
-              "light grey background, nothing else in the image. Copy only the colours, materials and style of the "
-              "reference images, not their objects.")
+              "light grey background, nothing else in the image.")
+# Put before the prompt when the workflow draws on its empty canvas (image 1) rather than editing a source image.
+CANVAS = "Image 1 is an empty canvas: draw the new image on it."
+CANVAS_REFERENCES = (" Use images 2 and later only for their art style (line work, shading, colours and materials); "
+                     "copy nothing else from them: not their scene, objects, buildings, scenery or smoke.")
 
 
 def style_text(pack: Pack) -> str:
@@ -224,9 +227,11 @@ def write_outputs(context: jobs.JobContext, files: dict[Path, bytes | Any]) -> N
 def generate(context: jobs.JobContext, client: ComfyClient | None = None) -> dict:
     inputs, ws = context.inputs, context.ws
     runner = Runner(context, client)
-    values: dict[str, Any] = {"prompt": inputs["prompt"]}
     refs = list(inputs.get("references") or [])
     prompt = workflow.load(inputs["workflow"])
+    canvas = "use_canvas" in workflow.inputs(prompt) and not inputs.get("source")  # a revision edits its source
+    text = f"{CANVAS}{CANVAS_REFERENCES if refs else ''}\n\n{inputs['prompt']}" if canvas else inputs["prompt"]
+    values: dict[str, Any] = {"prompt": text, "use_canvas": canvas}
     for i, slot in enumerate(workflow.reference_slots(prompt)):
         if i < len(refs):
             values[f"reference_{slot}"] = runner.upload(ws.root / refs[i])
@@ -443,7 +448,8 @@ def segment(context: jobs.JobContext, client: ComfyClient | None = None) -> dict
             faces = f"{part}_faces.json"
             files[folder / faces] = json.dumps(found3d["faces"]).encode()
             regions.append(m.Region(part=part, faces=faces, bounds=found3d["bounds"],
-                                    agreement=found3d["agreement"], uncertain=found3d["uncertain"]))
+                                    agreement=found3d["agreement"], uncertain=found3d["uncertain"],
+                                    implausible=found3d.get("implausible")))
     old = asset.masks(hero.path.name)
     kept = [k for k in (old.masks if old else []) if k.part not in names and k.part != "object"]
     for k in kept:  # parts not named this time keep their masks
@@ -476,5 +482,5 @@ def segment(context: jobs.JobContext, client: ComfyClient | None = None) -> dict
                        **({"region": k.region} if k.region else {}),
                        **({"implausible": k.implausible} if k.implausible else {})} for k in meta.masks],
             "missing": meta.missing,
-            "regions": [{"part": r.part, "bounds": r.bounds, "agreement": r.agreement, "uncertain": r.uncertain}
-                        for r in regions]}
+            "regions": [{"part": r.part, "bounds": r.bounds, "agreement": r.agreement, "uncertain": r.uncertain,
+                         **({"implausible": r.implausible} if r.implausible else {})} for r in regions]}

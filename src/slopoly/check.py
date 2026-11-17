@@ -148,8 +148,11 @@ def variant_status(variant: Variant) -> dict:
     from .review import load_notes  # review imports meshview; keep it out of every status call's import time
     notes = load_notes(variant).notes
     if notes:
-        out["notes"] = {"open": sum(n.status == "open" for n in notes),
-                        "addressed": sum(n.status == "addressed" for n in notes)}
+        # addressed notes stay unconfirmed until the user closes or reopens them in a review
+        unconfirmed = sum(n.status == "addressed" for n in notes)
+        out["notes"] = {"open": sum(n.status == "open" for n in notes), "unconfirmed": unconfirmed}
+        if unconfirmed:
+            out["notes"]["hint"] = f"the user confirms addressed notes in the next review: slopoly review {variant.address}"
     return out
 
 

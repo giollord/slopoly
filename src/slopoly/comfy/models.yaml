@@ -8,29 +8,23 @@ models:
     size_gb: 0.3
     licence: Apache 2.0
     workflows: [idol-mesh]
-  - file: qwen_image_edit_2511_fp8mixed.safetensors
+  - file: mage_flow_edit_turbo_int8_convrot.safetensors
     subfolder: diffusion_models
-    url: https://huggingface.co/Comfy-Org/Qwen-Image-Edit_ComfyUI/resolve/main/split_files/diffusion_models/qwen_image_edit_2511_fp8mixed.safetensors
-    size_gb: 20.5
-    licence: Apache 2.0
+    url: https://huggingface.co/Comfy-Org/Mage-Flow/resolve/main/diffusion_models/mage_flow_edit_turbo_int8_convrot.safetensors
+    size_gb: 4.2
+    licence: MIT
     workflows: [style-anchor, hero]
-  - file: qwen_2.5_vl_7b_fp8_scaled.safetensors
+  - file: qwen3vl_4b_bf16.safetensors
     subfolder: text_encoders
-    url: https://huggingface.co/Comfy-Org/HunyuanVideo_1.5_repackaged/resolve/main/split_files/text_encoders/qwen_2.5_vl_7b_fp8_scaled.safetensors
-    size_gb: 9.4
+    url: https://huggingface.co/Comfy-Org/Mage-Flow/resolve/main/text_encoders/qwen3vl_4b_bf16.safetensors
+    size_gb: 8.9
     licence: Apache 2.0
     workflows: [style-anchor, hero]
-  - file: qwen_image_vae.safetensors
+  - file: mage_flow_vae_bf16.safetensors
     subfolder: vae
-    url: https://huggingface.co/Comfy-Org/Qwen-Image_ComfyUI/resolve/main/split_files/vae/qwen_image_vae.safetensors
+    url: https://huggingface.co/Comfy-Org/Mage-Flow/resolve/main/vae/mage_flow_vae_bf16.safetensors
     size_gb: 0.3
-    licence: Apache 2.0
-    workflows: [style-anchor, hero]
-  - file: Qwen-Image-Edit-2511-Lightning-4steps-V1.0-bf16.safetensors
-    subfolder: loras
-    url: https://huggingface.co/lightx2v/Qwen-Image-Edit-2511-Lightning/resolve/main/Qwen-Image-Edit-2511-Lightning-4steps-V1.0-bf16.safetensors
-    size_gb: 0.8
-    licence: Apache 2.0
+    licence: MIT
     workflows: [style-anchor, hero]
   - file: idol_fp16.safetensors
     subfolder: diffusion_models

@@ -23,11 +23,14 @@ mimetypes.add_type("model/gltf-binary", ".glb")
 
 class PageServer:
     """Serves ``page`` at ``/<token>/``, ``static/``, ``files/<workspace path>`` and a small JSON API:
-    ``GET api/state`` (``state()``), ``POST api/choice`` (``choose(body)``), ``GET``/``POST api/prefs``."""
+    ``GET api/state`` (``state()``), ``POST api/choice`` (``choose(body)``), ``GET``/``POST api/prefs``, and
+    ``POST api/<name>`` for each extra route given."""
 
     def __init__(self, workspace_root: Path, page: str, state: Callable[[], dict],
-                 choose: Callable[[dict], dict] | None = None):
-        self.root, self.page, self.state, self.choose = workspace_root.resolve(), page, state, choose
+                 choose: Callable[[dict], dict] | None = None, routes: dict[str, Callable[[dict], dict]] | None = None):
+        self.root, self.page, self.state = workspace_root.resolve(), page, state
+        self.routes = {"api/choice": choose} if choose else {}
+        self.routes |= routes or {}
         self.token = secrets.token_urlsafe(16)
         self.last_seen = 0.0
         server = self
@@ -86,9 +89,9 @@ class PageServer:
                 if rest == "api/prefs":
                     config.save_prefs(body if isinstance(body, dict) else {})
                     return self.send_json({"ok": True})
-                if rest == "api/choice" and server.choose:
+                if handler := server.routes.get(rest):
                     try:
-                        return self.send_json(server.choose(body))
+                        return self.send_json(handler(body))
                     except SlopolyError as error:
                         return self.send_json(error.as_dict(), 400)
                 self.send(404, b"not found", "text/plain")

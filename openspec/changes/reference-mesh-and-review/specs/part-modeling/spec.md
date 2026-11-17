@@ -69,6 +69,23 @@ shape's mesh. Any face left without a tag after a program SHALL be reported as a
 
 ## ADDED Requirements
 
+### Requirement: One triangle count
+A build's result and report SHALL give one triangle count, the one the budget check uses. A build over budget SHALL
+list an `over_budget` issue. The result SHALL include a compact list of parts with their triangles, so the agent can
+see where the budget goes without opening the report.
+
+#### Scenario: Over budget
+- **WHEN** a build has 6,016 triangles against a budget of 6,000
+- **THEN** the result says 6,016, lists `over_budget` under the validation issues, and names each part's triangles
+
+### Requirement: Hidden reference surfaces
+The 3D comparison SHALL NOT report reference volume that lies inside the build's closed volume as missing. Such
+regions SHALL be marked `inside_build` with the parts that enclose them.
+
+#### Scenario: Inside the frame
+- **WHEN** the rough reference mesh has internal surfaces inside the build's solid frame box
+- **THEN** that region is listed as `inside_build` with `frame`, and the missing share doesn't count it
+
 ### Requirement: 3D comparison with the reference mesh
 When the variant's reference hero has a reference mesh, every build SHALL also be compared with it in 3D. The report
 SHALL give the volume overlap of the whole model, the surface distance between them, and regions where the reference

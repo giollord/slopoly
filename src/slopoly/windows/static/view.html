@@ -5,6 +5,15 @@
 <meta name="viewport" content="width=device-width, initial-scale=1">
 <title>Slopoly view</title>
 <link rel="stylesheet" href="static/style.css">
+<script>
+  // a script that fails to load (e.g. missing static files) leaves the page on "Loading...": say so instead
+  addEventListener("error", e => {
+    const title = document.getElementById("title");
+    if (!title || title.textContent !== "Loading...") return;
+    const what = e.target && e.target.src ? e.target.src.split("/static/").pop() : (e.message || "a script");
+    title.textContent = `This page could not load ${what}. Reinstall slopoly (slopoly doctor checks the window files).`;
+  }, true);
+</script>
 <script type="importmap">
 { "imports": { "three": "./static/three/build/three.module.min.js", "three/addons/": "./static/three/examples/jsm/" } }
 </script>
@@ -26,7 +35,7 @@
 </style>
 </head>
 <body>
-<header><h1 id="title">Loading...</h1></header>
+<header class="bar"><h1 id="title">Loading...</h1><button id="theme">Theme</button></header>
 <div class="layout">
   <div class="stage">
     <div id="canvas"></div>
@@ -45,12 +54,14 @@
 </div>
 <script type="module">
 import { create } from "./static/viewer3d.js";
+import { themeSwitch } from "./static/theme.js";
 
 const $ = id => document.getElementById(id);
 const viewer = create($("canvas"));
 const overlays = { wireframe: false, grid: false, axes: false, normals: false, shade: true };
 let model = null;
 
+themeSwitch($("theme"));
 const prefs = await (await fetch("api/prefs")).json().catch(() => ({}));
 Object.assign(overlays, prefs.overlays || {});
 function paintToolbar() {
@@ -60,7 +71,8 @@ for (const b of document.querySelectorAll("[data-overlay]")) b.onclick = () => {
   overlays[b.dataset.overlay] = !overlays[b.dataset.overlay];
   viewer.setOverlays(overlays);
   paintToolbar();
-  fetch("api/prefs", { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ ...prefs, overlays }) });
+  fetch("api/prefs").then(r => r.json()).then(current => fetch("api/prefs", { method: "POST",
+    headers: { "Content-Type": "application/json" }, body: JSON.stringify({ ...current, overlays }) }));
 };
 $("reset").onclick = () => viewer.resetView();
 $("palette").onchange = () => viewer.setPalette($("palette").value || null).catch(e => { $("error").textContent = e.message; });

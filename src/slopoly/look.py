@@ -42,6 +42,9 @@ def region_bounds(variant: Variant, hero: str, part: str) -> np.ndarray:
         raise SlopolyError("no_region", f"no 3D region for {part!r} on the reference mesh",
                            f"segment it: slopoly segment {variant.address} --parts {part}"
                            + (f" (regions: {', '.join(known)})" if known else ""))
+    if found[part].implausible:
+        raise SlopolyError("implausible_region", f"the 3D region of {part!r} {found[part].implausible}, so it is not "
+                           "that part", "look at the part with --box x0,y0,z0,x1,y1,z1 (metres) from the views instead")
     return np.array(found[part].bounds, float)
 
 

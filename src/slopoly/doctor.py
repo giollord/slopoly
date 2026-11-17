@@ -15,8 +15,8 @@ from .comfy.client import ComfyClient
 from .core import SlopolyError
 
 MODELS_FILE = Path(__file__).parent / "comfy" / "models.yaml"
-NODES_HINT = ("update ComfyUI to a recent version (tested with 0.45.3): the workflows use its core Qwen-Image-Edit, "
-              "TripoSplat/RenderSplat, background removal and SAM 3 nodes; see the skill's comfyui-setup reference")
+NODES_HINT = ("update ComfyUI to a recent version (tested with 0.38.0): the workflows use its core Mage-Flow-Edit, "
+              "TripoSplat, TRELLIS.2, background removal and SAM 3 nodes; see the skill's comfyui-setup reference")
 
 
 def required_models() -> list[dict]:
@@ -147,10 +147,23 @@ def fetch(missing: list[dict], models_dir: str | None) -> dict:
     return out
 
 
+WINDOW_FILES = ("pick.html", "view.html", "review.html", "style.css", "theme.js", "viewer3d.js",
+                "three/build/three.module.min.js", "three/examples/jsm/controls/OrbitControls.js")
+
+
+def window_check() -> dict:
+    """The pages and scripts of the pick, view and review windows, which an incomplete install can miss."""
+    static = Path(__file__).parent / "windows" / "static"
+    lacking = [name for name in WINDOW_FILES if not (static / name).is_file()]
+    return check("window files", not lacking, "the pick, view and review pages are installed" if not lacking else
+                 "missing: " + ", ".join(lacking), "reinstall slopoly: uv tool install --force --reinstall <source>")
+
+
 def doctor(fetch_missing: bool = False) -> dict:
     models_dir = config.get("comfyui.models_dir")
     checks, missing = comfy_checks(ComfyClient(config.require("comfyui.url"), timeout=30), models_dir)
     checks += blender_checks()
+    checks.append(window_check())
     checks.append(check("settings", True, f"stored in {config.describe()['file']}",
                         models_dir=models_dir or "(not set: doctor --fetch cannot download models)"))
     result = {"ok": all(c["ok"] for c in checks), "checks": checks}

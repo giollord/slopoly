@@ -18,6 +18,8 @@ from .workspace import Variant
 
 HIT_SIZE = 512  # px: the longest side of the image strokes are evaluated on
 MIN_SHARE = 0.10  # parts with less of a note's stroke weight are left out
+DIM = 0.4  # brightness kept outside the painted area of a note image
+BORDER = (((255, 214, 0), 0.85), ((0, 0, 0), 0.85))  # inner and outer band around it: colour, opacity
 STATUSES = ("open", "addressed", "wontfix")
 
 
@@ -132,6 +134,28 @@ def evaluate(note: dict, build: mv.Mesh, reference: mv.Mesh | None) -> dict:
     return out
 
 
+def highlight(data: bytes, strokes: list[dict]) -> bytes:
+    """A note image for the agent: the painted area as it was, a two-tone semi-transparent border around it and the
+    rest dimmed, nothing blurred and no paint over the object. Without strokes the image is returned unchanged."""
+    if not strokes:
+        return data
+    image = Image.open(io.BytesIO(data)).convert("RGB")
+    painted = stroke_weights(strokes, image.size) > 0
+    if not painted.any():
+        return data
+    band = max(2.0, max(image.size) / 300)
+    distance = ndimage.distance_transform_edt(~painted)
+    pixels = np.asarray(image, dtype=float)
+    out = pixels * DIM
+    out[painted] = pixels[painted]
+    for i, (colour, alpha) in enumerate(BORDER):
+        ring = (distance > i * band) & (distance <= (i + 1) * band)
+        out[ring] = out[ring] * (1 - alpha) + np.array(colour) * alpha
+    buffer = io.BytesIO()
+    Image.fromarray(out.round().astype(np.uint8)).save(buffer, "PNG")
+    return buffer.getvalue()
+
+
 def decode_png(data_url: str | None) -> bytes | None:
     if not data_url or "," not in data_url:
         return None
@@ -157,7 +181,8 @@ def add_notes(variant: Variant, build_number: int, sent: list[dict], build: mv.M
         images = {}
         for pane in ("reference", "model"):
             if (data := decode_png((note.get("images") or {}).get(pane))) is not None:
-                (folder / f"{number:03d}_{pane}.png").write_bytes(data)
+                strokes = note.get("model_strokes" if pane == "model" else "reference_strokes") or []
+                (folder / f"{number:03d}_{pane}.png").write_bytes(highlight(data, strokes))
                 images[pane] = f"{number:03d}_{pane}.png"
         found = evaluate(note, build, reference) if note.get("camera") else {"hits": [], "empty": 0.0, "region": None}
         entry = m.ReviewNote(number=number, build=build_number, comment=(note.get("comment") or "").strip(),

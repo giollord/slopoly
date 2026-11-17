@@ -5,6 +5,15 @@
 <meta name="viewport" content="width=device-width, initial-scale=1">
 <title>Slopoly review</title>
 <link rel="stylesheet" href="static/style.css">
+<script>
+  // a script that fails to load (e.g. missing static files) leaves the page on "Loading...": say so instead
+  addEventListener("error", e => {
+    const title = document.getElementById("title");
+    if (!title || title.textContent !== "Loading...") return;
+    const what = e.target && e.target.src ? e.target.src.split("/static/").pop() : (e.message || "a script");
+    title.textContent = `This page could not load ${what}. Reinstall slopoly (slopoly doctor checks the window files).`;
+  }, true);
+</script>
 <script type="importmap">
 { "imports": { "three": "./static/three/build/three.module.min.js", "three/addons/": "./static/three/examples/jsm/" } }
 </script>
@@ -18,8 +27,8 @@
   .pane .label { position: absolute; top: 6px; left: 8px; z-index: 3; font-size: 12px; color: var(--muted);
     background: var(--panel); padding: 1px 6px; border-radius: 4px; }
   .pane .view3d, .pane img, .pane canvas.ink { position: absolute; inset: 0; width: 100%; height: 100%; }
-  .pane img { object-fit: contain; background: #fff; }
-  canvas.ink { z-index: 2; pointer-events: none; }
+  .pane img { object-fit: contain; background: var(--panel); }
+  canvas.ink { z-index: 2; pointer-events: none; opacity: .4; }  /* see-through paint; overlaps don't build up */
   .painting canvas.ink { pointer-events: auto; cursor: crosshair; }
   .toolbar { padding: 8px 12px; border-top: 1px solid var(--line); background: var(--panel); }
   aside { overflow: auto; border-left: 1px solid var(--line); background: var(--panel); padding: 12px; display: flex;
@@ -40,6 +49,7 @@
   <span class="muted">Left:</span>
   <select id="left"><option value="hero">Hero image</option><option value="mesh">Rough 3D</option></select>
   <button id="lock" title="The reference follows the build's camera (with the hero image: the build turns to the hero's view)">Lock cameras</button>
+  <button id="theme">Theme</button>
 </header>
 <div class="layout">
   <div style="display:flex;flex-direction:column;min-height:0">
@@ -63,14 +73,23 @@
     <textarea id="comment" placeholder="What is wrong here? e.g. the cowcatcher should be a V in plan, wide at the bottom"></textarea>
     <div class="bar"><button id="add" class="primary">Add note</button><span class="muted" id="addHint"></span></div>
     <h2>Notes to send</h2><div id="notes" class="muted">none yet</div>
-    <h2 id="pinsTitle">Earlier notes to check</h2><div id="pins"></div>
+    <h2 id="pinsTitle">Earlier notes to check</h2>
+    <div class="bar" id="pinsBar"><button id="allFixed" title="Confirm every earlier note as fixed">All fixed</button></div>
+    <div id="pins"></div>
     <h2>Open notes</h2><div id="open" class="muted"></div>
     <button id="send" class="primary">Send to the agent</button>
     <p class="muted" id="sent"></p>
   </aside>
 </div>
+<div class="dialog" id="closeDialog"><div>
+  <b>Send your review to the agent?</b>
+  <span class="muted" id="closeWhat"></span>
+  <div class="bar"><button id="closeSend" class="primary">Send to the agent</button>
+    <button id="closeDiscard">Close without sending</button><button id="closeCancel">Cancel</button></div>
+</div></div>
 <script type="module">
 import { create } from "./static/viewer3d.js";
+import { themeSwitch } from "./static/theme.js";
 
 const $ = id => document.getElementById(id);
 const esc = s => String(s ?? "").replace(/[&<>"]/g, c => ({ "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;" }[c]));
@@ -80,6 +99,33 @@ let state = null, left = "hero", locked = false, painting = false, erasing = fal
 const ink = { left: [], right: [] };  // strokes: {points: [[x, y] as fractions], width: fraction of pane width}
 const pending = [];  // notes added, not sent yet
 const verdicts = new Map();  // pin number -> {fixed, comment}
+let sent = false, dirty = false;
+themeSwitch($("theme"));
+
+// --- unsent work: the window asks before closing while there is any ---
+function unsent() {
+  if (sent) return [];
+  const parts = [];
+  if (pending.length) parts.push(`${pending.length} note(s) not sent`);
+  if ($("comment").value.trim() || ink.left.length || ink.right.length) parts.push("a note in progress");
+  if (verdicts.size) parts.push(`${verdicts.size} answer(s) on earlier notes`);
+  return parts;
+}
+function track() {
+  const now = unsent().length > 0;
+  if (now === dirty) return;
+  dirty = now;
+  fetch("api/dirty", { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ dirty }) }).catch(() => {});
+}
+window.addEventListener("beforeunload", e => { if (unsent().length) e.preventDefault(); });
+window.askClose = () => {
+  $("closeWhat").textContent = `You have ${unsent().join(", ")}.`;
+  $("closeDialog").classList.add("open");
+};
+$("closeCancel").onclick = () => $("closeDialog").classList.remove("open");
+$("closeDiscard").onclick = () => { sent = true; fetch("api/close", { method: "POST", body: "{}" }); };
+$("closeSend").onclick = async () => { $("closeDialog").classList.remove("open"); await send(true); };
+$("comment").addEventListener("input", track);
 
 function deg(v) { return v * Math.PI / 180; }
 function heroCamera(camera) {
@@ -130,7 +176,7 @@ function draw() {
     c.width = r.width; c.height = r.height;
     const g = c.getContext("2d");
     g.clearRect(0, 0, c.width, c.height);
-    g.strokeStyle = "rgba(230, 30, 60, 0.75)"; g.lineCap = g.lineJoin = "round";
+    g.strokeStyle = "rgb(230, 30, 60)"; g.lineCap = g.lineJoin = "round";  // opaque: the canvas's opacity shows through
     for (const s of ink[side]) {
       g.lineWidth = s.width * c.width;
       g.beginPath();
@@ -140,6 +186,7 @@ function draw() {
     }
   }
   frozen();
+  track();
 }
 new ResizeObserver(draw).observe($("panes"));
 for (const side of ["left", "right"]) {
@@ -178,13 +225,14 @@ $("left").onchange = e => setLeft(e.target.value);
 $("resetView").onclick = () => { build.resetView(); reference.resetView(); applyLock(); };
 
 // --- notes ---
-function snapshot(side) {
+// the pane as shown: with the ink for the page's own thumbnails, without it for the agent (the host highlights it)
+function snapshot(side, withInk) {
   const pane = side === "left" ? $("leftPane") : $("rightPane");
   const r = pane.getBoundingClientRect();
   const out = document.createElement("canvas");
   out.width = Math.round(r.width); out.height = Math.round(r.height);
   const g = out.getContext("2d");
-  g.fillStyle = "#ffffff"; g.fillRect(0, 0, out.width, out.height);
+  g.fillStyle = getComputedStyle(pane).backgroundColor; g.fillRect(0, 0, out.width, out.height);
   if (side === "left" && left === "hero") {
     const img = $("heroImage"), k = Math.min(out.width / img.naturalWidth, out.height / img.naturalHeight);
     const w = img.naturalWidth * k, h = img.naturalHeight * k;
@@ -192,30 +240,33 @@ function snapshot(side) {
   } else {
     g.drawImage((side === "left" ? reference : build).snapshot(), 0, 0, out.width, out.height);
   }
-  g.drawImage(canvasOf(side), 0, 0, out.width, out.height);
+  if (withInk) { g.globalAlpha = 0.4; g.drawImage(canvasOf(side), 0, 0, out.width, out.height); }
   return out.toDataURL("image/png");
 }
-$("add").onclick = () => {
+function addNote() {
   const comment = $("comment").value.trim();
-  if (!comment && !ink.left.length && !ink.right.length) { $("error").textContent = "write a comment or paint first"; return; }
+  if (!comment && !ink.left.length && !ink.right.length) { $("error").textContent = "write a comment or paint first"; return false; }
   $("error").textContent = "";
   const r = $("rightPane").getBoundingClientRect();
   pending.push({
     comment, left, aspect: r.width / r.height,
     camera: build.getCamera(), reference_camera: left === "mesh" ? reference.getCamera() : null,
     model_strokes: ink.right, reference_strokes: ink.left,
-    images: { reference: snapshot("left"), model: snapshot("right") },
+    images: { reference: snapshot("left", false), model: snapshot("right", false) },
+    thumbs: { reference: snapshot("left", true), model: snapshot("right", true) },
   });
   ink.left = []; ink.right = []; $("comment").value = "";
   draw(); renderNotes();
-};
+  return true;
+}
+$("add").onclick = addNote;
 function renderNotes() {
   $("notes").classList.toggle("muted", !pending.length);
   $("notes").innerHTML = pending.length ? "" : "none yet";
   pending.forEach((n, i) => {
     const el = document.createElement("div");
     el.className = "note";
-    el.innerHTML = `<div class="thumbs"><img src="${n.images.reference}" alt=""><img src="${n.images.model}" alt=""></div>
+    el.innerHTML = `<div class="thumbs"><img src="${n.thumbs.reference}" alt=""><img src="${n.thumbs.model}" alt=""></div>
       <textarea>${esc(n.comment)}</textarea>
       <div class="row"><button data-act="look">Show camera</button><button data-act="del">Delete</button></div>`;
     el.querySelector("textarea").oninput = e => { n.comment = e.target.value; };
@@ -223,9 +274,10 @@ function renderNotes() {
     el.querySelector("[data-act=look]").onclick = () => { if (!ink.left.length && !ink.right.length) build.setCamera(n.camera); };
     $("notes").appendChild(el);
   });
+  track();
 }
 function renderPins() {
-  $("pinsTitle").style.display = $("pins").style.display = state.pins.length ? "" : "none";
+  $("pinsTitle").style.display = $("pins").style.display = $("pinsBar").style.display = state.pins.length ? "" : "none";
   $("pins").innerHTML = "";
   for (const p of state.pins) {
     const v = verdicts.get(p.number) || {};
@@ -244,17 +296,26 @@ function renderPins() {
     $("pins").appendChild(el);
   }
   $("open").innerHTML = state.open.length ? state.open.map(o => `<div>#${o.number} ${esc(o.comment)}</div>`).join("") : "none";
+  track();
 }
-$("send").onclick = async () => {
-  if (ink.left.length || ink.right.length || $("comment").value.trim()) { $("error").textContent = "add or clear the note you are painting first"; return; }
+$("allFixed").onclick = () => { for (const p of state.pins) verdicts.set(p.number, { fixed: true }); renderPins(); };
+// withCurrent: the note in progress is added first (sending from the close question)
+async function send(withCurrent) {
+  if (ink.left.length || ink.right.length || $("comment").value.trim()) {
+    if (!withCurrent) { $("error").textContent = "add or clear the note you are painting first"; return; }
+    if (!addNote()) return;
+  }
   $("send").disabled = true;
   const confirm = [...verdicts].map(([number, v]) => ({ number, fixed: v.fixed, comment: v.comment }));
+  const notes = pending.map(({ thumbs, ...note }) => note);
   const response = await fetch("api/choice", { method: "POST", headers: { "Content-Type": "application/json" },
-                                               body: JSON.stringify({ notes: pending, confirm }) });
+                                               body: JSON.stringify({ notes, confirm }) });
   const body = await response.json();
   if (!response.ok) { $("error").textContent = body.error; $("send").disabled = false; return; }
+  sent = true; track();
   $("sent").textContent = `Sent ${body.notes.length} note(s). You can close this window.`;
-};
+}
+$("send").onclick = () => send(false);
 
 try {
   const response = await fetch("api/state");

@@ -7,6 +7,38 @@ commenting. The agent then gets structured, persistent notes that it works throu
 
 ## ADDED Requirements
 
+### Requirement: Readable panes
+The review window SHALL have a light and a dark theme that the user switches, kept for the next window. Strokes SHALL
+be drawn see-through at one opacity, so overlapping strokes don't hide what is under them.
+
+#### Scenario: Dark model
+- **WHEN** the user reviews a dark model and switches to the light theme
+- **THEN** both panes show the model on a light background, and the choice holds in the next review
+
+### Requirement: Highlighted note images
+A note's pane image SHALL show the painted area as in the original, a semi-transparent border of contrasting colours
+around it, and the rest of the pane dimmed, with nothing blurred and no paint colour over the object. A pane without
+strokes SHALL be stored as it was shown.
+
+#### Scenario: Painted cowcatcher
+- **WHEN** a note has strokes over the cowcatcher on the build pane and none on the reference pane
+- **THEN** the build image shows the cowcatcher unchanged inside a border with the rest dimmed, and the reference
+  image is the plain pane
+
+### Requirement: Closing with unsent work
+When the user closes the review window with notes not sent, a comment or strokes in progress, or verdicts on earlier
+notes, the window SHALL ask whether to send them to the agent, close without sending, or keep the window open.
+Sending from that question SHALL include the note in progress.
+
+#### Scenario: Close with two notes
+- **WHEN** the user has added two notes and closes the window
+- **THEN** the window asks; choosing send stores both notes and finishes the job, choosing close finishes it as
+  cancelled, and choosing cancel keeps the window open with the notes
+
+#### Scenario: Close with nothing
+- **WHEN** the user closes the window without notes, comment, strokes or verdicts
+- **THEN** it closes without asking, and the job finishes as cancelled
+
 ### Requirement: Review window as a detached job
 `slopoly review <target>` SHALL open a window for a variant's current build (or a given build), start a job and return
 its id and the window's address at once. It SHALL show two panes side by side: on the left the reference, either the
@@ -88,9 +120,14 @@ build that addressed it. `slopoly status <target>` SHALL count open notes.
 
 ### Requirement: Earlier notes in the next review
 A review SHALL show the variant's earlier `addressed` notes as pins at their cameras. The user SHALL be able to
-confirm each one as fixed or reopen it. Reopening SHALL set it back to `open` with the user's comment.
+confirm each one as fixed or reopen it, or confirm all of them at once. Reopening SHALL set it back to `open` with the
+user's comment. `slopoly status` SHALL count `addressed` notes the user hasn't confirmed as `unconfirmed`.
 
 #### Scenario: Not fixed yet
 - **WHEN** the user opens addressed note 3 in the next review, sees the slats still fan the wrong way and reopens it
   with "still wider at the top"
 - **THEN** note 3 is `open` again with that comment in its history, and the job result lists it as reopened
+
+#### Scenario: All fixed
+- **WHEN** the next review shows 15 addressed notes and the user presses "All fixed" and sends
+- **THEN** all 15 notes are closed, and `slopoly status` shows no unconfirmed notes

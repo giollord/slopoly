@@ -154,3 +154,23 @@ def test_small_part_in_front_of_a_large_slanted_face_is_drawn_in_front():
     ids = mv.face_ids(mv.render(mesh, camera, ids=True)[0])
     u, v = camera.project(np.array([[0, 0.3, -1.8]]))[0][0]
     assert ids[int(v), int(u)] >= 2  # the box, not the plate's faces 0 and 1
+
+
+def test_compare3d_puts_reference_surfaces_inside_the_build_apart():
+    from slopoly import compare3d
+    # the build: a solid 2 m frame box; the reference: the same box with an inner wall across its middle
+    frame = box((-0.7, 0.6, -3.0), (0.7, 1.4, 3.0), (0.4, 0.3, 0.2))
+    wall = box((-0.6, 0.65, -0.05), (0.6, 1.35, 0.05), (0.4, 0.3, 0.2))
+    build = merge(frame)
+    build.face_parts = np.array(["frame"] * len(frame.tris), dtype=object)
+    result = compare3d.compare(build, merge(frame, wall))
+    assert not result["missing"]
+    inside = result["inside_build"]
+    assert inside and inside[0]["parts"] == ["frame"] and inside[0]["bounds"][0][2] > -0.2
+
+
+def test_region_spanning_the_whole_object_is_implausible(cart):
+    from slopoly import segmentation as seg
+    votes = seg.Votes(cart)
+    assert "spans most of the object" in votes.too_wide(cart.verts)
+    assert votes.too_wide(cart.verts[8:16]) is None  # the pole alone: a plausible part

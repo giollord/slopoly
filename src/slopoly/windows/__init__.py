@@ -74,8 +74,31 @@ def choose(ws: Workspace, shown: list[ImageRef], picked: list[tuple[ImageRef, st
 
 # --- showing a page ----------------------------------------------------------------------------------------------
 
-def show(server: PageServer, title: str, done: threading.Event, context: jobs.JobContext, size=(1280, 860)) -> str:
+class CloseGuard:
+    """Asks before a window with unsent work closes. The page reports whether it has any (``api/dirty``); when the
+    user closes the native window, the page is asked (``askClose()``) and answers by sending, or by closing anyway
+    (``api/close``). A browser tab asks with its own leave prompt instead."""
+
+    def __init__(self):
+        self.dirty = False
+        self.discard = threading.Event()
+
+    def routes(self) -> dict:
+        return {"api/dirty": self.set_dirty, "api/close": self.close}
+
+    def set_dirty(self, body: dict) -> dict:
+        self.dirty = bool(body.get("dirty"))
+        return {"dirty": self.dirty}
+
+    def close(self, _body: dict) -> dict:
+        self.discard.set()
+        return {"closing": True}
+
+
+def show(server: PageServer, title: str, done: threading.Event, context: jobs.JobContext, size=(1280, 860),
+         guard: CloseGuard | None = None) -> str:
     """Shows the page until ``done`` is set, the window is closed or the job is cancelled; returns how it was shown."""
+    discarded = guard.discard if guard else threading.Event()
     context.update(message=f"window open (if none appeared, browse {server.url})")
     if os.environ.get("SLOPOLY_WINDOW") != "browser":
         try:
@@ -83,8 +106,17 @@ def show(server: PageServer, title: str, done: threading.Event, context: jobs.Jo
 
             window = webview.create_window(title, server.url, width=size[0], height=size[1])
 
+            def closing():
+                if guard is None or done.is_set() or discarded.is_set() or not guard.dirty:
+                    return True
+                # the page asks; evaluate_js waits for the GUI thread, which is busy closing, so it runs apart
+                threading.Thread(target=window.evaluate_js, args=("window.askClose && window.askClose()",),
+                                 daemon=True).start()
+                return False
+            window.events.closing += closing
+
             def watch():
-                while not done.wait(0.5):
+                while not done.wait(0.5) and not discarded.is_set():
                     try:
                         context.check()
                     except (jobs.Cancelled, SlopolyError):
@@ -98,7 +130,7 @@ def show(server: PageServer, title: str, done: threading.Event, context: jobs.Jo
     context.update(message=f"open in your browser: {server.url}")
     webbrowser.open(server.url)
     started = time.monotonic()
-    while not done.wait(0.5):  # the page polls its state; a tab that stopped polling was closed
+    while not done.wait(0.5) and not discarded.is_set():  # the page polls its state; a tab that stopped polling was closed
         context.check()
         if server.last_seen and time.monotonic() - server.last_seen > BROWSER_IDLE:
             break
@@ -307,8 +339,9 @@ def review_job(context: jobs.JobContext) -> dict:
         done.set()
         return outcome
 
-    with PageServer(ws.root, "review.html", lambda: review_state(ws, spec), on_send) as server:
-        how = show(server, f"Slopoly: review {spec['target']}", done, context, size=(1500, 900))
+    guard = CloseGuard()
+    with PageServer(ws.root, "review.html", lambda: review_state(ws, spec), on_send, guard.routes()) as server:
+        how = show(server, f"Slopoly: review {spec['target']}", done, context, size=(1500, 900), guard=guard)
     if not done.is_set():
         raise jobs.Cancelled()
     return outcome | {"shown_in": how}

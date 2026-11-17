@@ -210,3 +210,20 @@ def test_metric_view_fit_reports_absolute_size():
     assert front["object"]["height_error"] == pytest.approx(0.0, abs=0.011)
     fitted = silhouette.score(assembly.current, [{"part": "object", "view": "front", "mask": mask}])["views"][0]
     assert fitted["scaling"] == "fitted" and abs(fitted["object"]["width_error"]) < 0.06  # proportions only
+
+
+def test_one_triangle_count_and_over_budget_issue(tmp_path):
+    source = "part('ball', prism(64, r=1, length=1), color='wood')\npart('peg', box(0.2, 0.2, 0.2), parent='ball', at=(0, 0.55, 0), color='wood')"
+    status, report = run_build(tmp_path, source, polyBudget=100)
+    assert status == 0 and not report["validated"]
+    counted = report["validation"]["triangles"]
+    assert counted["count"] == sum(p["triangles"] for p in report["parts"]) and not counted["ok"]
+    issue = next(i for i in report["validation"]["issues"] if i["issue"] == "over_budget")
+    assert issue["triangles"] == counted["count"] and issue["budget"] == 100
+
+
+def test_self_intersecting_jittered_part_names_jitter(tmp_path):
+    source = "part('lump', jitter(join(box(1, 1, 1), box(1, 1, 1).move(x=0.5)), 0.001), color='wood')"
+    status, report = run_build(tmp_path, source)
+    issue = next(i for i in report["validation"]["issues"] if i["issue"] == "not_solid")
+    assert "jitter(0.001)" in issue["parts"][0]["likely_cause"]

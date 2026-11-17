@@ -12,7 +12,7 @@ from ..core import SlopolyError
 
 WORKFLOWS = Path(__file__).parent / "workflows"
 # The widget an ``in:`` node's value goes into, when the node has several scalar inputs.
-PRIMARY = ("value", "image", "text", "noise_seed", "seed", "string", "boolean", "int", "float")
+PRIMARY = ("value", "image", "text", "prompt", "noise_seed", "seed", "string", "boolean", "int", "float")
 
 
 def names() -> list[str]:

@@ -126,9 +126,13 @@ def result(variant: Variant, number: int, report: dict) -> dict:
         for key in ("render", "compare"):
             if score.get(key):
                 score[key] = ws.rel(folder / score[key])
-    triangles = sum(p.get("triangles", 0) for p in report.get("parts", []))
+    counted = ((report.get("validation") or {}).get("triangles") or {}).get("count")
+    triangles = counted if counted is not None else sum(p.get("triangles", 0) for p in report.get("parts", []))
+    parts = [{k: p[k] for k in ("name", "triangles", "booleans", "warnings") if p.get(k)}
+             for p in report.get("parts", [])]
     return {"build": number, "variant": variant.address, "current": variant.meta.current == number,
             "validated": report.get("validated"), "triangles": triangles, "budget": variant.asset.budget,
+            "parts": parts,
             "bounds": report.get("bounds"), "validation": report.get("validation"), "silhouette": silhouette,
             "compare3d": report.get("compare3d"),
             "colors": report.get("colors"), "palette": report.get("palette"), "shading": report.get("shading"),

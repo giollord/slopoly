@@ -97,3 +97,10 @@ def test_fetch_resumes_and_installs(comfy, tmp_path, monkeypatch):
     assert ranges == ["bytes=4000-"]
     assert (models_dir / "checkpoints" / sam["file"]).read_bytes() == content and not part.exists()
     assert result["fetched"]["blender_libraries"] == "installed"
+
+
+def test_window_files_are_checked(monkeypatch, tmp_path):
+    assert doctor.window_check()["ok"]
+    monkeypatch.setattr(doctor, "WINDOW_FILES", doctor.WINDOW_FILES + ("missing.js",))
+    failed = doctor.window_check()
+    assert not failed["ok"] and "missing.js" in failed["detail"] and "reinstall" in failed["fix"]

@@ -153,6 +153,46 @@
 - [ ] 10.2 Rerun the cart end-to-end; verify the `design-agent` "Cart end-to-end" scenario still holds with metric
       views, and that `uv run pytest` and `uv run slopoly dev test-blender` pass
 
+## 11. Fixes from the locomotive rerun
+
+- [x] 11.1 Replace Qwen-Image-Edit-2511 in `style-anchor` and `hero` with Mage-Flow-Edit Turbo (Microsoft, MIT,
+      July 2026, 4 steps, up to 3 references), built with the `comfy` CLI from the gallery template
+      `image_mage_flow_edit_turbo_int8` and a new `recipes/mage-flow-references.recipe.json`. Keep the inputs
+      (`prompt`, `seed`, `reference_1..3`, `use_reference_1..3`) and `out:image`. Update `models.yaml`, the ComfyUI
+      README, `comfyui-setup.md` and the doctor hint; record the licence check and timings in `notes.md`. Verify a hero
+      and an anchor job run on the local ComfyUI and are faster than Qwen
+- [x] 11.2 Review window: a light/dark theme switch kept in the prefs, and a see-through brush (strokes drawn opaque
+      on the ink canvas, the canvas shown at low opacity so overlaps don't build up). Verify in the browser fallback
+- [x] 11.3 Note images: the page sends the panes without ink, and the host draws the highlight: the painted area as
+      in the original, a semi-transparent two-tone border around it, the rest dimmed, nothing blurred; a pane without
+      strokes is stored unchanged. Verify with host tests
+- [x] 11.4 Closing the review with unsent notes, a comment or strokes in progress, or verdicts on earlier notes asks
+      to send, close without sending, or cancel (native window: the closing event; browser: the page's leave
+      prompt). Add an "All fixed" button for the earlier notes. Verify the endpoints with host tests and the dialog
+      in the browser
+- [x] 11.5 Packaging: a test that the built wheel contains `static/three/build/three.module.min.js`; `slopoly doctor`
+      checks the window files; the view, pick and review pages show an error instead of "Loading..." when a script
+      fails to load. Verify with host tests
+- [x] 11.6 Workspace version: record the newest CLI version that used a workspace in `slopoly/.slopoly-version`, and
+      turn a file with unknown fields written by a newer CLI into a `version_mismatch` error with an upgrade hint.
+      Verify with host tests
+- [x] 11.7 Jobs: retry a failed `os.replace` on Windows `PermissionError` with a short back-off; `slopoly retry`
+      supports every job kind. Verify with host tests
+- [x] 11.8 Build results: one triangle count (the validator's), an `over_budget` issue when it fails, and a compact
+      `parts` summary (name, triangles, booleans, warnings) in the CLI result. A `not_solid` part that used `jitter`
+      names it as the likely cause. Verify with host and Blender tests
+- [x] 11.9 `compare3d`: a missing region inside the build's closed volume is marked `inside_build` with the parts
+      that enclose it, and doesn't count towards the missing share. Verify with a host test
+- [x] 11.10 Segmentation: a 3D region spanning most of the object is flagged implausible and gets no bounds for
+      `look --region`. Verify with a unit test
+- [x] 11.11 CLI and status: `slopoly notes --brief`; `slopoly status` reports `unconfirmed` (addressed, not yet
+      confirmed) notes. Verify with host tests
+- [x] 11.12 Docs and knowledge: spoked wheels as a hub prism with extruded spokes and a separate rim
+      (`wheeled-objects.md`), torn cloth and ragged edges without booleans, the build report shapes and the
+      installation note about closing windows first. Verify the samples build with the notes test
+- [x] 11.13 Bump the version to 0.2.1 in the four version files; verify `tests/test_versions.py` and the whole suite
+      pass
+
 ## Workflow follow-up
 
 - Archive the change after review, and sync the delta specs into `openspec/specs/`.

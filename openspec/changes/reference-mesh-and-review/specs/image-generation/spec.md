@@ -2,6 +2,17 @@
 
 ## MODIFIED Requirements
 
+### Requirement: Image model chosen by comparison
+The default model for style anchors and heroes SHALL be chosen by a recorded comparison of the candidate local models on the same prompts and references. The comparison covers style match, object correctness, element placement and time per image. A candidate SHALL be an open-weights model released in 2026 or later, in common use, whose licence allows commercial use of its outputs without revenue or seat limits.
+
+#### Scenario: Recorded choice
+- **WHEN** the comparison is complete
+- **THEN** the chosen model, the rejected candidates and the reasons are recorded in the change notes, and the workflow files use the chosen model
+
+#### Scenario: Faster than the model it replaces
+- **WHEN** Mage-Flow-Edit Turbo replaces Qwen-Image-Edit-2511 for anchors and heroes
+- **THEN** the notes record both models' time per image on the same machine, and the new one is faster
+
 ### Requirement: Part segmentation
 The system SHALL produce, for the view images of a hero and a list of part names, one mask per found part per view, with the mask's bounding box and area. The whole-object mask of each view SHALL come from the view's render silhouette. Parts that are not found SHALL be reported as missing rather than failing the job.
 
@@ -29,6 +40,14 @@ The system SHALL generate hero images of one asset: a single three-quarter front
 - **THEN** the prompt sent to the workflow excludes smoke and particles, so the hero shows the locomotive only
 
 ## ADDED Requirements
+
+### Requirement: Implausible 3D regions
+A part's 3D region that spans most of the object along two or more axes SHALL be flagged implausible, and `look
+--region` SHALL refuse it with that reason.
+
+#### Scenario: Rib over the whole locomotive
+- **WHEN** the votes give `rib` a region spanning the whole locomotive
+- **THEN** the region is flagged implausible, and `look --region rib` fails with a hint to use `--box`
 
 ### Requirement: Segmentation within a region
 A part MAY be segmented within a box given in a view's pixels or in metres. The system SHALL then run the detector on

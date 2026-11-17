@@ -49,6 +49,8 @@ def cart(run, pack, ready):
 def test_build_cart(run, cart):
     result = run("build", "gnome-village/cart").json
     assert result["build"] == 1 and result["validated"] and result["current"]
+    assert result["triangles"] == result["validation"]["triangles"]["count"] ==         sum(p["triangles"] for p in result["parts"])
+    assert {p["name"] for p in result["parts"]} >= {"bed", "axle"} and set(result["parts"][0]) <=         {"name", "triangles", "booleans", "warnings"}
     assert "no reference hero" in result["silhouette"]["renders"]
     for key in ("model", "blend", "report", "program"):
         assert Path(result["files"][key]).exists(), key

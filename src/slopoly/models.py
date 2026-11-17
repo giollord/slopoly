@@ -268,6 +268,7 @@ class Region(Model):
     bounds: list[list[float]] | None = Field(None, description="[[x, y, z] min, [x, y, z] max] in metres")
     agreement: float = 0.0
     uncertain: bool = True
+    implausible: str | None = Field(None, description="why the region can't be one part (spans most of the object)")
 
 
 class Masks(Model):

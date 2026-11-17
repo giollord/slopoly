@@ -161,6 +161,7 @@ class Shape:
         self.stack: list[_Modifier] = []
         self.fill_tag = 0  # tag for faces a modifier creates without a source face (SCREW of an outline)
         self.warnings: list[str] = []  # reported with the part in the build
+        self.jittered = 0.0  # the largest jitter amount applied: the likely cause when the part cuts through itself
 
     @property
     def bm(self) -> bmesh.types.BMesh:
@@ -171,7 +172,7 @@ class Shape:
     def copy(self) -> Shape:
         shape = Shape(self._bm.copy(), self.profile)
         shape.booleans, shape.groups, shape.fill_tag = self.booleans, list(self.groups), self.fill_tag
-        shape.warnings = list(self.warnings)
+        shape.warnings, shape.jittered = list(self.warnings), self.jittered
         shape.stack = [_Modifier(m.type, m.group, dict(m.settings)) for m in self.stack]
         return shape
 
@@ -722,6 +723,7 @@ def jitter(shape: Shape, amount: float, seed: int = 0, faces: FaceSelector = Non
         v.co += move
     bm.normal_update()
     crossing = defects(bm)["selfIntersecting"] - before
+    result.jittered = max(result.jittered, amount)
     if crossing > 0:
         result.warnings.append(f"jitter {amount} made {crossing} self-intersecting faces; lower the amount or "
                                "jitter before the boolean that made the thin wall")
@@ -810,6 +812,7 @@ def join(*shapes: Shape) -> Shape:
     result.groups = groups
     result.booleans = sum(s.booleans for s in shapes)
     result.warnings = [w for s in shapes for w in s.warnings]
+    result.jittered = max(s.jittered for s in shapes)
     return result
 
 

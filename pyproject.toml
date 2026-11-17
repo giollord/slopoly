@@ -1,6 +1,6 @@
 [project]
 name = "slopoly"
-version = "0.2.0"
+version = "0.2.1"
 description = "Low-poly 3D game asset packs from ComfyUI concepts and Blender part programs, driven by your coding agent"
 readme = "README.md"
 requires-python = ">=3.11"

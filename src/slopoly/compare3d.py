@@ -17,6 +17,7 @@ SAMPLES = 60000  # surface points per mesh
 REGION_SHARE = 0.01  # a region holds at least this share of its mesh's samples
 NEAR = 0.05  # metres: build parts this close to a region are named with it
 MAX_REGIONS = 8
+INSIDE = 0.8  # a missing region with this share of its points inside the build's volume is the reference's inside
 
 
 def sample(mesh: mv.Mesh, n: int = SAMPLES, seed: int = 0) -> tuple[np.ndarray, np.ndarray]:
@@ -50,7 +51,8 @@ def _solid(points: np.ndarray, cell: float, origin: np.ndarray, shape) -> np.nda
 
 
 def _regions(points: np.ndarray, far: np.ndarray, cell: float, origin: np.ndarray, shape, total: int,
-             near_parts: cKDTree | None, part_names: np.ndarray | None, build_points: np.ndarray | None) -> list[dict]:
+             near_parts: cKDTree | None, part_names: np.ndarray | None, build_points: np.ndarray | None,
+             inside: np.ndarray | None = None) -> list[dict]:
     if not far.any():
         return []
     grid = np.zeros(shape, np.int32)
@@ -65,18 +67,23 @@ def _regions(points: np.ndarray, far: np.ndarray, cell: float, origin: np.ndarra
             continue
         region = {"bounds": [np.round(members.min(0), 3).tolist(), np.round(members.max(0), 3).tolist()],
                   "share": round(len(members) / total, 4)}
+        if inside is not None:
+            at = np.clip(((members - origin) / cell).astype(int), 0, np.array(shape) - 1)
+            region["inside"] = float(inside[at[:, 0], at[:, 1], at[:, 2]].mean())
         if near_parts is not None and part_names is not None and build_points is not None:
-            dist, nearest = near_parts.query(members, distance_upper_bound=NEAR + cell)
+            bound = np.inf if region.get("inside", 0) >= INSIDE else NEAR + cell  # inside: the enclosing parts
+            dist, nearest = near_parts.query(members, distance_upper_bound=bound)
             names = Counter(part_names[nearest[np.isfinite(dist)]].tolist())
             region["parts"] = [n for n, _ in names.most_common(3) if n]
         out.append(region)
-    return sorted(out, key=lambda r: -r["share"])[:MAX_REGIONS]
+    return sorted(out, key=lambda r: -r["share"])
 
 
 def compare(build: mv.Mesh, ref: mv.Mesh) -> dict:
     """{"volume_iou", "distance": {"mean", "p90"} in metres (both ways), "missing": regions where the reference has
     surface the build lacks, "extra": the reverse}. Each region: bounds in metres, its share of the samples, and the
-    build parts nearby."""
+    build parts nearby. Missing regions inside the build's closed volume (a rough reference's inner surfaces) are
+    listed apart as "inside_build", with the parts that enclose them, and don't count as missing."""
     ref_points, _ = sample(ref)
     build_points, build_faces = sample(build, seed=1)
     if not len(ref_points) or not len(build_points):
@@ -92,12 +99,15 @@ def compare(build: mv.Mesh, ref: mv.Mesh) -> dict:
     threshold = max(3 * cell, 0.02 * float(np.linalg.norm(hi - lo)))
     names = build.face_parts[build_faces] if build.face_parts is not None else None
     both = np.concatenate([to_build, to_ref])
+    missing = _regions(ref_points, to_build > threshold, cell, origin, shape, len(ref_points), build_tree, names,
+                       build_points, inside=b)
+    hidden = [r for r in missing if r.pop("inside") >= INSIDE]
     return {
         "volume_iou": round(float(np.logical_and(a, b).sum() / union), 4) if union else None,
         "distance": {"mean": round(float(both.mean()), 4), "p90": round(float(np.percentile(both, 90)), 4)},
         "threshold": round(threshold, 4),
-        "missing": _regions(ref_points, to_build > threshold, cell, origin, shape, len(ref_points), build_tree, names,
-                            build_points),
+        "missing": [r for r in missing if r not in hidden][:MAX_REGIONS],
+        "inside_build": hidden[:MAX_REGIONS],
         "extra": _regions(build_points, to_ref > threshold, cell, origin, shape, len(build_points), build_tree,
-                          names, build_points),
+                          names, build_points)[:MAX_REGIONS],
     }

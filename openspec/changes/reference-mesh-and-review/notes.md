@@ -45,3 +45,35 @@ as `--generator trellis2|pixal3d` for heroes where the splat is poor. This rever
 `views` turntable workflow is removed (the views are rendered on the host from the mesh), and Idol's models move to
 `idol-mesh`. Resolution: TRELLIS.2 at 1024 (its upsample stage); SplatToMesh at 384 (finer grids add noise, not
 detail, at the splat's density).
+
+## Image model replaced (task 11.1, 2026-11-17)
+
+Qwen-Image-Edit-2511 took too long per image. Criteria for the replacement: an open-weights model from 2026 or later,
+in common use, not FLUX, that runs locally, takes style references, and whose licence allows commercial use with no
+revenue or seat limits. Candidates from the ComfyUI template gallery (template uses as reported by the gallery):
+
+| Model | Released | Licence | Gallery uses | Verdict |
+|---|---|---|---|---|
+| [Mage-Flow-Edit Turbo](https://huggingface.co/Comfy-Org/Mage-Flow) (Microsoft, 4B, 4 steps, 1-3 references) | 2026-07 | MIT (text encoder Qwen3-VL 4B: Apache 2.0) | 127 (67k downloads of the Comfy-Org repack) | **chosen** |
+| Krea 2 Turbo (style reference) | 2026-06 | Krea 2 community licence: free commercial use only under revenue/seat limits, content filter required | 9,144 (text to image) | rejected: licence |
+| Qwen Image 2.1 (edit) | 2026-09 | Qwen Research License (non-commercial) | 9,019 | rejected: licence |
+| FireRed Image Edit 1.1 | 2026-03 | - | 1,424 | rejected: a Qwen-Image-Edit derivative of the same size, no faster |
+| FLUX.2 klein | 2026-01 | Apache 2.0 (4B) | 1,150 | rejected: FLUX, lost the earlier bake-off |
+| HiDream O1, Boogu 0.1, JoyAI Image Edit | 2026-05 to 07 | - | under 100 | rejected: rarely used |
+| MOSS-Image (edit with references) | 2026 | Apache 2.0 | not in this ComfyUI | rejected: 25 steps, needs ComfyUI 0.43 |
+
+Timings on the development machine (one 16 GB GPU, ComfyUI 0.38.0, models unloaded before each model's first run),
+the locomotive hero prompt with the orcish anchor as reference, and the anchor's own prompt without references:
+
+| Workflow | Qwen-Image-Edit-2511 (fp8mixed, Lightning 4 steps), cold / warm | Mage-Flow-Edit Turbo (int8, 4 steps), cold / warm |
+|---|---|---|
+| hero, 1024x1024, 1 reference | 28.5 s / 18.3 s | 9.5 s / 3.7 s |
+| style-anchor, 1344x768, no reference | 14.8 s / 10.7 s | 6.7 s / 2.1 s |
+
+Mage-Flow edits its first image: given the anchor as image 1, every hero copied the anchor's whole scene (water
+tower, logs, rails, smoke). Without the reference latents (the anchor only seen by the text encoder) the heroes were
+single objects but lost the anchor's flat cartoon style. The shipped wiring gives an empty light grey canvas as image 1
+and the references as images 2-4, and the job tells the model to draw on the canvas and take only the art style from
+the other images. Two of three hero seeds were then a single object in the anchor's style; one still drew the water
+tower and logs, and smoke appears in most (it is in the anchor). Heroes are generated in sets and picked, so this is
+acceptable; the prompt keeps asking for no smoke. `gen revise` turns the canvas off and edits its source image.

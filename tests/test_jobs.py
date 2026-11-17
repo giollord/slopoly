@@ -73,3 +73,13 @@ def test_status_lists_open_jobs(run, pack):
     status = run("status", "gnome-village").json
     assert status["packs"][0]["open_jobs"][0]["id"] == job
     run("cancel", job)
+
+
+def test_retry_knows_every_job_kind():
+    """slopoly retry starts a job from its file alone, in a process that hasn't imported the job modules."""
+    import subprocess
+    import sys
+    code = ("from slopoly import jobs\nassert 'segment' not in jobs.KINDS\njobs.register_all()\n"
+            "print(sorted(jobs.KINDS))")
+    out = subprocess.run([sys.executable, "-c", code], capture_output=True, text=True, check=True).stdout
+    assert all(kind in out for kind in ("generate", "views", "segment", "pick", "view", "review"))

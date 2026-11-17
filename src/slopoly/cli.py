@@ -498,12 +498,13 @@ def note(target: str = typer.Argument(..., help="<pack>/<asset>[:<variant>]"),
 
 @app.command()
 def notes(target: str = typer.Argument(..., help="<pack>/<asset>[:<variant>]"),
-          all_: bool = typer.Option(False, "--all", help="also closed and wontfix notes")):
+          all_: bool = typer.Option(False, "--all", help="also closed and wontfix notes"),
+          brief: bool = typer.Option(False, "--brief", help="only each note's number, status and comment")):
     """List a variant's review notes (open and addressed ones by default)."""
     from . import review as reviews
     variant = ws().target(target).need_variant()
-    found = [reviews.summary(variant, n) for n in reviews.load_notes(variant).notes
-             if all_ or n.status in ("open", "addressed")]
+    found = [{"number": n.number, "status": n.status, "comment": n.comment} if brief else reviews.summary(variant, n)
+             for n in reviews.load_notes(variant).notes if all_ or n.status in ("open", "addressed")]
     emit({"variant": variant.address, "notes": found, "open": reviews.open_count(variant)})
 
 

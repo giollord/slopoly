@@ -104,7 +104,13 @@ def test_note_lifecycle(built):
 def test_note_commands_and_status(run, built):
     review.add_notes(built, 1, [{"comment": "wheels too small"}], build_mesh(), None)
     assert run("notes", built.address).json["open"] == 1
-    assert run("status", built.address).json["notes"] == {"open": 1, "addressed": 0}
+    assert run("status", built.address).json["notes"] == {"open": 1, "unconfirmed": 0}
+    assert run("notes", built.address, "--brief").json["notes"] == [
+        {"number": 1, "status": "open", "comment": "wheels too small"}]
+    review.set_status(built, 1, "addressed", 1, "bigger wheels")
+    status = run("status", built.address).json["notes"]
+    assert status["unconfirmed"] == 1 and "slopoly review" in status["hint"]
+    review.set_status(built, 1, "open", None, None)
     assert run("note", built.address, "1", "wontfix", ok=False).json["code"] == "reason_required"
     assert run("note", built.address, "1", "wontfix", "--reason", "matches the hero").json["open"] == 0
     assert run("notes", built.address).json["notes"] == []
@@ -114,10 +120,12 @@ def test_note_commands_and_status(run, built):
 def test_review_job_stores_sent_notes(run, built, monkeypatch):
     sent = {}
 
-    def fake_show(server, title, done, context, size=None):
+    def fake_show(server, title, done, context, size=None, guard=None):
         import httpx
         state = httpx.get(server.url + "api/state").json()
         sent["state"] = state
+        assert httpx.post(server.url + "api/dirty", json={"dirty": True}).json() == {"dirty": True}
+        assert guard.dirty
         camera = front_camera()
         body = {"notes": [{"comment": "chimney", "camera": camera, "aspect": 1.0, "left": "hero",
                            "model_strokes": [{"points": [project((0, 0.9, 0.7), camera)], "width": 0.03}]}]}
@@ -131,3 +139,34 @@ def test_review_job_stores_sent_notes(run, built, monkeypatch):
     result = windows.review_job(Context())
     assert sent["state"]["model"].startswith("files/") and sent["state"]["build"] == 1
     assert result["notes"][0]["hits"][0]["part"] == "chimney" and result["open"] == 1
+
+
+def test_review_closed_without_sending_is_cancelled(run, built, monkeypatch):
+    def fake_show(server, title, done, context, size=None, guard=None):
+        import httpx
+        httpx.post(server.url + "api/dirty", json={"dirty": True})
+        assert httpx.post(server.url + "api/close", json={}).json() == {"closing": True}
+        assert guard.discard.is_set() and not done.is_set()
+        return "window"
+    monkeypatch.setattr(windows, "show", fake_show)
+
+    class Context:
+        ws = workspace.find()
+        inputs = {"target": built.address, "build": None}
+    with pytest.raises(windows.jobs.Cancelled):
+        windows.review_job(Context())
+    assert review.load_notes(built).notes == []
+
+
+def test_note_image_highlights_the_painted_area():
+    image = Image.new("RGB", (200, 100), (200, 200, 200))
+    raw = io.BytesIO()
+    image.save(raw, "PNG")
+    assert review.highlight(raw.getvalue(), []) == raw.getvalue()  # no strokes: unchanged
+    stroke = {"points": [[0.25, 0.5], [0.35, 0.5]], "width": 0.05}  # 10 px wide, x 50..70
+    out = np.asarray(Image.open(io.BytesIO(review.highlight(raw.getvalue(), [stroke]))).convert("RGB")).astype(int)
+    assert out[50, 60].tolist() == [200, 200, 200]  # painted: as it was, no paint colour
+    assert out[50, 150].tolist() == [80, 80, 80]  # far away: dimmed
+    inner, outer = out[50, 76], out[50, 78]  # just outside the stroke's end (painted to x 74): the border
+    assert inner[0] > 200 and inner[2] < 100 and outer.max() < 60
+    assert out[10, 10].tolist() == out[90, 190].tolist()  # nothing blurred: the dimmed area is flat

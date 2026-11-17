@@ -190,14 +190,20 @@ The build fails with the message and the program line.
 
 - every child is within 5 mm of its parent;
 - every part touches the root's connected group;
-- the triangle count is within the pack budget;
+- the triangle count of the exported model is within the pack budget (otherwise the issue `over_budget`);
 - every face has a known palette role;
 - every part's mesh is a closed manifold solid that doesn't cut through itself (see `palette-and-shading.md`). To
   combine overlapping solids into one part, use `boolean(..., op="union")`, not `join`; or make them separate
-  parts, which may overlap.
+  parts, which may overlap. A part that cuts through itself after `jitter` gets a `likely_cause` naming it.
+
+The `slopoly build` result and `report.json` differ in size, not in meaning. The result gives `triangles` (the count
+the budget check uses, the same as `validation.triangles.count`), `parts` (name, triangles, and booleans and warnings
+when there are any), `validation`, `silhouette` (`views`, `mean_iou`, `mean_object_iou`) and `compare3d`, plus the
+file paths. `report.json` holds everything below.
 
 **parts** lists, for each part: parent, mesh, triangles, booleans, warnings (such as a `jitter` that made the shape
-cut through itself), joint, origin, world bounds and program line.
+cut through itself), joint, origin, world bounds and program line. Booleans re-triangulate the faces they merge, so
+a part with booleans often costs far more than its pieces: see the notes on wheels and torn cloth for cheaper ways.
 
 **validation** contains `intersections` (a, b, volume, fraction, allowed, ok; for information: an unlisted
 overlap over 1 % has ok false, which is worth a look but doesn't fail the build), `contacts` (part, parent, gap, ok;

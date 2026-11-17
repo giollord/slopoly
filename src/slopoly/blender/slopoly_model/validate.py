@@ -119,7 +119,8 @@ def validate(model: Model, budget: int, contact_tolerance: float = CONTACT_TOLER
     count = sum(p.shape.triangle_count() for p in parts.values())
     triangles = {"count": count, "budget": budget, "ok": count <= budget}
     # Parts may overlap (intersections are reported, not failed); each part's own mesh is checked in normals.defects.
-    validated = not issues and not disconnected and triangles["ok"] and all(c["ok"] for c in contacts)
+    # the budget is checked on the exported meshes (runner.build), whose count the result reports
+    validated = not issues and not disconnected and all(c["ok"] for c in contacts)
     return {"validated": validated, "intersections": intersections, "contacts": contacts,
             "disconnected": disconnected, "triangles": triangles, "issues": issues}
 

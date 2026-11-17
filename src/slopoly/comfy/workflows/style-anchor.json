@@ -1,7 +1,7 @@
 {
- "2618981577737424": {
+ "4038514143546916": {
   "inputs": {
-   "unet_name": "qwen_image_edit_2511_fp8mixed.safetensors",
+   "unet_name": "mage_flow_edit_turbo_int8_convrot.safetensors",
    "weight_dtype": "default"
   },
   "class_type": "UNETLoader",
@@ -9,52 +9,10 @@
    "title": "Load Diffusion Model"
   }
  },
- "764280422157654": {
+ "3475847253286523": {
   "inputs": {
-   "shift": 3.1,
-   "sampling": "flow",
-   "model": [
-    "2618981577737424",
-    0
-   ]
-  },
-  "class_type": "ModelSamplingAuraFlow",
-  "_meta": {
-   "title": "ModelSamplingAuraFlow"
-  }
- },
- "749006387601409": {
-  "inputs": {
-   "strength": 1,
-   "pre_cfg": false,
-   "model": [
-    "764280422157654",
-    0
-   ]
-  },
-  "class_type": "CFGNorm",
-  "_meta": {
-   "title": "CFGNorm"
-  }
- },
- "2998544964297125": {
-  "inputs": {
-   "lora_name": "Qwen-Image-Edit-2511-Lightning-4steps-V1.0-bf16.safetensors",
-   "strength_model": 1,
-   "model": [
-    "749006387601409",
-    0
-   ]
-  },
-  "class_type": "LoraLoaderModelOnly",
-  "_meta": {
-   "title": "Load LoRA"
-  }
- },
- "1868839946790576": {
-  "inputs": {
-   "clip_name": "qwen_2.5_vl_7b_fp8_scaled.safetensors",
-   "type": "qwen_image",
+   "clip_name": "qwen3vl_4b_bf16.safetensors",
+   "type": "mage",
    "device": "default"
   },
   "class_type": "CLIPLoader",
@@ -62,95 +20,99 @@
    "title": "Load CLIP"
   }
  },
- "3693271663601147": {
+ "1800880473283042": {
   "inputs": {
-   "vae_name": "qwen_image_vae.safetensors"
+   "vae_name": "mage_flow_vae_bf16.safetensors"
   },
   "class_type": "VAELoader",
   "_meta": {
    "title": "Load VAE"
   }
  },
- "1244318090346671": {
+ "680990557235572": {
   "inputs": {
-   "prompt": null,
+   "prompt": "",
+   "negative_prompt": "",
+   "width": 1344,
+   "height": 768,
+   "batch_size": 1,
    "clip": [
-    "1868839946790576",
+    "3475847253286523",
     0
    ],
    "vae": [
-    "3693271663601147",
+    "1800880473283042",
     0
    ],
-   "image1": [
-    "2288552975240859",
+   "images.image_1": [
+    "2042262431700102",
     0
    ],
-   "image2": [
-    "2684480247116255",
+   "images.image_2": [
+    "4268101786681665",
     0
    ],
-   "image3": [
-    "3869277693079990",
+   "images.image_3": [
+    "2791789061719137",
+    0
+   ],
+   "images.image_4": [
+    "1925725554326534",
     0
    ]
   },
-  "class_type": "TextEncodeQwenImageEditPlus",
+  "class_type": "TextEncodeMageFlowEdit",
   "_meta": {
    "title": "in:prompt"
   }
  },
- "4285605480274812": {
+ "3083019836708900": {
   "inputs": {
-   "prompt": "",
-   "clip": [
-    "1868839946790576",
+   "width": 1344,
+   "height": 768,
+   "batch_size": 1,
+   "color": 15132390
+  },
+  "class_type": "EmptyImage",
+  "_meta": {
+   "title": "Empty Image"
+  }
+ },
+ "1292479552414365": {
+  "inputs": {
+   "value": true
+  },
+  "class_type": "PrimitiveBoolean",
+  "_meta": {
+   "title": "in:use_canvas"
+  }
+ },
+ "2042262431700102": {
+  "inputs": {
+   "switch": [
+    "1292479552414365",
     0
    ],
-   "vae": [
-    "3693271663601147",
-    0
-   ],
-   "image1": [
-    "2288552975240859",
-    0
-   ],
-   "image2": [
-    "2684480247116255",
-    0
-   ],
-   "image3": [
-    "3869277693079990",
+   "on_true": [
+    "3083019836708900",
     0
    ]
   },
-  "class_type": "TextEncodeQwenImageEditPlus",
+  "class_type": "ComfySwitchNode",
   "_meta": {
-   "title": "Text Encode Qwen Image Edit Plus"
+   "title": "If/Else Switch"
   }
  },
- "4125124149981684": {
+ "4373013469871150": {
   "inputs": {
-   "image": "example.png"
+   "image": "ComfyUI_00070_.png"
   },
   "class_type": "LoadImage",
   "_meta": {
    "title": "in:reference_1"
   }
  },
- "874405709229320": {
-  "inputs": {
-   "image": [
-    "4125124149981684",
-    0
-   ]
-  },
-  "class_type": "FluxKontextImageScale",
-  "_meta": {
-   "title": "FluxKontextImageScale"
-  }
- },
- "3121631079894572": {
+ "2434271769037903": {
   "inputs": {
    "value": false
   },
@@ -159,14 +121,14 @@
    "title": "in:use_reference_1"
   }
  },
- "2288552975240859": {
+ "4268101786681665": {
   "inputs": {
    "switch": [
-    "3121631079894572",
+    "2434271769037903",
     0
    ],
    "on_true": [
-    "874405709229320",
+    "4373013469871150",
     0
    ]
   },
@@ -175,28 +137,16 @@
    "title": "If/Else Switch"
   }
  },
- "65547718631201": {
+ "790624962261955": {
   "inputs": {
-   "image": "example.png"
+   "image": "ComfyUI_00070_.png"
   },
   "class_type": "LoadImage",
   "_meta": {
    "title": "in:reference_2"
   }
  },
- "3546189195827604": {
-  "inputs": {
-   "image": [
-    "65547718631201",
-    0
-   ]
-  },
-  "class_type": "FluxKontextImageScale",
-  "_meta": {
-   "title": "FluxKontextImageScale"
-  }
- },
- "3315165666046682": {
+ "1655702077251667": {
   "inputs": {
    "value": false
   },
@@ -205,14 +155,14 @@
    "title": "in:use_reference_2"
   }
  },
- "2684480247116255": {
+ "2791789061719137": {
   "inputs": {
    "switch": [
-    "3315165666046682",
+    "1655702077251667",
     0
    ],
    "on_true": [
-    "3546189195827604",
+    "790624962261955",
     0
    ]
   },
@@ -221,28 +171,16 @@
    "title": "If/Else Switch"
   }
  },
- "2319732742444475": {
+ "4074136583844547": {
   "inputs": {
-   "image": "example.png"
+   "image": "ComfyUI_00070_.png"
   },
   "class_type": "LoadImage",
   "_meta": {
    "title": "in:reference_3"
   }
  },
- "2172326680613948": {
-  "inputs": {
-   "image": [
-    "2319732742444475",
-    0
-   ]
-  },
-  "class_type": "FluxKontextImageScale",
-  "_meta": {
-   "title": "FluxKontextImageScale"
-  }
- },
- "2695385356964062": {
+ "1113954512961018": {
   "inputs": {
    "value": false
   },
@@ -251,14 +189,14 @@
    "title": "in:use_reference_3"
   }
  },
- "3869277693079990": {
+ "1925725554326534": {
   "inputs": {
    "switch": [
-    "2695385356964062",
+    "1113954512961018",
     0
    ],
    "on_true": [
-    "2172326680613948",
+    "4074136583844547",
     0
    ]
   },
@@ -267,44 +205,7 @@
    "title": "If/Else Switch"
   }
  },
- "348657752164818": {
-  "inputs": {
-   "reference_latents_method": "index_timestep_zero",
-   "conditioning": [
-    "1244318090346671",
-    0
-   ]
-  },
-  "class_type": "FluxKontextMultiReferenceLatentMethod",
-  "_meta": {
-   "title": "Edit Model Reference Method"
-  }
- },
- "2258096221627086": {
-  "inputs": {
-   "reference_latents_method": "index_timestep_zero",
-   "conditioning": [
-    "4285605480274812",
-    0
-   ]
-  },
-  "class_type": "FluxKontextMultiReferenceLatentMethod",
-  "_meta": {
-   "title": "Edit Model Reference Method"
-  }
- },
- "3944964362001507": {
-  "inputs": {
-   "width": 1344,
-   "height": 768,
-   "batch_size": 1
-  },
-  "class_type": "EmptySD3LatentImage",
-  "_meta": {
-   "title": "EmptySD3LatentImage"
-  }
- },
- "1795621353284733": {
+ "3687438527050725": {
   "inputs": {
    "seed": 0,
    "steps": 4,
@@ -313,20 +214,20 @@
    "scheduler": "simple",
    "denoise": 1,
    "model": [
-    "2998544964297125",
+    "4038514143546916",
     0
    ],
    "positive": [
-    "348657752164818",
+    "680990557235572",
     0
    ],
    "negative": [
-    "2258096221627086",
-    0
+    "680990557235572",
+    1
    ],
    "latent_image": [
-    "3944964362001507",
-    0
+    "680990557235572",
+    2
    ]
   },
   "class_type": "KSampler",
@@ -334,14 +235,14 @@
    "title": "in:seed"
   }
  },
- "1989813396378913": {
+ "3262690569409537": {
   "inputs": {
    "samples": [
-    "1795621353284733",
+    "3687438527050725",
     0
    ],
    "vae": [
-    "3693271663601147",
+    "1800880473283042",
     0
    ]
   },
@@ -350,11 +251,11 @@
    "title": "VAE Decode"
   }
  },
- "1097154012581807": {
+ "3920803998672407": {
   "inputs": {
-   "filename_prefix": "slopoly/style-anchor-qwen",
+   "filename_prefix": "slopoly/anchor",
    "images": [
-    "1989813396378913",
+    "3262690569409537",
     0
    ]
   },

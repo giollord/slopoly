@@ -23,6 +23,7 @@ VOTE_DIRECTIONS = [(yaw, 20.0) for yaw in range(0, 360, 45)]
 VOTE_SIZE = 512
 VOTE_SHARE = 0.5  # a face belongs to a part when the part's masks cover it in at least this share of its renders
 UNCERTAIN = 0.6  # regions whose mean agreement is lower are reported as uncertain
+SPAN = 0.8  # a region wider than this share of the object along two or more axes is implausible for one part
 SPEC = re.compile(r"^(?P<part>[^@]+?)(?:@(?P<view>[a-z]+)(?::(?P<box>[-\d.,\s]+))?)?$")
 
 
@@ -155,6 +156,13 @@ class Votes:
         sizes = np.bincount(labels)
         return faces[sizes[labels] >= PIECE_SHARE * sizes.max()]
 
+    def too_wide(self, verts: np.ndarray) -> str | None:
+        """Why a part's region is implausible: it spans most of the object along two or more axes."""
+        extent = np.maximum(np.ptp(self.mesh.verts, axis=0), 1e-9)
+        span = np.ptp(verts, axis=0) / extent
+        wide = [f"{axis} {share:.0%}" for axis, share in zip("xyz", span) if share > SPAN]
+        return f"spans most of the object ({', '.join(wide)})" if len(wide) >= 2 else None
+
     def regions(self) -> dict[str, dict]:
         out = {}
         for part, hits in self.hits.items():
@@ -167,5 +175,6 @@ class Votes:
             verts = self.mesh.verts[np.unique(self.mesh.tris[faces])]
             agreement = round(float(share[faces].mean()), 3)
             out[part] = {"faces": faces.tolist(), "agreement": agreement, "uncertain": agreement < UNCERTAIN,
-                         "bounds": [np.round(verts.min(0), 4).tolist(), np.round(verts.max(0), 4).tolist()]}
+                         "bounds": [np.round(verts.min(0), 4).tolist(), np.round(verts.max(0), 4).tolist()],
+                         "implausible": self.too_wide(verts)}
         return out

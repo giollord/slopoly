@@ -204,6 +204,10 @@ def test_hero_job_writes_images(run, pack, started):
     meta = yaml.safe_load((heroes / "hero_002.yaml").read_text())
     assert meta["seed"] == 11 and meta["state"] == "undecided" and meta["job"] == "j1"
     assert len(fake.prompts) == 2 and fake.uploads[0].endswith("anchor_001.png")
+    sent = {name: fake.prompts[0][node]["inputs"] for name, node in workflow.inputs(fake.prompts[0]).items()}
+    assert sent["use_canvas"]["value"] is True  # drawn on the empty canvas, the anchor only for its style
+    assert sent["prompt"]["prompt"].startswith(generate.CANVAS + generate.CANVAS_REFERENCES)
+    assert "wooden hand cart" in sent["prompt"]["prompt"] and "empty canvas" not in meta["prompt"]
 
 
 def test_cancelled_job_writes_nothing(run, pack, started):
@@ -428,3 +432,15 @@ def test_look_renders_a_region_close_up_beside_the_build(run, pack, started):
     assert run("look", "gnome-village/cart", "--region", "rope", ok=False).json["code"] == "no_region"
     assert run("look", "gnome-village/cart", "--from", "sideways", ok=False).json["code"] == "bad_direction"
     assert "**/variants/*/looks/" in (pack / ".gitignore").read_text()
+
+
+def test_revision_edits_its_source_without_the_canvas(run, pack, started):
+    make_image(pack / "anchors/anchor_001.png", {"kind": "anchor", "state": "picked"})
+    hero = make_image(pack / "assets/cart/heroes/hero_001.png",
+                      {"kind": "hero", "prompt": "a cart", "references": ["gnome-village/anchors/anchor_001.png"]})
+    run("gen", "revise", hero.as_posix(), "--change", "add a red roof", "--count", "1")
+    kind, target, inputs = started[0]
+    fake = FakeComfy(lambda prompt: {"image": [png(np.full((32, 32, 3), 200, np.uint8))]})
+    generate.generate(context(pack, kind, target, inputs), fake)
+    sent = {name: fake.prompts[0][node]["inputs"] for name, node in workflow.inputs(fake.prompts[0]).items()}
+    assert sent["use_canvas"]["value"] is False and sent["prompt"]["prompt"].startswith("a cart")
