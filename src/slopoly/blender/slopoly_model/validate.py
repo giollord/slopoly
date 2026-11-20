@@ -7,6 +7,8 @@ from collections import deque
 from itertools import combinations
 
 import numpy as np
+from mathutils import Vector
+from mathutils.bvhtree import BVHTree
 
 from .assembly import Model, Part
 from .shapes import Shape, ShapeError
@@ -44,6 +46,25 @@ def _boxes_touch(a, b, margin: float) -> bool:
     return all(ba[i] - margin <= bb[i + 3] and bb[i] - margin <= ba[i + 3] for i in range(3))
 
 
+def _tree(part: Part) -> tuple[np.ndarray, BVHTree]:
+    verts = part.world_vertices()
+    tris = np.asarray(part.shape.triangles(), dtype=int).reshape(-1, 3)
+    return verts, BVHTree.FromPolygons([tuple(v) for v in verts], [tuple(t) for t in tris])
+
+
+def nearest_points(a: Part, b: Part) -> tuple[list[float], list[float]]:
+    """The closest pair of points between two parts' surfaces (one of them a vertex), world space."""
+    (va, ta), (vb, tb) = _tree(a), _tree(b)
+    best = (np.inf, None, None)
+    for verts, tree, flip in ((va, tb, False), (vb, ta, True)):
+        for v in verts:
+            hit, _, _, dist = tree.find_nearest(Vector(v))
+            if hit is not None and dist < best[0]:
+                pa, pb = (list(hit), list(v)) if flip else (list(v), list(hit))
+                best = (dist, pa, pb)
+    return [round(float(c), 4) for c in best[1]], [round(float(c), 4) for c in best[2]]
+
+
 def _allowed(a: Part, b: Part) -> bool:
     return b.name in a.overlaps or a.name in b.overlaps
 
@@ -78,8 +99,10 @@ def validate(model: Model, budget: int, contact_tolerance: float = CONTACT_TOLER
         if p.parent is None or p.name not in solids or p.parent not in solids:
             continue
         gap = 0.0 if p.parent in touching[p.name] else solids[p.name].min_gap(solids[p.parent], 100.0)
-        contacts.append({"part": p.name, "parent": p.parent, "gap": round(float(gap), 6),
-                         "ok": gap <= contact_tolerance})
+        contact = {"part": p.name, "parent": p.parent, "gap": round(float(gap), 6), "ok": gap <= contact_tolerance}
+        if not contact["ok"]:
+            contact["nearest"], contact["parent_nearest"] = nearest_points(p, parts[p.parent])
+        contacts.append(contact)
 
     roots = model.roots()
     reached: set[str] = set()
@@ -96,7 +119,8 @@ def validate(model: Model, budget: int, contact_tolerance: float = CONTACT_TOLER
     count = sum(p.shape.triangle_count() for p in parts.values())
     triangles = {"count": count, "budget": budget, "ok": count <= budget}
     # Parts may overlap (intersections are reported, not failed); each part's own mesh is checked in normals.defects.
-    validated = not issues and not disconnected and triangles["ok"] and all(c["ok"] for c in contacts)
+    # the budget is checked on the exported meshes (runner.build), whose count the result reports
+    validated = not issues and not disconnected and all(c["ok"] for c in contacts)
     return {"validated": validated, "intersections": intersections, "contacts": contacts,
             "disconnected": disconnected, "triangles": triangles, "issues": issues}
 
@@ -107,7 +131,7 @@ def summary(model: Model) -> list[dict]:
     for p in model.parts.values():
         verts = p.world_vertices()
         rows.append({"name": p.name, "parent": p.parent, "mesh": p.mesh, "triangles": p.shape.triangle_count(),
-                     "booleans": p.shape.booleans, "joint": p.joint.as_dict() if p.joint else None,
+                     "booleans": p.shape.booleans, "warnings": p.shape.warnings, "joint": p.joint.as_dict() if p.joint else None,
                      "origin": np.round(p.origin, 6).tolist(),
                      "bounds": [np.round(verts.min(0), 6).tolist(), np.round(verts.max(0), 6).tolist()],
                      "line": p.line})

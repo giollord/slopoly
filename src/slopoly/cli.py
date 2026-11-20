@@ -8,11 +8,13 @@ from pathlib import Path
 from typing import Optional
 
 import typer
+from pydantic import ValidationError
 
 from . import __version__, config
 from . import build as builds
 from . import jobs as job_runner
 from . import check as checks
+from . import models as m
 from . import workspace as wsp
 from .core import SlopolyError, emit, write_yaml
 
@@ -100,16 +102,54 @@ def pack_rm(name: str, yes: bool = typer.Option(False, "--yes", help="confirm th
     emit({"removed": name, "cancelled_jobs": cancelled})
 
 
+SIZE_HELP = "real size in metres: 9 (longest dimension) or <axis>=<metres>, e.g. z=9 from back to front"
+
+
+def parse_size(text: str) -> m.Size:
+    try:
+        return m.Size.parse(text)
+    except (ValueError, ValidationError) as error:
+        raise SlopolyError("bad_size", f"can't read the size {text!r}", SIZE_HELP) from error
+
+
+@asset_app.command("size")
+def asset_size(target: str = typer.Argument(..., help="<pack>/<asset>"),
+               size: str = typer.Argument(..., help=SIZE_HELP)):
+    """Set an asset's real size; its heroes' reference meshes and views are rescaled at once (no new generation)."""
+    from . import generate
+    pack, name = asset_target(target)
+    emit(generate.resize(pack.asset(name), parse_size(size)))
+
+
 @asset_app.command("new")
 def asset_new(target: str = typer.Argument(..., help="<pack>/<asset>"),
               description: str = typer.Option("", help="short description of the asset"),
-              budget: Optional[int] = typer.Option(None, help="triangle budget (default: the pack's)")):
+              budget: Optional[int] = typer.Option(None, help="triangle budget (default: the pack's)"),
+              size: Optional[str] = typer.Option(None, help=SIZE_HELP)):
     """Create an asset with its default variant."""
     pack, name = asset_target(target)
-    asset = wsp.new_asset(pack, name, description, budget)
+    asset = wsp.new_asset(pack, name, description, budget, parse_size(size) if size else None)
     variant = asset.variant()
     emit({"asset": asset.address, "variant": variant.name, "path": pack.ws.rel(asset.root),
           "files": [pack.ws.rel(p) for p in (asset.file, variant.file, variant.program_file)]})
+
+
+@variant_app.command("reference")
+def variant_reference(target: str = typer.Argument(..., help="<pack>/<asset>:<variant>"),
+                      hero: str = typer.Argument(..., help="a hero of the asset (its path or file name)")):
+    """Make a hero the variant's reference, keeping the variant's manifest, program and builds. The old reference
+    is rejected unless another variant uses it."""
+    variant = ws().target(target).need_variant()
+    found = variant.asset.hero(Path(hero).name)
+    if not found.path.exists():
+        raise SlopolyError("not_found", f"{variant.asset.address} has no hero {Path(hero).name!r}",
+                           f"list them: slopoly status {variant.asset.address}")
+    if found.meta.kind != "hero":
+        raise SlopolyError("not_a_hero", f"{Path(hero).name} is not a hero image")
+    out = wsp.set_reference(variant, found)
+    if not variant.asset.views(found.path.name):
+        out["hint"] = f"make its views: slopoly gen views {variant.address}"
+    emit(out)
 
 
 @variant_app.command("new")
@@ -316,18 +356,51 @@ def gen_revise(image: str, change: Optional[str] = typer.Option(None, help="what
 
 @gen_app.command("views")
 def gen_views(hero: str = typer.Argument(..., help="a picked hero image, or <pack>/<asset>[:<variant>] for its reference"),
-              front_yaw: Optional[float] = typer.Option(None, help="turn the front (degrees) and remake the views")):
-    """Front, side, top and back views with silhouettes, from a 3D splat of the hero."""
+              front_yaw: Optional[float] = typer.Option(None, help="turn the front (degrees) and remake the views"),
+              generator: Optional[str] = typer.Option(None, help="image-to-3D model: idol (default), trellis2 or pixal3d")):
+    """A rough 3D reference mesh of the hero, scaled to the asset's size, and its metric front, side, top and back
+    views with silhouettes."""
     from . import generate
-    emit(generate.start_views(hero_ref(hero), front_yaw))
+    emit(generate.start_views(hero_ref(hero), front_yaw, generator))
+
+
+@app.command()
+def look(target: str = typer.Argument(..., help="<pack>/<asset>[:<variant>]"),
+         from_: str = typer.Option("hero", "--from", help="front, back, left, right, side, top, bottom, hero, or "
+                                                          "<yaw>,<pitch> in degrees (yaw from the front towards +X)"),
+         region: Optional[str] = typer.Option(None, help="frame this part's 3D region (from slopoly segment)"),
+         box: Optional[str] = typer.Option(None, help="frame this box: x0,y0,z0,x1,y1,z1 in metres"),
+         zoom: float = typer.Option(1.0, help="move closer by this factor"),
+         perspective: bool = typer.Option(False, help="perspective instead of orthographic"),
+         with_build: bool = typer.Option(False, "--with-build", help="also render the current build, same camera"),
+         build: Optional[int] = typer.Option(None, help="render this build number beside the reference")):
+    """Close-up of the reference mesh from any direction, optionally beside the build: image paths, the camera and
+    the framed bounds in metres."""
+    from . import look as looks
+    emit(looks.look(ws().target(target).need_variant(), from_, region, box, zoom, perspective, with_build, build))
 
 
 @app.command()
 def segment(hero: str = typer.Argument(..., help="a hero image, or <pack>/<asset>[:<variant>] for its reference"),
-            parts: str = typer.Option(..., help="comma-separated part names, e.g. 'wheel,axle,handle,bed'")):
-    """Part masks (bounds, areas, colours) in each view of a hero."""
+            parts: str = typer.Option(..., help="comma-separated parts: name, name@view, or name@view:x0,y0,x1,y1 "
+                                                "to look only within a box (pixels, or fractions of the image)"),
+            within: Optional[str] = typer.Option(None, help="look for the parts only within this part's masks"),
+            no_3d: bool = typer.Option(False, "--no-3d", help="skip the 3D regions on the reference mesh")):
+    """Part masks (bounds, areas, colours) in each view of a hero, and part regions on its reference mesh. Parts
+    segmented before and not named again keep their masks."""
     from . import generate
-    emit(generate.start_segment(hero_ref(hero), parts.split(",")))
+    emit(generate.start_segment(hero_ref(hero), split_parts(parts), within, not no_3d))
+
+
+def split_parts(text: str) -> list[str]:
+    """Commas separate parts, except inside a box (name@view:x0,y0,x1,y1)."""
+    out: list[str] = []
+    for piece in text.split(","):
+        if out and "@" in out[-1] and ":" in out[-1] and out[-1].count(",") < 3:
+            out[-1] += "," + piece
+        else:
+            out.append(piece)
+    return out
 
 
 def hero_ref(value: str) -> wsp.ImageRef:
@@ -355,7 +428,9 @@ def pick(target: Optional[str] = typer.Argument(None, help="<pack> (anchors) or 
          set_: Optional[str] = typer.Option(None, "--set", metavar="IMAGE", help="no window: set this image's state"),
          state: Optional[str] = typer.Option(None, help="with --set: picked, rejected or undecided"),
          variant: Optional[str] = typer.Option(None, help="with --set on a hero: the variant it becomes the reference "
-                                                          "of (created if new; default: the default variant)")):
+                                                          "of (created if new; default: the default variant)"),
+         for_: Optional[str] = typer.Option(None, "--for", help="with --heroes: the variant whose reference the pick "
+                                                                 "replaces (keeping its program and builds)")):
     """Open a window where the user picks images (or answers a question); images not picked are rejected. Each
     picked hero becomes the reference of its own variant. Returns a job id at once: slopoly wait <id> returns the
     choice. With --set, sets one image's state without a window."""
@@ -380,7 +455,11 @@ def pick(target: Optional[str] = typer.Argument(None, help="<pack> (anchors) or 
     kind = "anchors" if anchors or (not heroes and not t.asset) else "heroes"
     if kind == "heroes":
         t.need_variant()
+        if for_ is not None and for_ not in [v.name for v in t.asset.variants()]:
+            raise SlopolyError("not_found", f"{t.asset.address} has no variant {for_!r}",
+                               variants=[v.name for v in t.asset.variants()])
     spec = {"pack": t.pack.name, "target": t.asset.address if t.asset else t.pack.name, "set": kind,
+            "for": for_ if kind == "heroes" else None,
             "paths": image or None, "question": question, "options": option or None, "limit": limit,
             "show_rejected": show_rejected,
             "title": question or (f"Pick style anchors of {t.pack.name}" if kind == "anchors" else
@@ -394,6 +473,39 @@ def view(target: str = typer.Argument(..., help="<pack>/<asset>[:<variant>] or <
     """Open the 3D viewer with the build's comparison images and report. Returns at once."""
     from . import windows
     emit(windows.start_view(ws(), target, number))
+
+
+@app.command()
+def review(target: str = typer.Argument(..., help="<pack>/<asset>[:<variant>]"),
+           number: Optional[int] = typer.Option(None, "--build", help="a build number (default: the current build)")):
+    """Open the review window: the reference (hero image or reference mesh) beside the build, where the user paints
+    on both and comments, as many notes as they like. Returns a job id and the window's address at once; slopoly wait
+    <id> returns the notes with the parts their strokes hit."""
+    from . import windows
+    emit(windows.start_review(ws(), target, number))
+
+
+@app.command()
+def note(target: str = typer.Argument(..., help="<pack>/<asset>[:<variant>]"),
+         number: int = typer.Argument(..., help="the note's number"),
+         status: str = typer.Argument(..., help="addressed, wontfix or open"),
+         by: Optional[int] = typer.Option(None, "--by", help="the build that addressed it"),
+         reason: Optional[str] = typer.Option(None, help="what you changed, or why it won't be fixed")):
+    """Set a review note's status. The next review shows addressed notes for the user to confirm or reopen."""
+    from . import review as reviews
+    emit(reviews.set_status(ws().target(target).need_variant(), number, status, by, reason))
+
+
+@app.command()
+def notes(target: str = typer.Argument(..., help="<pack>/<asset>[:<variant>]"),
+          all_: bool = typer.Option(False, "--all", help="also closed and wontfix notes"),
+          brief: bool = typer.Option(False, "--brief", help="only each note's number, status and comment")):
+    """List a variant's review notes (open and addressed ones by default)."""
+    from . import review as reviews
+    variant = ws().target(target).need_variant()
+    found = [{"number": n.number, "status": n.status, "comment": n.comment} if brief else reviews.summary(variant, n)
+             for n in reviews.load_notes(variant).notes if all_ or n.status in ("open", "addressed")]
+    emit({"variant": variant.address, "notes": found, "open": reviews.open_count(variant)})
 
 
 # --- environment -------------------------------------------------------------------------------------------------
@@ -489,6 +601,16 @@ def config_set(key: str, value: str = typer.Argument("", help="empty to unset"))
     emit({key: config.get(key)})
 
 
+def split_target_hint(args: list[str]) -> str | None:
+    """For "<pack>/<asset> <variant>" given as two arguments: the command with them joined by ":"."""
+    for i, (a, b) in enumerate(zip(args, args[1:])):
+        target = a.count("/") == 1 and ":" not in a and not a.startswith("-")
+        if target and m.NAME.fullmatch(b):
+            joined = [*args[:i], f"{a}:{b}", *args[i + 2:]]
+            return f"did you mean <pack>/<asset>:<variant>? slopoly {' '.join(joined)}"
+    return None
+
+
 def main() -> None:
     try:
         app(standalone_mode=False)
@@ -500,7 +622,7 @@ def main() -> None:
             print(error.ctx.get_help() if getattr(error, "ctx", None) else str(error))
             sys.exit(0)
         message = error.format_message() if hasattr(error, "format_message") else str(error)
-        emit({"error": message, "code": "usage", "hint": "run the command with --help"})
+        emit({"error": message, "code": "usage", "hint": split_target_hint(sys.argv[1:]) or "run the command with --help"})
         sys.exit(1)
     except typer.Exit as done:
         sys.exit(done.exit_code)

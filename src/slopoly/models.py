@@ -40,10 +40,23 @@ class Pack(Model):
     shading: Shading = Shading()
 
 
+class Size(Model):
+    """The asset's real size: ``metres`` along ``axis`` (x, y, z or longest), used to scale its reference mesh."""
+    axis: Literal["x", "y", "z", "longest"] = "longest"
+    metres: float = Field(gt=0)
+
+    @classmethod
+    def parse(cls, text: str) -> Size:
+        """"9" (the longest dimension) or "<axis>=<metres>", e.g. "z=9" for 9 m from back to front."""
+        axis, _, metres = text.rpartition("=")
+        return cls(axis=axis.strip().lower() or "longest", metres=float(metres))
+
+
 class Asset(Model):
     description: str = ""
     budget: int | None = Field(None, gt=0)
     default_variant: str = "default"
+    size: Size | None = None
 
 
 class Variant(Model):
@@ -57,12 +70,38 @@ class Connection(Model):
     axis: str | None = None
 
 
+VIEW_NAMES = ("front", "side", "top", "back")
+# Directions `slopoly look --from` takes by name; "hero" is the hero image's camera (three-quarter front-left).
+LOOK_DIRECTIONS = ("front", "back", "left", "right", "side", "top", "bottom", "hero")
+
+
+def check_problem(check: str) -> str | None:
+    """Why a shape plan's check entry is invalid (None when valid): a view name, or look:<direction> where the
+    direction is a named one or "<yaw>,<pitch>" in degrees."""
+    if check in VIEW_NAMES:
+        return None
+    kind, _, direction = check.partition(":")
+    if kind != "look":
+        return f"check {check!r} is neither a view ({', '.join(VIEW_NAMES)}) nor look:<direction>"
+    if direction in LOOK_DIRECTIONS:
+        return None
+    try:
+        yaw, pitch = (float(x) for x in direction.split(","))
+    except ValueError:
+        return (f"check {check!r} has an unknown direction; use {', '.join(LOOK_DIRECTIONS)} "
+                "or <yaw>,<pitch> in degrees")
+    return None if -90 <= pitch <= 90 else f"check {check!r} has a pitch outside -90..90"
+
+
 class ManifestPart(Model):
     name: str
     parent: str | None = None
     primitive: str | None = None
     mirror: str | None = None
     connections: list[Connection] = []
+    shape: str | None = Field(None, description="the part's shape character: plan, profile, bends, ends, contacts")
+    steps: list[str] = Field([], description="how the part is built, in modelling operations")
+    checks: list[str] = Field([], description="views or look:<direction> close-ups that show the part is right")
 
 
 class Manifest(Model):
@@ -76,6 +115,9 @@ class Manifest(Model):
                 out.append({"field": f"parts.{i}.name", "message": f"part {part.name!r} appears twice"})
             if part.parent is not None and part.parent not in names:
                 out.append({"field": f"parts.{i}.parent", "message": f"part {part.name!r} has unknown parent {part.parent!r}"})
+            for j, check in enumerate(part.checks):
+                if problem := check_problem(check):
+                    out.append({"field": f"parts.{i}.checks.{j}", "message": f"part {part.name!r}: {problem}"})
             for j, c in enumerate(part.connections):
                 if c.to not in names:
                     out.append({"field": f"parts.{i}.connections.{j}.to",
@@ -163,6 +205,13 @@ class Image(Model):
 Bounds = dict  # {x, y, width, height} in pixels
 
 
+class Fit(Model):
+    """Image pixel = the scorer's view projection (metres) * scale + offset."""
+    scale: float
+    offset: list[float]
+    image: list[int]
+
+
 class View(Model):
     view: Literal["front", "side", "top", "back"]
     image: str
@@ -170,6 +219,19 @@ class View(Model):
     width: int
     height: int
     bounds: Bounds | None = None
+    m_per_px: float | None = Field(None, description="metres per pixel (views of a reference mesh)")
+    axes: dict[str, str] | None = Field(None, description="model axis along the image's x and y, e.g. {x: -z, y: -y}")
+    ground_row: float | None = Field(None, description="image row of the ground (y = 0)")
+    fit: Fit | None = None
+
+
+class MeshPlacement(Model):
+    """How the generated mesh becomes the reference: mirrored across X, turned ``yaw`` degrees around Y, scaled and
+    moved onto the ground."""
+    yaw: float = 0.0
+    mirrored: bool = False
+    scale: float = 1.0
+    offset: list[float] = [0.0, 0.0, 0.0]
 
 
 class Views(Model):
@@ -179,6 +241,13 @@ class Views(Model):
     front: Literal["detected", "assumed", "given"] | None = None
     job: str | None = None
     views: list[View]
+    generator: str | None = Field(None, description="the image-to-3D model that made the reference mesh")
+    mesh: str | None = Field(None, description="the reference mesh, placed in metres (reference.glb)")
+    generated: str | None = Field(None, description="the mesh as generated, before placement")
+    placement: MeshPlacement | None = None
+    mirrored: bool | None = None
+    scale: Literal["given", "assumed"] | None = Field(None, description="whether the size came from the asset")
+    size: Size | None = Field(None, description="the asset size the views were made at")
 
 
 class Mask(Model):
@@ -188,6 +257,18 @@ class Mask(Model):
     bounds: Bounds | None = None
     area: int | None = None
     colors: list[dict] = []
+    region: list[int] | None = Field(None, description="the box (x0, y0, x1, y1 px) it was segmented within")
+    implausible: str | None = Field(None, description="why the mask is suspect (covers most of the object...)")
+
+
+class Region(Model):
+    """A part's faces on the reference mesh, voted from its masks in many renders."""
+    part: str
+    faces: str | None = Field(None, description="JSON file with the face indices on reference.glb")
+    bounds: list[list[float]] | None = Field(None, description="[[x, y, z] min, [x, y, z] max] in metres")
+    agreement: float = 0.0
+    uncertain: bool = True
+    implausible: str | None = Field(None, description="why the region can't be one part (spans most of the object)")
 
 
 class Masks(Model):
@@ -196,6 +277,7 @@ class Masks(Model):
     job: str | None = None
     masks: list[Mask] = []
     missing: list[dict] = []
+    regions: list[Region] = []
 
 
 class Placement(Model):
@@ -247,3 +329,29 @@ class Note(BaseModel):
     title: str
     tags: list[str] = []
     summary: str
+
+
+class ReviewEvent(Model):
+    at: str
+    status: Literal["open", "addressed", "wontfix", "closed"]
+    build: int | None = None
+    text: str | None = Field(None, description="the agent's reason or the user's comment")
+
+
+class ReviewNote(Model):
+    """A user's review note on a variant: a comment with painted regions on the reference and the build."""
+    number: int
+    build: int | None = None
+    comment: str = ""
+    status: Literal["open", "addressed", "wontfix", "closed"] = "open"
+    camera: dict = {}
+    left: Literal["hero", "mesh"] = "hero"
+    images: dict[str, str] = Field({}, description="pane images with the strokes, relative to the variant's notes/")
+    hits: list[dict] = Field([], description="build parts under the strokes: part, share, centre (metres)")
+    empty: float = Field(0.0, description="share of the strokes over empty space")
+    region: list[list[float]] | None = Field(None, description="the painted region on the reference mesh (metres)")
+    history: list[ReviewEvent] = []
+
+
+class ReviewNotes(Model):
+    notes: list[ReviewNote] = []

@@ -67,9 +67,11 @@ def _projected(part: Part, project) -> np.ndarray:
     return project(part.world_vertices())[part.shape.triangles()]
 
 
-def score_view(model: Model, view: str, masks: dict[str, np.ndarray]) -> dict:
+def score_view(model: Model, view: str, masks: dict[str, np.ndarray], fit: dict | None = None) -> dict:
     """Scores one view. ``masks`` maps mask part names (``object`` for the silhouette) to boolean arrays covering the
-    view image (all the same size)."""
+    view image (all the same size). With the view's metric ``fit`` (views of a reference mesh: pixel = projection *
+    scale + offset, in metres) the model is placed exactly, so size errors are absolute; without it the model is
+    scaled to the silhouette and the errors are proportions."""
     if view not in VIEWS or not masks:
         return {"view": view, "skipped": "unknown view" if view not in VIEWS else "no masks"}
     height, width = next(iter(masks.values())).shape
@@ -84,9 +86,13 @@ def score_view(model: Model, view: str, masks: dict[str, np.ndarray]) -> dict:
     every = np.concatenate([t.reshape(-1, 2) for t in tris.values()])
     lo, hi = every.min(0), every.max(0)
     size = np.maximum(hi - lo, 1e-9)
-    scale = float(np.sqrt((object_w / size[0]) * (object_h / size[1])))  # uniform: keeps the program's aspect
-    offset = np.array([(tx0 + tx1) / 2, (ty0 + ty1) / 2]) - (lo + hi) / 2 * scale
-    result = {"view": view, "scale": round(scale, 3), "parts": [],
+    if fit is not None:
+        scale, offset, how = float(fit["scale"]), np.asarray(fit["offset"], float), "metric"
+    else:
+        scale = float(np.sqrt((object_w / size[0]) * (object_h / size[1])))  # uniform: keeps the program's aspect
+        offset = np.array([(tx0 + tx1) / 2, (ty0 + ty1) / 2]) - (lo + hi) / 2 * scale
+        how = "fitted"
+    result = {"view": view, "scale": round(scale, 3), "scaling": how, "parts": [],
               # image pixel = projection * scale + offset; renders use it to frame the camera exactly
               "fit": {"scale": scale, "offset": offset.tolist(), "image": [width, height]},
               "object": {"width_error": round((size[0] * scale - object_w) / object_w, 4),
@@ -125,15 +131,16 @@ def _compare(name: str, members: list[Part], filled: np.ndarray, mask: np.ndarra
     return row
 
 
-def score(model: Model, masks: list[dict]) -> dict:
-    """Scores every view that has masks. ``masks`` items: {"part", "view", "mask": bool array}. ``mean_object_iou``
-    averages the views' object IoU, ``mean_iou`` the views' mean part IoU."""
+def score(model: Model, masks: list[dict], fits: dict[str, dict] | None = None) -> dict:
+    """Scores every view that has masks. ``masks`` items: {"part", "view", "mask": bool array}; ``fits`` the views'
+    metric fits by view name, when they have one. ``mean_object_iou`` averages the views' object IoU, ``mean_iou``
+    the views' mean part IoU."""
     if not model.parts:
         return {"views": [], "mean_iou": None, "mean_object_iou": None}
     views: dict[str, dict[str, np.ndarray]] = {}
     for m in masks:
         views.setdefault(m["view"], {})[m["part"]] = m["mask"]
-    results = [score_view(model, view, by_part) for view, by_part in views.items()]
+    results = [score_view(model, view, by_part, (fits or {}).get(view)) for view, by_part in views.items()]
 
     def mean(values):
         values = [v for v in values if v is not None]

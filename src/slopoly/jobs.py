@@ -146,9 +146,15 @@ def spawn(path: Path, cwd: Path) -> None:
     log.close()
 
 
+def register_all() -> None:
+    from . import generate, windows  # noqa: F401  (their modules register their kinds)
+
+
 def start(pack: Pack, kind_name: str, target: str, inputs: dict, retry_of: str | None = None) -> dict:
     if kind_name not in KINDS:
-        raise SlopolyError("unknown_kind", f"unknown job kind {kind_name!r}")
+        register_all()  # e.g. retry, which knows the kind only from the job file
+    if kind_name not in KINDS:
+        raise SlopolyError("unknown_kind", f"unknown job kind {kind_name!r}", kinds=sorted(KINDS))
     stamp = datetime.now().strftime("%Y%m%d-%H%M%S")
     job = m.Job(id=f"{stamp}-{secrets.token_hex(2)}", kind=kind_name, target=target, inputs=inputs, created=now(),
                 retry_of=retry_of)
@@ -175,7 +181,7 @@ def run(path: Path) -> int:
     try:
         if job.cancel_requested:
             raise Cancelled()
-        from . import generate, windows  # noqa: F401  (register their kinds)
+        register_all()
         result = KINDS[job.kind](context)
         context.check()
         final = {"state": "succeeded", "result": result, "progress": 1.0}

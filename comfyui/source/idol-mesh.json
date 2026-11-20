@@ -1,0 +1,792 @@
+{
+  "nodes": [
+    {
+      "id": 1169566206063028,
+      "type": "LoadImage",
+      "pos": [
+        40.0,
+        60.0
+      ],
+      "size": [
+        270.0,
+        328.0
+      ],
+      "flags": {},
+      "order": 0,
+      "mode": 0,
+      "inputs": [],
+      "outputs": [
+        {
+          "name": "IMAGE",
+          "type": "IMAGE",
+          "links": [
+            2477852828627140,
+            3944549516656905
+          ]
+        },
+        {
+          "name": "MASK",
+          "type": "MASK",
+          "links": []
+        }
+      ],
+      "properties": {},
+      "widgets_values": [
+        "ComfyUI_00070_.png"
+      ],
+      "title": "in:image"
+    },
+    {
+      "id": 852454745098370,
+      "type": "LoadBackgroundRemovalModel",
+      "pos": [
+        40.0,
+        458.0
+      ],
+      "size": [
+        283.5,
+        94.0
+      ],
+      "flags": {},
+      "order": 0,
+      "mode": 0,
+      "inputs": [],
+      "outputs": [
+        {
+          "name": "bg_model",
+          "type": "BACKGROUND_REMOVAL",
+          "links": [
+            4082598135237050
+          ]
+        }
+      ],
+      "properties": {},
+      "widgets_values": [
+        "birefnet.safetensors"
+      ]
+    },
+    {
+      "id": 2396264254426144,
+      "type": "RemoveBackground",
+      "pos": [
+        408.79999999999995,
+        323.5
+      ],
+      "size": [
+        213.0,
+        82.0
+      ],
+      "flags": {},
+      "order": 0,
+      "mode": 0,
+      "inputs": [
+        {
+          "name": "bg_removal_model",
+          "type": "BACKGROUND_REMOVAL",
+          "link": 4082598135237050
+        },
+        {
+          "name": "image",
+          "type": "IMAGE",
+          "link": 2477852828627140
+        }
+      ],
+      "outputs": [
+        {
+          "name": "mask",
+          "type": "MASK",
+          "links": [
+            2937579733978624,
+            1600384548390362
+          ]
+        }
+      ],
+      "properties": {},
+      "widgets_values": []
+    },
+    {
+      "id": 1769169824975523,
+      "type": "TripoSplatPreprocessImage",
+      "pos": [
+        701.8,
+        225.25
+      ],
+      "size": [
+        270.0,
+        138.0
+      ],
+      "flags": {},
+      "order": 0,
+      "mode": 0,
+      "inputs": [
+        {
+          "name": "image",
+          "type": "IMAGE",
+          "link": 3944549516656905
+        },
+        {
+          "name": "mask",
+          "type": "MASK",
+          "link": 2937579733978624
+        }
+      ],
+      "outputs": [
+        {
+          "name": "image",
+          "type": "IMAGE",
+          "links": [
+            2503588013208860
+          ]
+        }
+      ],
+      "properties": {},
+      "widgets_values": [
+        1,
+        1024
+      ]
+    },
+    {
+      "id": 1743340874466456,
+      "type": "CLIPVisionLoader",
+      "pos": [
+        40.0,
+        622.0
+      ],
+      "size": [
+        270.0,
+        94.0
+      ],
+      "flags": {},
+      "order": 0,
+      "mode": 0,
+      "inputs": [],
+      "outputs": [
+        {
+          "name": "CLIP_VISION",
+          "type": "CLIP_VISION",
+          "links": [
+            2501519790566052
+          ]
+        }
+      ],
+      "properties": {},
+      "widgets_values": [
+        "dino_v3_vit_h_bf16.safetensors"
+      ]
+    },
+    {
+      "id": 3312900093132349,
+      "type": "VAELoader",
+      "pos": [
+        40.0,
+        786.0
+      ],
+      "size": [
+        270.0,
+        94.0
+      ],
+      "flags": {},
+      "order": 0,
+      "mode": 0,
+      "inputs": [],
+      "outputs": [
+        {
+          "name": "VAE",
+          "type": "VAE",
+          "links": [
+            1523740577733670
+          ]
+        }
+      ],
+      "properties": {},
+      "widgets_values": [
+        "flux2-vae.safetensors"
+      ]
+    },
+    {
+      "id": 2814712287139562,
+      "type": "VAELoader",
+      "pos": [
+        40.0,
+        950.0
+      ],
+      "size": [
+        270.0,
+        94.0
+      ],
+      "flags": {},
+      "order": 0,
+      "mode": 0,
+      "inputs": [],
+      "outputs": [
+        {
+          "name": "VAE",
+          "type": "VAE",
+          "links": [
+            2352368978370731
+          ]
+        }
+      ],
+      "properties": {},
+      "widgets_values": [
+        "idol_decoder_fp16.safetensors"
+      ]
+    },
+    {
+      "id": 929673439667408,
+      "type": "UNETLoader",
+      "pos": [
+        40.0,
+        1114.0
+      ],
+      "size": [
+        270.0,
+        118.0
+      ],
+      "flags": {},
+      "order": 0,
+      "mode": 0,
+      "inputs": [],
+      "outputs": [
+        {
+          "name": "MODEL",
+          "type": "MODEL",
+          "links": [
+            3473903721359709
+          ]
+        }
+      ],
+      "properties": {},
+      "widgets_values": [
+        "idol_fp16.safetensors",
+        "default"
+      ]
+    },
+    {
+      "id": 1011442675751850,
+      "type": "TripoSplatConditioning",
+      "pos": [
+        1051.8,
+        547.75
+      ],
+      "size": [
+        233.1,
+        102.0
+      ],
+      "flags": {},
+      "order": 0,
+      "mode": 0,
+      "inputs": [
+        {
+          "name": "clip_vision",
+          "type": "CLIP_VISION",
+          "link": 2501519790566052
+        },
+        {
+          "name": "vae",
+          "type": "VAE",
+          "link": 1523740577733670
+        },
+        {
+          "name": "image",
+          "type": "IMAGE",
+          "link": 2503588013208860
+        }
+      ],
+      "outputs": [
+        {
+          "name": "positive",
+          "type": "CONDITIONING",
+          "links": [
+            3574538223812188
+          ]
+        },
+        {
+          "name": "negative",
+          "type": "CONDITIONING",
+          "links": [
+            1162292627496748
+          ]
+        },
+        {
+          "name": "latent",
+          "type": "LATENT",
+          "links": [
+            3661104518713418
+          ]
+        }
+      ],
+      "properties": {},
+      "widgets_values": []
+    },
+    {
+      "id": 1968022928092470,
+      "type": "KSampler",
+      "pos": [
+        1401.8,
+        593.3125
+      ],
+      "size": [
+        288.79999999999995,
+        298.0
+      ],
+      "flags": {},
+      "order": 0,
+      "mode": 0,
+      "inputs": [
+        {
+          "name": "model",
+          "type": "MODEL",
+          "link": 3473903721359709
+        },
+        {
+          "name": "positive",
+          "type": "CONDITIONING",
+          "link": 3574538223812188
+        },
+        {
+          "name": "negative",
+          "type": "CONDITIONING",
+          "link": 1162292627496748
+        },
+        {
+          "name": "latent_image",
+          "type": "LATENT",
+          "link": 3661104518713418
+        }
+      ],
+      "outputs": [
+        {
+          "name": "LATENT",
+          "type": "LATENT",
+          "links": [
+            1176328859352074
+          ]
+        }
+      ],
+      "properties": {},
+      "widgets_values": [
+        0,
+        "fixed",
+        20,
+        3,
+        "dpmpp_2m",
+        "simple",
+        1.0
+      ],
+      "title": "in:seed"
+    },
+    {
+      "id": 1833411664118716,
+      "type": "VAEDecodeTripoSplat",
+      "pos": [
+        1770.6,
+        788.65625
+      ],
+      "size": [
+        288.79999999999995,
+        162.0
+      ],
+      "flags": {},
+      "order": 0,
+      "mode": 0,
+      "inputs": [
+        {
+          "name": "samples",
+          "type": "LATENT",
+          "link": 1176328859352074
+        },
+        {
+          "name": "vae",
+          "type": "VAE",
+          "link": 2352368978370731
+        }
+      ],
+      "outputs": [
+        {
+          "name": "splat",
+          "type": "SPLAT",
+          "links": [
+            613037269268660
+          ]
+        }
+      ],
+      "properties": {},
+      "widgets_values": [
+        262144,
+        0,
+        "fixed"
+      ]
+    },
+    {
+      "id": 859441453010365,
+      "type": "MaskToImage",
+      "pos": [
+        701.8,
+        433.25
+      ],
+      "size": [
+        216.3,
+        62.0
+      ],
+      "flags": {},
+      "order": 0,
+      "mode": 0,
+      "inputs": [
+        {
+          "name": "mask",
+          "type": "MASK",
+          "link": 1600384548390362
+        }
+      ],
+      "outputs": [
+        {
+          "name": "IMAGE",
+          "type": "IMAGE",
+          "links": [
+            382569126296502
+          ]
+        }
+      ],
+      "properties": {},
+      "widgets_values": []
+    },
+    {
+      "id": 2053361705139289,
+      "type": "SaveImage",
+      "pos": [
+        1051.8,
+        719.75
+      ],
+      "size": [
+        270.0,
+        94.0
+      ],
+      "flags": {},
+      "order": 0,
+      "mode": 0,
+      "inputs": [
+        {
+          "name": "images",
+          "type": "IMAGE",
+          "link": 382569126296502
+        }
+      ],
+      "outputs": [
+        {
+          "name": "images",
+          "type": "IMAGE",
+          "links": []
+        }
+      ],
+      "properties": {},
+      "widgets_values": [
+        "slopoly/mesh_hero_mask"
+      ],
+      "title": "out:hero_mask"
+    },
+    {
+      "id": 3548994248970707,
+      "type": "SplatToMesh",
+      "pos": [
+        2139.3999999999996,
+        750.65625
+      ],
+      "size": [
+        270.0,
+        238.0
+      ],
+      "flags": {},
+      "order": 0,
+      "mode": 0,
+      "inputs": [
+        {
+          "name": "splat",
+          "type": "SPLAT",
+          "link": 613037269268660
+        }
+      ],
+      "outputs": [
+        {
+          "name": "mesh",
+          "type": "MESH",
+          "links": [
+            3522051225526968
+          ]
+        }
+      ],
+      "properties": {},
+      "widgets_values": [
+        384,
+        5,
+        2,
+        0.4,
+        500,
+        0.02,
+        2.0
+      ]
+    },
+    {
+      "id": 1830859221921706,
+      "type": "PrimitiveInt",
+      "pos": [
+        40.0,
+        1302.0
+      ],
+      "size": [
+        288.79999999999995,
+        118.0
+      ],
+      "flags": {},
+      "order": 0,
+      "mode": 0,
+      "inputs": [],
+      "outputs": [
+        {
+          "name": "INT",
+          "type": "INT",
+          "links": [
+            3735536944501980
+          ]
+        }
+      ],
+      "properties": {},
+      "widgets_values": [
+        80000,
+        "fixed"
+      ],
+      "title": "in:faces"
+    },
+    {
+      "id": 104941173574749,
+      "type": "DecimateMesh",
+      "pos": [
+        2489.3999999999996,
+        1056.328125
+      ],
+      "size": [
+        270.0,
+        118.0
+      ],
+      "flags": {},
+      "order": 0,
+      "mode": 0,
+      "inputs": [
+        {
+          "name": "mesh",
+          "type": "MESH",
+          "link": 3522051225526968
+        },
+        {
+          "name": "target_face_count",
+          "type": "INT",
+          "link": 3735536944501980,
+          "grow_id": 3735536944501980,
+          "widget": {
+            "name": "target_face_count"
+          }
+        }
+      ],
+      "outputs": [
+        {
+          "name": "mesh",
+          "type": "MESH",
+          "links": [
+            3462662399535424
+          ]
+        }
+      ],
+      "properties": {},
+      "widgets_values": [
+        200000,
+        "midpoint"
+      ]
+    },
+    {
+      "id": 4124277940770660,
+      "type": "SaveGLB",
+      "pos": [
+        2839.3999999999996,
+        1056.328125
+      ],
+      "size": [
+        270.0,
+        118.0
+      ],
+      "flags": {},
+      "order": 0,
+      "mode": 0,
+      "inputs": [
+        {
+          "name": "mesh",
+          "type": "MESH,FILE_3D_GLB,FILE_3D_GLTF,FILE_3D_OBJ,FILE_3D_FBX,FILE_3D_STL,FILE_3D_USDZ,FILE_3D_PLY,FILE_3D_SPLAT,FILE_3D_SPZ,FILE_3D_KSPLAT,FILE_3D_SPLAT_ANY,FILE_3D_POINT_CLOUD_ANY,FILE_3D",
+          "link": 3462662399535424
+        }
+      ],
+      "outputs": [],
+      "properties": {},
+      "widgets_values": [
+        "slopoly/mesh",
+        ""
+      ],
+      "title": "out:mesh"
+    }
+  ],
+  "links": [
+    [
+      4082598135237050,
+      852454745098370,
+      0,
+      2396264254426144,
+      0,
+      "BACKGROUND_REMOVAL"
+    ],
+    [
+      2477852828627140,
+      1169566206063028,
+      0,
+      2396264254426144,
+      1,
+      "IMAGE"
+    ],
+    [
+      3944549516656905,
+      1169566206063028,
+      0,
+      1769169824975523,
+      0,
+      "IMAGE"
+    ],
+    [
+      2937579733978624,
+      2396264254426144,
+      0,
+      1769169824975523,
+      1,
+      "MASK"
+    ],
+    [
+      2501519790566052,
+      1743340874466456,
+      0,
+      1011442675751850,
+      0,
+      "CLIP_VISION"
+    ],
+    [
+      1523740577733670,
+      3312900093132349,
+      0,
+      1011442675751850,
+      1,
+      "VAE"
+    ],
+    [
+      2503588013208860,
+      1769169824975523,
+      0,
+      1011442675751850,
+      2,
+      "IMAGE"
+    ],
+    [
+      3473903721359709,
+      929673439667408,
+      0,
+      1968022928092470,
+      0,
+      "MODEL"
+    ],
+    [
+      3574538223812188,
+      1011442675751850,
+      0,
+      1968022928092470,
+      1,
+      "CONDITIONING"
+    ],
+    [
+      1162292627496748,
+      1011442675751850,
+      1,
+      1968022928092470,
+      2,
+      "CONDITIONING"
+    ],
+    [
+      3661104518713418,
+      1011442675751850,
+      2,
+      1968022928092470,
+      3,
+      "LATENT"
+    ],
+    [
+      1176328859352074,
+      1968022928092470,
+      0,
+      1833411664118716,
+      0,
+      "LATENT"
+    ],
+    [
+      2352368978370731,
+      2814712287139562,
+      0,
+      1833411664118716,
+      1,
+      "VAE"
+    ],
+    [
+      1600384548390362,
+      2396264254426144,
+      0,
+      859441453010365,
+      0,
+      "MASK"
+    ],
+    [
+      382569126296502,
+      859441453010365,
+      0,
+      2053361705139289,
+      0,
+      "IMAGE"
+    ],
+    [
+      613037269268660,
+      1833411664118716,
+      0,
+      3548994248970707,
+      0,
+      "SPLAT"
+    ],
+    [
+      3522051225526968,
+      3548994248970707,
+      0,
+      104941173574749,
+      0,
+      "MESH"
+    ],
+    [
+      3735536944501980,
+      1830859221921706,
+      0,
+      104941173574749,
+      1,
+      "INT"
+    ],
+    [
+      3462662399535424,
+      104941173574749,
+      0,
+      4124277940770660,
+      0,
+      "MESH"
+    ]
+  ],
+  "last_node_id": 4124277940770660,
+  "last_link_id": 0,
+  "version": 0.4
+}

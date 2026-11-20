@@ -1,0 +1,2239 @@
+{
+  "nodes": [
+    {
+      "id": 537873122915656,
+      "type": "LoadImage",
+      "pos": [
+        40.0,
+        1444.0
+      ],
+      "size": [
+        270.0,
+        328.0
+      ],
+      "flags": {},
+      "order": 0,
+      "mode": 0,
+      "inputs": [],
+      "outputs": [
+        {
+          "name": "IMAGE",
+          "type": "IMAGE",
+          "links": [
+            2117138767165266,
+            2893646920383905
+          ]
+        },
+        {
+          "name": "MASK",
+          "type": "MASK",
+          "links": []
+        }
+      ],
+      "properties": {},
+      "widgets_values": [
+        "ComfyUI_00070_.png"
+      ],
+      "title": "in:image"
+    },
+    {
+      "id": 3675682507554348,
+      "type": "LoadBackgroundRemovalModel",
+      "pos": [
+        40.0,
+        1842.0
+      ],
+      "size": [
+        283.5,
+        94.0
+      ],
+      "flags": {},
+      "order": 0,
+      "mode": 0,
+      "inputs": [],
+      "outputs": [
+        {
+          "name": "bg_model",
+          "type": "BACKGROUND_REMOVAL",
+          "links": [
+            1453056855908510
+          ]
+        }
+      ],
+      "properties": {},
+      "widgets_values": [
+        "birefnet.safetensors"
+      ]
+    },
+    {
+      "id": 1221841759706441,
+      "type": "RemoveBackground",
+      "pos": [
+        420.29999999999995,
+        1707.5
+      ],
+      "size": [
+        213.0,
+        82.0
+      ],
+      "flags": {},
+      "order": 0,
+      "mode": 0,
+      "inputs": [
+        {
+          "name": "bg_removal_model",
+          "type": "BACKGROUND_REMOVAL",
+          "link": 1453056855908510
+        },
+        {
+          "name": "image",
+          "type": "IMAGE",
+          "link": 2117138767165266
+        }
+      ],
+      "outputs": [
+        {
+          "name": "mask",
+          "type": "MASK",
+          "links": [
+            1891118822526938,
+            923052247220228
+          ]
+        }
+      ],
+      "properties": {},
+      "widgets_values": []
+    },
+    {
+      "id": 179575471626445,
+      "type": "ImageCropToMask",
+      "pos": [
+        770.3,
+        1573.25
+      ],
+      "size": [
+        270.0,
+        210.0
+      ],
+      "flags": {},
+      "order": 0,
+      "mode": 0,
+      "inputs": [
+        {
+          "name": "images",
+          "type": "IMAGE",
+          "link": 2893646920383905
+        },
+        {
+          "name": "masks",
+          "type": "MASK",
+          "link": 1891118822526938
+        }
+      ],
+      "outputs": [
+        {
+          "name": "images",
+          "type": "IMAGE",
+          "links": [
+            588827991402427,
+            1031031758984994,
+            3761829394259991
+          ]
+        }
+      ],
+      "properties": {},
+      "widgets_values": [
+        1024,
+        1024,
+        1.1,
+        0,
+        "#000000"
+      ]
+    },
+    {
+      "id": 205917333605882,
+      "type": "CLIPVisionLoader",
+      "pos": [
+        40.0,
+        2006.0
+      ],
+      "size": [
+        270.0,
+        94.0
+      ],
+      "flags": {},
+      "order": 0,
+      "mode": 0,
+      "inputs": [],
+      "outputs": [
+        {
+          "name": "CLIP_VISION",
+          "type": "CLIP_VISION",
+          "links": [
+            2340871991398171,
+            4228617073729823
+          ]
+        }
+      ],
+      "properties": {},
+      "widgets_values": [
+        "dino_v3_L_naf_fp32.safetensors"
+      ]
+    },
+    {
+      "id": 1336928961549603,
+      "type": "Trellis2Conditioning",
+      "pos": [
+        1120.3,
+        2041.25
+      ],
+      "size": [
+        255.0,
+        82.0
+      ],
+      "flags": {},
+      "order": 0,
+      "mode": 0,
+      "inputs": [
+        {
+          "name": "clip_vision_model",
+          "type": "CLIP_VISION",
+          "link": 2340871991398171
+        },
+        {
+          "name": "image",
+          "type": "IMAGE",
+          "link": 588827991402427
+        }
+      ],
+      "outputs": [
+        {
+          "name": "positive",
+          "type": "CONDITIONING",
+          "links": [
+            716241524887079
+          ]
+        },
+        {
+          "name": "negative",
+          "type": "CONDITIONING",
+          "links": [
+            3984581283557807
+          ]
+        }
+      ],
+      "properties": {},
+      "widgets_values": []
+    },
+    {
+      "id": 3887360521293465,
+      "type": "LoadMoGeModel",
+      "pos": [
+        40.0,
+        60.0
+      ],
+      "size": [
+        270.0,
+        94.0
+      ],
+      "flags": {},
+      "order": 0,
+      "mode": 0,
+      "inputs": [],
+      "outputs": [
+        {
+          "name": "MOGE_MODEL",
+          "type": "MOGE_MODEL",
+          "links": [
+            3067455043637389
+          ]
+        }
+      ],
+      "properties": {},
+      "widgets_values": [
+        "moge_2_vitl_normal_fp16.safetensors"
+      ]
+    },
+    {
+      "id": 3189836195454421,
+      "type": "MoGeInference",
+      "pos": [
+        1120.3,
+        775.625
+      ],
+      "size": [
+        270.0,
+        234.0
+      ],
+      "flags": {},
+      "order": 0,
+      "mode": 0,
+      "inputs": [
+        {
+          "name": "moge_model",
+          "type": "MOGE_MODEL",
+          "link": 3067455043637389
+        },
+        {
+          "name": "image",
+          "type": "IMAGE",
+          "link": 1031031758984994
+        }
+      ],
+      "outputs": [
+        {
+          "name": "moge_geometry",
+          "type": "MOGE_GEOMETRY",
+          "links": [
+            2532471263234109
+          ]
+        }
+      ],
+      "properties": {},
+      "widgets_values": [
+        9,
+        0.0,
+        4,
+        true,
+        true,
+        3
+      ]
+    },
+    {
+      "id": 1145485620310568,
+      "type": "MoGeGeometryToFOV",
+      "pos": [
+        1470.3,
+        823.625
+      ],
+      "size": [
+        270.0,
+        138.0
+      ],
+      "flags": {},
+      "order": 0,
+      "mode": 0,
+      "inputs": [
+        {
+          "name": "moge_geometry",
+          "type": "MOGE_GEOMETRY",
+          "link": 2532471263234109
+        }
+      ],
+      "outputs": [
+        {
+          "name": "fov",
+          "type": "FLOAT",
+          "links": [
+            2598506399981614
+          ]
+        },
+        {
+          "name": "focal_pixels",
+          "type": "FLOAT",
+          "links": []
+        }
+      ],
+      "properties": {},
+      "widgets_values": [
+        "horizontal",
+        "degrees"
+      ]
+    },
+    {
+      "id": 3916421811799264,
+      "type": "Pixal3DConditioning",
+      "pos": [
+        1820.3,
+        1484.2916666666667
+      ],
+      "size": [
+        270.0,
+        114.0
+      ],
+      "flags": {},
+      "order": 0,
+      "mode": 0,
+      "inputs": [
+        {
+          "name": "clip_vision_model",
+          "type": "CLIP_VISION",
+          "link": 4228617073729823
+        },
+        {
+          "name": "image",
+          "type": "IMAGE",
+          "link": 3761829394259991
+        },
+        {
+          "name": "camera_angle_x",
+          "type": "FLOAT",
+          "link": 2598506399981614,
+          "grow_id": 2598506399981614,
+          "widget": {
+            "name": "camera_angle_x"
+          }
+        }
+      ],
+      "outputs": [
+        {
+          "name": "positive",
+          "type": "CONDITIONING",
+          "links": [
+            278615304055411
+          ]
+        },
+        {
+          "name": "negative",
+          "type": "CONDITIONING",
+          "links": [
+            1795674936422831
+          ]
+        }
+      ],
+      "properties": {},
+      "widgets_values": [
+        49.13
+      ]
+    },
+    {
+      "id": 2668729587839042,
+      "type": "PrimitiveBoolean",
+      "pos": [
+        40.0,
+        1116.0
+      ],
+      "size": [
+        270.0,
+        94.0
+      ],
+      "flags": {},
+      "order": 0,
+      "mode": 0,
+      "inputs": [],
+      "outputs": [
+        {
+          "name": "BOOLEAN",
+          "type": "BOOLEAN",
+          "links": [
+            3544313513319096,
+            1758441904252745,
+            2772022998063430
+          ]
+        }
+      ],
+      "properties": {},
+      "widgets_values": [
+        true
+      ],
+      "title": "in:trellis2"
+    },
+    {
+      "id": 1494815835358541,
+      "type": "ComfySwitchNode",
+      "pos": [
+        2170.3,
+        1538.513888888889
+      ],
+      "size": [
+        270.0,
+        114.0
+      ],
+      "flags": {},
+      "order": 0,
+      "mode": 0,
+      "inputs": [
+        {
+          "name": "on_false",
+          "type": "COMFY_MATCHTYPE_V3",
+          "link": 278615304055411
+        },
+        {
+          "name": "on_true",
+          "type": "COMFY_MATCHTYPE_V3",
+          "link": 716241524887079
+        },
+        {
+          "name": "switch",
+          "type": "BOOLEAN",
+          "link": 3544313513319096,
+          "grow_id": 3544313513319096,
+          "widget": {
+            "name": "switch"
+          }
+        }
+      ],
+      "outputs": [
+        {
+          "name": "output",
+          "type": "COMFY_MATCHTYPE_V3",
+          "links": [
+            2523524710536078,
+            3564227908279878
+          ]
+        }
+      ],
+      "properties": {},
+      "widgets_values": [
+        null
+      ]
+    },
+    {
+      "id": 858842332135813,
+      "type": "ComfySwitchNode",
+      "pos": [
+        2170.3,
+        1722.513888888889
+      ],
+      "size": [
+        270.0,
+        114.0
+      ],
+      "flags": {},
+      "order": 0,
+      "mode": 0,
+      "inputs": [
+        {
+          "name": "on_false",
+          "type": "COMFY_MATCHTYPE_V3",
+          "link": 1795674936422831
+        },
+        {
+          "name": "on_true",
+          "type": "COMFY_MATCHTYPE_V3",
+          "link": 3984581283557807
+        },
+        {
+          "name": "switch",
+          "type": "BOOLEAN",
+          "link": 1758441904252745,
+          "grow_id": 1758441904252745,
+          "widget": {
+            "name": "switch"
+          }
+        }
+      ],
+      "outputs": [
+        {
+          "name": "output",
+          "type": "COMFY_MATCHTYPE_V3",
+          "links": [
+            3020713567454742,
+            1938952912367681
+          ]
+        }
+      ],
+      "properties": {},
+      "widgets_values": [
+        null
+      ]
+    },
+    {
+      "id": 1941005726155066,
+      "type": "UNETLoader",
+      "pos": [
+        40.0,
+        224.0
+      ],
+      "size": [
+        270.0,
+        118.0
+      ],
+      "flags": {},
+      "order": 0,
+      "mode": 0,
+      "inputs": [],
+      "outputs": [
+        {
+          "name": "MODEL",
+          "type": "MODEL",
+          "links": [
+            3816954646340186
+          ]
+        }
+      ],
+      "properties": {},
+      "widgets_values": [
+        "trellis_2_int8_convrot.safetensors",
+        "default"
+      ]
+    },
+    {
+      "id": 1242399721668807,
+      "type": "UNETLoader",
+      "pos": [
+        40.0,
+        412.0
+      ],
+      "size": [
+        270.0,
+        118.0
+      ],
+      "flags": {},
+      "order": 0,
+      "mode": 0,
+      "inputs": [],
+      "outputs": [
+        {
+          "name": "MODEL",
+          "type": "MODEL",
+          "links": [
+            2719432894628498
+          ]
+        }
+      ],
+      "properties": {},
+      "widgets_values": [
+        "pixal3d_int8_convrot.safetensors",
+        "default"
+      ]
+    },
+    {
+      "id": 503109503580847,
+      "type": "ComfySwitchNode",
+      "pos": [
+        420.29999999999995,
+        582.0
+      ],
+      "size": [
+        270.0,
+        114.0
+      ],
+      "flags": {},
+      "order": 0,
+      "mode": 0,
+      "inputs": [
+        {
+          "name": "on_false",
+          "type": "COMFY_MATCHTYPE_V3",
+          "link": 2719432894628498
+        },
+        {
+          "name": "on_true",
+          "type": "COMFY_MATCHTYPE_V3",
+          "link": 3816954646340186
+        },
+        {
+          "name": "switch",
+          "type": "BOOLEAN",
+          "link": 2772022998063430,
+          "grow_id": 2772022998063430,
+          "widget": {
+            "name": "switch"
+          }
+        }
+      ],
+      "outputs": [
+        {
+          "name": "output",
+          "type": "COMFY_MATCHTYPE_V3",
+          "links": [
+            478732993000609,
+            2761432902128375,
+            3621739297097951
+          ]
+        }
+      ],
+      "properties": {},
+      "widgets_values": [
+        null
+      ]
+    },
+    {
+      "id": 1496577950908708,
+      "type": "VAELoader",
+      "pos": [
+        40.0,
+        1280.0
+      ],
+      "size": [
+        270.0,
+        94.0
+      ],
+      "flags": {},
+      "order": 0,
+      "mode": 0,
+      "inputs": [],
+      "outputs": [
+        {
+          "name": "VAE",
+          "type": "VAE",
+          "links": [
+            2957214730437990,
+            4258643879966392,
+            2949990690135543
+          ]
+        }
+      ],
+      "properties": {},
+      "widgets_values": [
+        "trellis_2_shape_vae_bf16.safetensors"
+      ]
+    },
+    {
+      "id": 2429273087783155,
+      "type": "VAELoader",
+      "pos": [
+        40.0,
+        600.0
+      ],
+      "size": [
+        270.0,
+        94.0
+      ],
+      "flags": {},
+      "order": 0,
+      "mode": 0,
+      "inputs": [],
+      "outputs": [
+        {
+          "name": "VAE",
+          "type": "VAE",
+          "links": [
+            4263010355712005
+          ]
+        }
+      ],
+      "properties": {},
+      "widgets_values": [
+        "trellis_2_texture_vae_bf16.safetensors"
+      ]
+    },
+    {
+      "id": 1358526044671601,
+      "type": "CFGOverride",
+      "pos": [
+        770.3,
+        2065.25
+      ],
+      "size": [
+        270.0,
+        142.0
+      ],
+      "flags": {},
+      "order": 0,
+      "mode": 0,
+      "inputs": [
+        {
+          "name": "model",
+          "type": "MODEL",
+          "link": 478732993000609
+        }
+      ],
+      "outputs": [
+        {
+          "name": "MODEL",
+          "type": "MODEL",
+          "links": [
+            4445586160728279
+          ]
+        }
+      ],
+      "properties": {},
+      "widgets_values": [
+        1,
+        0.667,
+        1
+      ]
+    },
+    {
+      "id": 1105108769860078,
+      "type": "RescaleCFG",
+      "pos": [
+        1120.3,
+        2193.25
+      ],
+      "size": [
+        270.0,
+        94.0
+      ],
+      "flags": {},
+      "order": 0,
+      "mode": 0,
+      "inputs": [
+        {
+          "name": "model",
+          "type": "MODEL",
+          "link": 4445586160728279
+        }
+      ],
+      "outputs": [
+        {
+          "name": "MODEL",
+          "type": "MODEL",
+          "links": [
+            1471111196816259
+          ]
+        }
+      ],
+      "properties": {},
+      "widgets_values": [
+        0.7
+      ]
+    },
+    {
+      "id": 3949380059205757,
+      "type": "ModelSamplingSD3",
+      "pos": [
+        1470.3,
+        2193.25
+      ],
+      "size": [
+        270.0,
+        94.0
+      ],
+      "flags": {},
+      "order": 0,
+      "mode": 0,
+      "inputs": [
+        {
+          "name": "model",
+          "type": "MODEL",
+          "link": 1471111196816259
+        }
+      ],
+      "outputs": [
+        {
+          "name": "MODEL",
+          "type": "MODEL",
+          "links": [
+            1716649759216416
+          ]
+        }
+      ],
+      "properties": {},
+      "widgets_values": [
+        5
+      ]
+    },
+    {
+      "id": 56582400045030,
+      "type": "EmptyTrellis2LatentStructure",
+      "pos": [
+        40.0,
+        764.0
+      ],
+      "size": [
+        300.29999999999995,
+        94.0
+      ],
+      "flags": {},
+      "order": 0,
+      "mode": 0,
+      "inputs": [],
+      "outputs": [
+        {
+          "name": "LATENT",
+          "type": "LATENT",
+          "links": [
+            2216052704408192
+          ]
+        }
+      ],
+      "properties": {},
+      "widgets_values": [
+        1
+      ]
+    },
+    {
+      "id": 1393564727436899,
+      "type": "KSampler",
+      "pos": [
+        2520.3,
+        1457.5694444444443
+      ],
+      "size": [
+        288.79999999999995,
+        298.0
+      ],
+      "flags": {},
+      "order": 0,
+      "mode": 0,
+      "inputs": [
+        {
+          "name": "model",
+          "type": "MODEL",
+          "link": 1716649759216416
+        },
+        {
+          "name": "positive",
+          "type": "CONDITIONING",
+          "link": 2523524710536078
+        },
+        {
+          "name": "negative",
+          "type": "CONDITIONING",
+          "link": 3020713567454742
+        },
+        {
+          "name": "latent_image",
+          "type": "LATENT",
+          "link": 2216052704408192
+        }
+      ],
+      "outputs": [
+        {
+          "name": "LATENT",
+          "type": "LATENT",
+          "links": [
+            1114895284839007
+          ]
+        }
+      ],
+      "properties": {},
+      "widgets_values": [
+        56,
+        "fixed",
+        12,
+        7.5,
+        "euler",
+        "normal",
+        1.0
+      ],
+      "title": "in:seed"
+    },
+    {
+      "id": 1954608334515831,
+      "type": "VaeDecodeStructureTrellis2",
+      "pos": [
+        2889.1000000000004,
+        1409.7847222222222
+      ],
+      "size": [
+        283.5,
+        114.0
+      ],
+      "flags": {},
+      "order": 0,
+      "mode": 0,
+      "inputs": [
+        {
+          "name": "samples",
+          "type": "LATENT",
+          "link": 1114895284839007
+        },
+        {
+          "name": "vae",
+          "type": "VAE",
+          "link": 2957214730437990
+        }
+      ],
+      "outputs": [
+        {
+          "name": "voxel",
+          "type": "VOXEL",
+          "links": [
+            2814269378183018
+          ]
+        }
+      ],
+      "properties": {},
+      "widgets_values": [
+        "32"
+      ]
+    },
+    {
+      "id": 2576221998991649,
+      "type": "Trellis2ShapeStage",
+      "pos": [
+        3252.6000000000004,
+        1562.9375
+      ],
+      "size": [
+        207.9,
+        102.0
+      ],
+      "flags": {},
+      "order": 0,
+      "mode": 0,
+      "inputs": [
+        {
+          "name": "positive",
+          "type": "CONDITIONING",
+          "link": 3564227908279878
+        },
+        {
+          "name": "negative",
+          "type": "CONDITIONING",
+          "link": 1938952912367681
+        },
+        {
+          "name": "voxel",
+          "type": "VOXEL",
+          "link": 2814269378183018
+        }
+      ],
+      "outputs": [
+        {
+          "name": "positive",
+          "type": "CONDITIONING",
+          "links": [
+            4208466539239262,
+            3420754053662706
+          ]
+        },
+        {
+          "name": "negative",
+          "type": "CONDITIONING",
+          "links": [
+            1347088298883488,
+            157463323186176
+          ]
+        },
+        {
+          "name": "LATENT",
+          "type": "LATENT",
+          "links": [
+            878850803949860
+          ]
+        }
+      ],
+      "properties": {},
+      "widgets_values": []
+    },
+    {
+      "id": 2421057415093829,
+      "type": "CFGOverride",
+      "pos": [
+        770.3,
+        1853.25
+      ],
+      "size": [
+        270.0,
+        142.0
+      ],
+      "flags": {},
+      "order": 0,
+      "mode": 0,
+      "inputs": [
+        {
+          "name": "model",
+          "type": "MODEL",
+          "link": 2761432902128375
+        }
+      ],
+      "outputs": [
+        {
+          "name": "MODEL",
+          "type": "MODEL",
+          "links": [
+            989138337638082
+          ]
+        }
+      ],
+      "properties": {},
+      "widgets_values": [
+        1,
+        0.769,
+        1
+      ]
+    },
+    {
+      "id": 1499243992042364,
+      "type": "RescaleCFG",
+      "pos": [
+        1120.3,
+        1877.25
+      ],
+      "size": [
+        270.0,
+        94.0
+      ],
+      "flags": {},
+      "order": 0,
+      "mode": 0,
+      "inputs": [
+        {
+          "name": "model",
+          "type": "MODEL",
+          "link": 989138337638082
+        }
+      ],
+      "outputs": [
+        {
+          "name": "MODEL",
+          "type": "MODEL",
+          "links": [
+            1692340040212686,
+            1556472210373793
+          ]
+        }
+      ],
+      "properties": {},
+      "widgets_values": [
+        0.5
+      ]
+    },
+    {
+      "id": 3139749513174711,
+      "type": "KSampler",
+      "pos": [
+        3540.5000000000005,
+        1542.515625
+      ],
+      "size": [
+        288.79999999999995,
+        298.0
+      ],
+      "flags": {},
+      "order": 0,
+      "mode": 0,
+      "inputs": [
+        {
+          "name": "model",
+          "type": "MODEL",
+          "link": 1692340040212686
+        },
+        {
+          "name": "positive",
+          "type": "CONDITIONING",
+          "link": 4208466539239262
+        },
+        {
+          "name": "negative",
+          "type": "CONDITIONING",
+          "link": 1347088298883488
+        },
+        {
+          "name": "latent_image",
+          "type": "LATENT",
+          "link": 878850803949860
+        }
+      ],
+      "outputs": [
+        {
+          "name": "LATENT",
+          "type": "LATENT",
+          "links": [
+            4298639367298457
+          ]
+        }
+      ],
+      "properties": {},
+      "widgets_values": [
+        42,
+        "fixed",
+        20,
+        7.5,
+        "euler",
+        "normal",
+        1.0
+      ]
+    },
+    {
+      "id": 718302114959934,
+      "type": "PrimitiveInt",
+      "pos": [
+        40.0,
+        928.0
+      ],
+      "size": [
+        288.79999999999995,
+        118.0
+      ],
+      "flags": {},
+      "order": 0,
+      "mode": 0,
+      "inputs": [],
+      "outputs": [
+        {
+          "name": "INT",
+          "type": "INT",
+          "links": [
+            1714423000630713
+          ]
+        }
+      ],
+      "properties": {},
+      "widgets_values": [
+        1024,
+        "fixed"
+      ],
+      "title": "in:resolution"
+    },
+    {
+      "id": 1610791377907674,
+      "type": "Trellis2UpsampleStage",
+      "pos": [
+        3909.3,
+        1369.678125
+      ],
+      "size": [
+        270.0,
+        154.0
+      ],
+      "flags": {},
+      "order": 0,
+      "mode": 0,
+      "inputs": [
+        {
+          "name": "positive",
+          "type": "CONDITIONING",
+          "link": 3420754053662706
+        },
+        {
+          "name": "negative",
+          "type": "CONDITIONING",
+          "link": 157463323186176
+        },
+        {
+          "name": "shape_latent",
+          "type": "LATENT",
+          "link": 4298639367298457
+        },
+        {
+          "name": "vae",
+          "type": "VAE",
+          "link": 4258643879966392
+        },
+        {
+          "name": "target_resolution",
+          "type": "INT",
+          "link": 1714423000630713,
+          "grow_id": 1714423000630713,
+          "widget": {
+            "name": "target_resolution"
+          }
+        }
+      ],
+      "outputs": [
+        {
+          "name": "positive",
+          "type": "CONDITIONING",
+          "links": [
+            2985840256519343,
+            3324299311547072
+          ]
+        },
+        {
+          "name": "negative",
+          "type": "CONDITIONING",
+          "links": [
+            2422748746256250,
+            1233174913894096
+          ]
+        },
+        {
+          "name": "LATENT",
+          "type": "LATENT",
+          "links": [
+            3069302332157242
+          ]
+        }
+      ],
+      "properties": {},
+      "widgets_values": [
+        1024
+      ]
+    },
+    {
+      "id": 727156013547174,
+      "type": "KSampler",
+      "pos": [
+        4259.3,
+        1417.0710937499998
+      ],
+      "size": [
+        288.79999999999995,
+        298.0
+      ],
+      "flags": {},
+      "order": 0,
+      "mode": 0,
+      "inputs": [
+        {
+          "name": "model",
+          "type": "MODEL",
+          "link": 1556472210373793
+        },
+        {
+          "name": "positive",
+          "type": "CONDITIONING",
+          "link": 2985840256519343
+        },
+        {
+          "name": "negative",
+          "type": "CONDITIONING",
+          "link": 2422748746256250
+        },
+        {
+          "name": "latent_image",
+          "type": "LATENT",
+          "link": 3069302332157242
+        }
+      ],
+      "outputs": [
+        {
+          "name": "LATENT",
+          "type": "LATENT",
+          "links": [
+            3730757641441013,
+            1360567262956878
+          ]
+        }
+      ],
+      "properties": {},
+      "widgets_values": [
+        42,
+        "fixed",
+        12,
+        7.5,
+        "euler",
+        "simple",
+        1.0
+      ]
+    },
+    {
+      "id": 1400433200916516,
+      "type": "VaeDecodeShapeTrellis",
+      "pos": [
+        4628.1,
+        1607.47578125
+      ],
+      "size": [
+        249.9,
+        82.0
+      ],
+      "flags": {},
+      "order": 0,
+      "mode": 0,
+      "inputs": [
+        {
+          "name": "samples",
+          "type": "LATENT",
+          "link": 3730757641441013
+        },
+        {
+          "name": "vae",
+          "type": "VAE",
+          "link": 2949990690135543
+        }
+      ],
+      "outputs": [
+        {
+          "name": "mesh",
+          "type": "MESH",
+          "links": [
+            72159240754076
+          ]
+        },
+        {
+          "name": "shape_subdivides",
+          "type": "SHAPE_SUBDIVIDES",
+          "links": [
+            1853048590570767
+          ]
+        }
+      ],
+      "properties": {},
+      "widgets_values": []
+    },
+    {
+      "id": 516109172798688,
+      "type": "Trellis2TextureStage",
+      "pos": [
+        4628.1,
+        1435.47578125
+      ],
+      "size": [
+        224.7,
+        102.0
+      ],
+      "flags": {},
+      "order": 0,
+      "mode": 0,
+      "inputs": [
+        {
+          "name": "positive",
+          "type": "CONDITIONING",
+          "link": 3324299311547072
+        },
+        {
+          "name": "negative",
+          "type": "CONDITIONING",
+          "link": 1233174913894096
+        },
+        {
+          "name": "shape_latent",
+          "type": "LATENT",
+          "link": 1360567262956878
+        }
+      ],
+      "outputs": [
+        {
+          "name": "positive",
+          "type": "CONDITIONING",
+          "links": [
+            2341542858898289
+          ]
+        },
+        {
+          "name": "negative",
+          "type": "CONDITIONING",
+          "links": [
+            3051778817569745
+          ]
+        },
+        {
+          "name": "LATENT",
+          "type": "LATENT",
+          "links": [
+            4048033038491601
+          ]
+        }
+      ],
+      "properties": {},
+      "widgets_values": []
+    },
+    {
+      "id": 148461739587619,
+      "type": "KSampler",
+      "pos": [
+        4958.0,
+        1125.6068359375
+      ],
+      "size": [
+        288.79999999999995,
+        298.0
+      ],
+      "flags": {},
+      "order": 0,
+      "mode": 0,
+      "inputs": [
+        {
+          "name": "model",
+          "type": "MODEL",
+          "link": 3621739297097951
+        },
+        {
+          "name": "positive",
+          "type": "CONDITIONING",
+          "link": 2341542858898289
+        },
+        {
+          "name": "negative",
+          "type": "CONDITIONING",
+          "link": 3051778817569745
+        },
+        {
+          "name": "latent_image",
+          "type": "LATENT",
+          "link": 4048033038491601
+        }
+      ],
+      "outputs": [
+        {
+          "name": "LATENT",
+          "type": "LATENT",
+          "links": [
+            419863604833931
+          ]
+        }
+      ],
+      "properties": {},
+      "widgets_values": [
+        43,
+        "fixed",
+        12,
+        1,
+        "euler",
+        "normal",
+        1.0
+      ]
+    },
+    {
+      "id": 148830434738671,
+      "type": "VaeDecodeTextureTrellis",
+      "pos": [
+        5326.8,
+        1139.0275390625
+      ],
+      "size": [
+        280.2,
+        102.0
+      ],
+      "flags": {},
+      "order": 0,
+      "mode": 0,
+      "inputs": [
+        {
+          "name": "samples",
+          "type": "LATENT",
+          "link": 419863604833931
+        },
+        {
+          "name": "vae",
+          "type": "VAE",
+          "link": 4263010355712005
+        },
+        {
+          "name": "shape_subdivides",
+          "type": "SHAPE_SUBDIVIDES",
+          "link": 1853048590570767
+        }
+      ],
+      "outputs": [
+        {
+          "name": "voxel_colors",
+          "type": "VOXEL",
+          "links": [
+            4399687405320068
+          ]
+        }
+      ],
+      "properties": {},
+      "widgets_values": []
+    },
+    {
+      "id": 1830717116669552,
+      "type": "PrimitiveInt",
+      "pos": [
+        40.0,
+        2170.0
+      ],
+      "size": [
+        288.79999999999995,
+        118.0
+      ],
+      "flags": {},
+      "order": 0,
+      "mode": 0,
+      "inputs": [],
+      "outputs": [
+        {
+          "name": "INT",
+          "type": "INT",
+          "links": [
+            1776165750878165
+          ]
+        }
+      ],
+      "properties": {},
+      "widgets_values": [
+        80000,
+        "fixed"
+      ],
+      "title": "in:faces"
+    },
+    {
+      "id": 2979660817229853,
+      "type": "DecimateMesh",
+      "pos": [
+        4958.0,
+        1879.737890625
+      ],
+      "size": [
+        270.0,
+        118.0
+      ],
+      "flags": {},
+      "order": 0,
+      "mode": 0,
+      "inputs": [
+        {
+          "name": "mesh",
+          "type": "MESH",
+          "link": 72159240754076
+        },
+        {
+          "name": "target_face_count",
+          "type": "INT",
+          "link": 1776165750878165,
+          "grow_id": 1776165750878165,
+          "widget": {
+            "name": "target_face_count"
+          }
+        }
+      ],
+      "outputs": [
+        {
+          "name": "mesh",
+          "type": "MESH",
+          "links": [
+            1697276385657149
+          ]
+        }
+      ],
+      "properties": {},
+      "widgets_values": [
+        200000,
+        "midpoint"
+      ]
+    },
+    {
+      "id": 1308223010766869,
+      "type": "PaintMesh",
+      "pos": [
+        5687.0,
+        1523.38271484375
+      ],
+      "size": [
+        179.4,
+        82.0
+      ],
+      "flags": {},
+      "order": 0,
+      "mode": 0,
+      "inputs": [
+        {
+          "name": "mesh",
+          "type": "MESH",
+          "link": 1697276385657149
+        },
+        {
+          "name": "voxel_colors",
+          "type": "VOXEL",
+          "link": 4399687405320068
+        }
+      ],
+      "outputs": [
+        {
+          "name": "mesh",
+          "type": "MESH",
+          "links": [
+            808756556488626
+          ]
+        }
+      ],
+      "properties": {},
+      "widgets_values": []
+    },
+    {
+      "id": 3832830581472536,
+      "type": "SaveGLB",
+      "pos": [
+        5946.4,
+        1505.38271484375
+      ],
+      "size": [
+        270.0,
+        118.0
+      ],
+      "flags": {},
+      "order": 0,
+      "mode": 0,
+      "inputs": [
+        {
+          "name": "mesh",
+          "type": "MESH,FILE_3D_GLB,FILE_3D_GLTF,FILE_3D_OBJ,FILE_3D_FBX,FILE_3D_STL,FILE_3D_USDZ,FILE_3D_PLY,FILE_3D_SPLAT,FILE_3D_SPZ,FILE_3D_KSPLAT,FILE_3D_SPLAT_ANY,FILE_3D_POINT_CLOUD_ANY,FILE_3D",
+          "link": 808756556488626
+        }
+      ],
+      "outputs": [],
+      "properties": {},
+      "widgets_values": [
+        "slopoly/mesh",
+        ""
+      ],
+      "title": "out:mesh"
+    },
+    {
+      "id": 3746723133970288,
+      "type": "MaskToImage",
+      "pos": [
+        770.3,
+        2277.25
+      ],
+      "size": [
+        216.3,
+        62.0
+      ],
+      "flags": {},
+      "order": 0,
+      "mode": 0,
+      "inputs": [
+        {
+          "name": "mask",
+          "type": "MASK",
+          "link": 923052247220228
+        }
+      ],
+      "outputs": [
+        {
+          "name": "IMAGE",
+          "type": "IMAGE",
+          "links": [
+            2145916936980504
+          ]
+        }
+      ],
+      "properties": {},
+      "widgets_values": []
+    },
+    {
+      "id": 4021273180710587,
+      "type": "SaveImage",
+      "pos": [
+        1120.3,
+        2357.25
+      ],
+      "size": [
+        270.0,
+        94.0
+      ],
+      "flags": {},
+      "order": 0,
+      "mode": 0,
+      "inputs": [
+        {
+          "name": "images",
+          "type": "IMAGE",
+          "link": 2145916936980504
+        }
+      ],
+      "outputs": [
+        {
+          "name": "images",
+          "type": "IMAGE",
+          "links": []
+        }
+      ],
+      "properties": {},
+      "widgets_values": [
+        "slopoly/mesh_hero_mask"
+      ],
+      "title": "out:hero_mask"
+    }
+  ],
+  "links": [
+    [
+      1453056855908510,
+      3675682507554348,
+      0,
+      1221841759706441,
+      0,
+      "BACKGROUND_REMOVAL"
+    ],
+    [
+      2117138767165266,
+      537873122915656,
+      0,
+      1221841759706441,
+      1,
+      "IMAGE"
+    ],
+    [
+      2893646920383905,
+      537873122915656,
+      0,
+      179575471626445,
+      0,
+      "IMAGE"
+    ],
+    [
+      1891118822526938,
+      1221841759706441,
+      0,
+      179575471626445,
+      1,
+      "MASK"
+    ],
+    [
+      2340871991398171,
+      205917333605882,
+      0,
+      1336928961549603,
+      0,
+      "CLIP_VISION"
+    ],
+    [
+      588827991402427,
+      179575471626445,
+      0,
+      1336928961549603,
+      1,
+      "IMAGE"
+    ],
+    [
+      3067455043637389,
+      3887360521293465,
+      0,
+      3189836195454421,
+      0,
+      "MOGE_MODEL"
+    ],
+    [
+      1031031758984994,
+      179575471626445,
+      0,
+      3189836195454421,
+      1,
+      "IMAGE"
+    ],
+    [
+      2532471263234109,
+      3189836195454421,
+      0,
+      1145485620310568,
+      0,
+      "MOGE_GEOMETRY"
+    ],
+    [
+      4228617073729823,
+      205917333605882,
+      0,
+      3916421811799264,
+      0,
+      "CLIP_VISION"
+    ],
+    [
+      3761829394259991,
+      179575471626445,
+      0,
+      3916421811799264,
+      1,
+      "IMAGE"
+    ],
+    [
+      2598506399981614,
+      1145485620310568,
+      0,
+      3916421811799264,
+      2,
+      "FLOAT"
+    ],
+    [
+      3544313513319096,
+      2668729587839042,
+      0,
+      1494815835358541,
+      2,
+      "BOOLEAN"
+    ],
+    [
+      716241524887079,
+      1336928961549603,
+      0,
+      1494815835358541,
+      1,
+      "CONDITIONING"
+    ],
+    [
+      278615304055411,
+      3916421811799264,
+      0,
+      1494815835358541,
+      0,
+      "CONDITIONING"
+    ],
+    [
+      1758441904252745,
+      2668729587839042,
+      0,
+      858842332135813,
+      2,
+      "BOOLEAN"
+    ],
+    [
+      3984581283557807,
+      1336928961549603,
+      1,
+      858842332135813,
+      1,
+      "CONDITIONING"
+    ],
+    [
+      1795674936422831,
+      3916421811799264,
+      1,
+      858842332135813,
+      0,
+      "CONDITIONING"
+    ],
+    [
+      2772022998063430,
+      2668729587839042,
+      0,
+      503109503580847,
+      2,
+      "BOOLEAN"
+    ],
+    [
+      3816954646340186,
+      1941005726155066,
+      0,
+      503109503580847,
+      1,
+      "MODEL"
+    ],
+    [
+      2719432894628498,
+      1242399721668807,
+      0,
+      503109503580847,
+      0,
+      "MODEL"
+    ],
+    [
+      478732993000609,
+      503109503580847,
+      0,
+      1358526044671601,
+      0,
+      "COMFY_MATCHTYPE_V3"
+    ],
+    [
+      4445586160728279,
+      1358526044671601,
+      0,
+      1105108769860078,
+      0,
+      "MODEL"
+    ],
+    [
+      1471111196816259,
+      1105108769860078,
+      0,
+      3949380059205757,
+      0,
+      "MODEL"
+    ],
+    [
+      1716649759216416,
+      3949380059205757,
+      0,
+      1393564727436899,
+      0,
+      "MODEL"
+    ],
+    [
+      2523524710536078,
+      1494815835358541,
+      0,
+      1393564727436899,
+      1,
+      "COMFY_MATCHTYPE_V3"
+    ],
+    [
+      3020713567454742,
+      858842332135813,
+      0,
+      1393564727436899,
+      2,
+      "COMFY_MATCHTYPE_V3"
+    ],
+    [
+      2216052704408192,
+      56582400045030,
+      0,
+      1393564727436899,
+      3,
+      "LATENT"
+    ],
+    [
+      1114895284839007,
+      1393564727436899,
+      0,
+      1954608334515831,
+      0,
+      "LATENT"
+    ],
+    [
+      2957214730437990,
+      1496577950908708,
+      0,
+      1954608334515831,
+      1,
+      "VAE"
+    ],
+    [
+      3564227908279878,
+      1494815835358541,
+      0,
+      2576221998991649,
+      0,
+      "COMFY_MATCHTYPE_V3"
+    ],
+    [
+      1938952912367681,
+      858842332135813,
+      0,
+      2576221998991649,
+      1,
+      "COMFY_MATCHTYPE_V3"
+    ],
+    [
+      2814269378183018,
+      1954608334515831,
+      0,
+      2576221998991649,
+      2,
+      "VOXEL"
+    ],
+    [
+      2761432902128375,
+      503109503580847,
+      0,
+      2421057415093829,
+      0,
+      "COMFY_MATCHTYPE_V3"
+    ],
+    [
+      989138337638082,
+      2421057415093829,
+      0,
+      1499243992042364,
+      0,
+      "MODEL"
+    ],
+    [
+      1692340040212686,
+      1499243992042364,
+      0,
+      3139749513174711,
+      0,
+      "MODEL"
+    ],
+    [
+      4208466539239262,
+      2576221998991649,
+      0,
+      3139749513174711,
+      1,
+      "CONDITIONING"
+    ],
+    [
+      1347088298883488,
+      2576221998991649,
+      1,
+      3139749513174711,
+      2,
+      "CONDITIONING"
+    ],
+    [
+      878850803949860,
+      2576221998991649,
+      2,
+      3139749513174711,
+      3,
+      "LATENT"
+    ],
+    [
+      3420754053662706,
+      2576221998991649,
+      0,
+      1610791377907674,
+      0,
+      "CONDITIONING"
+    ],
+    [
+      157463323186176,
+      2576221998991649,
+      1,
+      1610791377907674,
+      1,
+      "CONDITIONING"
+    ],
+    [
+      4298639367298457,
+      3139749513174711,
+      0,
+      1610791377907674,
+      2,
+      "LATENT"
+    ],
+    [
+      4258643879966392,
+      1496577950908708,
+      0,
+      1610791377907674,
+      3,
+      "VAE"
+    ],
+    [
+      1714423000630713,
+      718302114959934,
+      0,
+      1610791377907674,
+      4,
+      "INT"
+    ],
+    [
+      1556472210373793,
+      1499243992042364,
+      0,
+      727156013547174,
+      0,
+      "MODEL"
+    ],
+    [
+      2985840256519343,
+      1610791377907674,
+      0,
+      727156013547174,
+      1,
+      "CONDITIONING"
+    ],
+    [
+      2422748746256250,
+      1610791377907674,
+      1,
+      727156013547174,
+      2,
+      "CONDITIONING"
+    ],
+    [
+      3069302332157242,
+      1610791377907674,
+      2,
+      727156013547174,
+      3,
+      "LATENT"
+    ],
+    [
+      3730757641441013,
+      727156013547174,
+      0,
+      1400433200916516,
+      0,
+      "LATENT"
+    ],
+    [
+      2949990690135543,
+      1496577950908708,
+      0,
+      1400433200916516,
+      1,
+      "VAE"
+    ],
+    [
+      3324299311547072,
+      1610791377907674,
+      0,
+      516109172798688,
+      0,
+      "CONDITIONING"
+    ],
+    [
+      1233174913894096,
+      1610791377907674,
+      1,
+      516109172798688,
+      1,
+      "CONDITIONING"
+    ],
+    [
+      1360567262956878,
+      727156013547174,
+      0,
+      516109172798688,
+      2,
+      "LATENT"
+    ],
+    [
+      3621739297097951,
+      503109503580847,
+      0,
+      148461739587619,
+      0,
+      "COMFY_MATCHTYPE_V3"
+    ],
+    [
+      2341542858898289,
+      516109172798688,
+      0,
+      148461739587619,
+      1,
+      "CONDITIONING"
+    ],
+    [
+      3051778817569745,
+      516109172798688,
+      1,
+      148461739587619,
+      2,
+      "CONDITIONING"
+    ],
+    [
+      4048033038491601,
+      516109172798688,
+      2,
+      148461739587619,
+      3,
+      "LATENT"
+    ],
+    [
+      419863604833931,
+      148461739587619,
+      0,
+      148830434738671,
+      0,
+      "LATENT"
+    ],
+    [
+      4263010355712005,
+      2429273087783155,
+      0,
+      148830434738671,
+      1,
+      "VAE"
+    ],
+    [
+      1853048590570767,
+      1400433200916516,
+      1,
+      148830434738671,
+      2,
+      "SHAPE_SUBDIVIDES"
+    ],
+    [
+      72159240754076,
+      1400433200916516,
+      0,
+      2979660817229853,
+      0,
+      "MESH"
+    ],
+    [
+      1776165750878165,
+      1830717116669552,
+      0,
+      2979660817229853,
+      1,
+      "INT"
+    ],
+    [
+      1697276385657149,
+      2979660817229853,
+      0,
+      1308223010766869,
+      0,
+      "MESH"
+    ],
+    [
+      4399687405320068,
+      148830434738671,
+      0,
+      1308223010766869,
+      1,
+      "VOXEL"
+    ],
+    [
+      808756556488626,
+      1308223010766869,
+      0,
+      3832830581472536,
+      0,
+      "MESH"
+    ],
+    [
+      923052247220228,
+      1221841759706441,
+      0,
+      3746723133970288,
+      0,
+      "MASK"
+    ],
+    [
+      2145916936980504,
+      3746723133970288,
+      0,
+      4021273180710587,
+      0,
+      "IMAGE"
+    ]
+  ],
+  "last_node_id": 4021273180710587,
+  "last_link_id": 0,
+  "version": 0.4
+}

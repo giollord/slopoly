@@ -4,8 +4,11 @@
   --accent: #2f6fdf; --good: #2e9e5b; --bad: #d0453a;
 }
 @media (prefers-color-scheme: dark) {
-  :root { --bg: #18181a; --panel: #222226; --text: #ececea; --muted: #9a9a96; --line: #36363b; }
+  :root:not([data-theme="light"]) { --bg: #18181a; --panel: #222226; --text: #ececea; --muted: #9a9a96; --line: #36363b; }
 }
+:root[data-theme="dark"] { color-scheme: dark; --bg: #18181a; --panel: #222226; --text: #ececea; --muted: #9a9a96;
+  --line: #36363b; }
+:root[data-theme="light"] { color-scheme: light; }
 * { box-sizing: border-box; }
 body { margin: 0; background: var(--bg); color: var(--text); font: 14px/1.4 system-ui, sans-serif; }
 header { padding: 12px 16px; border-bottom: 1px solid var(--line); background: var(--panel); }
@@ -22,3 +25,8 @@ textarea, input[type=text], select { font: inherit; padding: 6px 8px; border: 1p
 .muted { color: var(--muted); }
 .error { color: var(--bad); }
 .bar { display: flex; gap: 8px; align-items: center; flex-wrap: wrap; }
+.dialog { position: fixed; inset: 0; z-index: 10; display: none; align-items: center; justify-content: center;
+  background: rgba(0, 0, 0, .45); }
+.dialog.open { display: flex; }
+.dialog > div { background: var(--panel); border: 1px solid var(--line); border-radius: 8px; padding: 16px 18px;
+  max-width: 440px; display: flex; flex-direction: column; gap: 12px; }

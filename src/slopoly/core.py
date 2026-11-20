@@ -6,6 +6,7 @@ import json
 import os
 import sys
 import tempfile
+import time
 from pathlib import Path
 from typing import Any
 
@@ -44,6 +45,21 @@ def emit(value: Any) -> None:
     sys.stdout.flush()
 
 
+REPLACE_TRIES = 20  # Windows denies a replace while another process has the file open (e.g. slopoly wait reading it)
+
+
+def replace(source: str | Path, target: Path) -> None:
+    """``os.replace`` that retries briefly while Windows denies it because a reader has the target open."""
+    for attempt in range(REPLACE_TRIES):
+        try:
+            os.replace(source, target)
+            return
+        except PermissionError:
+            if sys.platform != "win32" or attempt == REPLACE_TRIES - 1:
+                raise
+            time.sleep(0.05 * (attempt + 1))
+
+
 def write_atomic(path: Path, data: bytes | str) -> None:
     """Writes via a temporary file in the same folder, so readers never see a half-written file."""
     path.parent.mkdir(parents=True, exist_ok=True)
@@ -52,7 +68,7 @@ def write_atomic(path: Path, data: bytes | str) -> None:
     try:
         with os.fdopen(fd, "wb") as out:
             out.write(raw)
-        os.replace(tmp, path)
+        replace(tmp, path)
     except BaseException:
         Path(tmp).unlink(missing_ok=True)
         raise
@@ -82,6 +98,47 @@ def invalid_file(path: Path, problems: list[dict]) -> SlopolyError:
                         problems=[{"file": path.as_posix()} | p for p in problems])
 
 
+VERSION_FILE = ".slopoly-version"  # in the workspace root: the newest CLI version that used the workspace
+
+
+def version_key(text: str) -> tuple[int, ...]:
+    return tuple(int(part) for part in text.strip().split(".")[:3] if part.isdigit())
+
+
+def recorded_version(path: Path) -> str | None:
+    """The newest CLI version that used the workspace holding ``path``."""
+    for folder in path.resolve().parents:
+        marker = folder / VERSION_FILE
+        if marker.is_file():
+            return marker.read_text(encoding="utf-8").strip() or None
+    return None
+
+
+def record_version(root: Path) -> None:
+    """Records this CLI's version in the workspace when it is newer than the one recorded."""
+    from . import __version__
+    marker = root / VERSION_FILE
+    current = marker.read_text(encoding="utf-8").strip() if marker.is_file() else ""
+    if not current or version_key(__version__) > version_key(current):
+        try:
+            write_atomic(marker, __version__ + "\n")
+        except OSError:
+            pass  # a read-only workspace still works
+
+
+def newer_version_error(path: Path, error: ValidationError) -> SlopolyError | None:
+    """A file with fields this CLI doesn't know, in a workspace used by a newer CLI: a version mismatch."""
+    from . import __version__
+    if not any(e["type"] == "extra_forbidden" for e in error.errors()):
+        return None
+    recorded = recorded_version(path)
+    if not recorded or version_key(recorded) <= version_key(__version__):
+        return None
+    return SlopolyError("version_mismatch", f"{path.as_posix()} was written by slopoly {recorded}, newer than this "
+                        f"slopoly {__version__}", f"install slopoly {recorded} or newer, then run the command again",
+                        workspace_version=recorded, cli_version=__version__)
+
+
 def load(model: type[BaseModel], path: Path, default: Any = None):
     """Reads and validates a YAML file; a missing file gives ``default`` (or an empty model when default is None)."""
     if not path.exists():
@@ -92,4 +149,4 @@ def load(model: type[BaseModel], path: Path, default: Any = None):
     try:
         return model.model_validate(data if data is not None else {})
     except ValidationError as error:
-        raise invalid_file(path, problems_of(error)) from error
+        raise newer_version_error(path, error) or invalid_file(path, problems_of(error)) from error

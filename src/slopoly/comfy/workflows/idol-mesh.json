@@ -1,0 +1,244 @@
+{
+ "1169566206063028": {
+  "inputs": {
+   "image": "ComfyUI_00070_.png"
+  },
+  "class_type": "LoadImage",
+  "_meta": {
+   "title": "in:image"
+  }
+ },
+ "852454745098370": {
+  "inputs": {
+   "bg_removal_name": "birefnet.safetensors"
+  },
+  "class_type": "LoadBackgroundRemovalModel",
+  "_meta": {
+   "title": "Load Background Removal Model"
+  }
+ },
+ "2396264254426144": {
+  "inputs": {
+   "bg_removal_model": [
+    "852454745098370",
+    0
+   ],
+   "image": [
+    "1169566206063028",
+    0
+   ]
+  },
+  "class_type": "RemoveBackground",
+  "_meta": {
+   "title": "Remove Background"
+  }
+ },
+ "1769169824975523": {
+  "inputs": {
+   "erode_radius": 1,
+   "size": 1024,
+   "image": [
+    "1169566206063028",
+    0
+   ],
+   "mask": [
+    "2396264254426144",
+    0
+   ]
+  },
+  "class_type": "TripoSplatPreprocessImage",
+  "_meta": {
+   "title": "TripoSplat Preprocess Image"
+  }
+ },
+ "1743340874466456": {
+  "inputs": {
+   "clip_name": "dino_v3_vit_h_bf16.safetensors"
+  },
+  "class_type": "CLIPVisionLoader",
+  "_meta": {
+   "title": "Load CLIP Vision"
+  }
+ },
+ "3312900093132349": {
+  "inputs": {
+   "vae_name": "flux2-vae.safetensors"
+  },
+  "class_type": "VAELoader",
+  "_meta": {
+   "title": "Load VAE"
+  }
+ },
+ "2814712287139562": {
+  "inputs": {
+   "vae_name": "idol_decoder_fp16.safetensors"
+  },
+  "class_type": "VAELoader",
+  "_meta": {
+   "title": "Load VAE"
+  }
+ },
+ "929673439667408": {
+  "inputs": {
+   "unet_name": "idol_fp16.safetensors",
+   "weight_dtype": "default"
+  },
+  "class_type": "UNETLoader",
+  "_meta": {
+   "title": "Load Diffusion Model"
+  }
+ },
+ "1011442675751850": {
+  "inputs": {
+   "clip_vision": [
+    "1743340874466456",
+    0
+   ],
+   "vae": [
+    "3312900093132349",
+    0
+   ],
+   "image": [
+    "1769169824975523",
+    0
+   ]
+  },
+  "class_type": "TripoSplatConditioning",
+  "_meta": {
+   "title": "TripoSplat Conditioning"
+  }
+ },
+ "1968022928092470": {
+  "inputs": {
+   "seed": 0,
+   "steps": 20,
+   "cfg": 3,
+   "sampler_name": "dpmpp_2m",
+   "scheduler": "simple",
+   "denoise": 1.0,
+   "model": [
+    "929673439667408",
+    0
+   ],
+   "positive": [
+    "1011442675751850",
+    0
+   ],
+   "negative": [
+    "1011442675751850",
+    1
+   ],
+   "latent_image": [
+    "1011442675751850",
+    2
+   ]
+  },
+  "class_type": "KSampler",
+  "_meta": {
+   "title": "in:seed"
+  }
+ },
+ "1833411664118716": {
+  "inputs": {
+   "num_gaussians": 262144,
+   "seed": 0,
+   "samples": [
+    "1968022928092470",
+    0
+   ],
+   "vae": [
+    "2814712287139562",
+    0
+   ]
+  },
+  "class_type": "VAEDecodeTripoSplat",
+  "_meta": {
+   "title": "TripoSplat Decode"
+  }
+ },
+ "859441453010365": {
+  "inputs": {
+   "mask": [
+    "2396264254426144",
+    0
+   ]
+  },
+  "class_type": "MaskToImage",
+  "_meta": {
+   "title": "Convert Mask to Image"
+  }
+ },
+ "2053361705139289": {
+  "inputs": {
+   "filename_prefix": "slopoly/mesh_hero_mask",
+   "images": [
+    "859441453010365",
+    0
+   ]
+  },
+  "class_type": "SaveImage",
+  "_meta": {
+   "title": "out:hero_mask"
+  }
+ },
+ "3548994248970707": {
+  "inputs": {
+   "resolution": 384,
+   "kernel": 5,
+   "smooth": 2,
+   "level": 0.4,
+   "min_component": 500,
+   "min_opacity": 0.02,
+   "color_sharpen": 2.0,
+   "solid": true,
+   "fill": 20.0,
+   "splat": [
+    "1833411664118716",
+    0
+   ]
+  },
+  "class_type": "SplatToMesh",
+  "_meta": {
+   "title": "Extract Mesh from Splat"
+  }
+ },
+ "1830859221921706": {
+  "inputs": {
+   "value": 80000
+  },
+  "class_type": "PrimitiveInt",
+  "_meta": {
+   "title": "in:faces"
+  }
+ },
+ "104941173574749": {
+  "inputs": {
+   "placement_mode": "midpoint",
+   "mesh": [
+    "3548994248970707",
+    0
+   ],
+   "target_face_count": [
+    "1830859221921706",
+    0
+   ]
+  },
+  "class_type": "DecimateMesh",
+  "_meta": {
+   "title": "Decimate Mesh"
+  }
+ },
+ "4124277940770660": {
+  "inputs": {
+   "filename_prefix": "slopoly/mesh",
+   "mesh": [
+    "104941173574749",
+    0
+   ]
+  },
+  "class_type": "SaveGLB",
+  "_meta": {
+   "title": "out:mesh"
+  }
+ }
+}

@@ -37,6 +37,10 @@ part("block", block, at=(0, 0.1, -0.6))
 - ARRAY counts are cheap to edit: change `count` and rebuild instead of adding pieces.
 - A radial ARRAY rotates each copy by the empty's rotation: 360 / count around the axis the copies turn about.
 - Parts that move on their own (wheels, doors) are never ARRAY copies: they need their own part and joint.
+- **Join or union?** Copies that don't touch (rivets on a plate, slats with gaps) go together with `join` or ARRAY
+  without merging: no extra triangles. Copies that must cross their base (spokes into a hub) need
+  `boolean(..., op="union")`, which adds faces at every crossing; read the part's `triangles` and `booleans` in the
+  report, and lower the copy count first when it is over budget.
 - `instance` keeps one mesh in the export (smaller files) and each copy gets its own name for the game.
 - Vary repeats in rustic styles: `jitter` the source with a small amount before the ARRAY, or use `instance` with
   slightly different rotations.

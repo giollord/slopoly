@@ -195,3 +195,49 @@ def test_view_state(run, pack):
     assert state["validated"] and state["triangles"] == 12 and state["comparisons"][0]["object_iou"] == 0.9
     assert state["model"].startswith("files/gnome-village/assets/cart/variants/default/builds/0001/model.glb")
     assert state["comparisons"][0]["compare"].startswith("files/")
+
+
+def test_pick_for_a_variant_replaces_its_reference_and_keeps_its_builds(run, pack, clicking):
+    hero(pack, "hero_003", state="picked")
+    variant = pack / "assets/cart/variants/default"
+    (variant / "variant.yaml").write_text("reference: hero_003.png\ncurrent: 9\n")
+    (variant / "program.py").write_text("# the program\n")
+    (variant / "builds/0009").mkdir(parents=True)
+    hero(pack, "hero_006")
+    seen = clicking(lambda s: {"picked": [{"path": s["images"][0]["path"], "variant": s["suggested"][0]}]})
+    spec = {"pack": "gnome-village", "target": "gnome-village/cart", "set": "heroes", "for": "default"}
+    result = windows.pick(pick_context(pack, spec))
+    assert seen["state"]["suggested"][0] == "default" and seen["state"]["replacing"] == "default"
+    assert reference(pack) == "hero_006.png" and not result.get("created")
+    assert (variant / "program.py").read_text() == "# the program\n" and (variant / "builds/0009").exists()
+    assert (pack / HEROES / "rejected/hero_003.png").exists()
+    assert [v.name for v in workspace.find().pack("gnome-village").asset("cart").variants()] == ["default"]
+
+
+def test_variant_reference_command(run, pack):
+    hero(pack, "hero_003", state="picked")
+    variant = pack / "assets/cart/variants/default"
+    (variant / "variant.yaml").write_text("reference: hero_003.png\n")
+    (variant / "program.py").write_text("# keep me\n")
+    hero(pack, "hero_006")
+    out = run("variant", "reference", "gnome-village/cart:default", f"{HEROES}/hero_006.png").json
+    assert out["reference"] == "hero_006.png" and "gen views" in out["hint"]
+    assert reference(pack) == "hero_006.png" and (variant / "program.py").read_text() == "# keep me\n"
+    assert run("variant", "reference", "gnome-village/cart:default", "hero_404.png", ok=False).json["code"] == \
+        "not_found"
+
+
+def test_pick_for_an_unknown_variant_is_refused(run, pack):
+    hero(pack, "hero_001")
+    assert run("pick", "gnome-village/cart", "--heroes", "--for", "rustic", ok=False).json["code"] == "not_found"
+
+
+def test_window_commands_return_the_page_address(run, pack, monkeypatch):
+    def started(pack_, kind, target, inputs):
+        job = m.Job(id="20260101-000000-abcd", kind=kind, target=target, inputs=inputs, created="now",
+                    state="running", message="window open (if none appeared, browse http://127.0.0.1:5123/tok/)")
+        write_yaml(pack_.jobs_dir / f"{job.id}.yaml", job)
+        return {"job": job.id}
+    monkeypatch.setattr(jobs, "start", started)
+    make_image(pack / "anchors/anchor_001.png", {"kind": "anchor"})
+    assert run("pick", "gnome-village").json["url"] == "http://127.0.0.1:5123/tok/"

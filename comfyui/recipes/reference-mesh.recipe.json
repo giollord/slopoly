@@ -1,0 +1,902 @@
+{
+ "recipe": "reference-mesh",
+ "description": "Hero image -> rough 3D mesh with vertex colours (TRELLIS.2 or Pixal3D). Cut down from the gallery template 3d_pixal3d_trellis2_image_to_model: BiRefNet background removal, crop to the mask, DINOv3-L NAF conditioning (Pixal3D adds the MoGe field of view), structure -> shape -> upsample stages, the texture stage for vertex colours only (no UV unwrap or texture bakes), decimated and saved as GLB.",
+ "params": {
+  "prefix": {
+   "type": "string",
+   "default": "slopoly/mesh"
+  },
+  "resolution": {
+   "type": "int",
+   "default": 1024
+  },
+  "faces": {
+   "type": "int",
+   "default": 80000
+  }
+ },
+ "ops": [
+  {
+   "op": "add_node",
+   "class_type": "LoadImage",
+   "as": "image"
+  },
+  {
+   "op": "add_node",
+   "class_type": "LoadBackgroundRemovalModel",
+   "as": "bg_model"
+  },
+  {
+   "op": "set_widget",
+   "node": "bg_model",
+   "widget": "bg_removal_name",
+   "value": "birefnet.safetensors"
+  },
+  {
+   "op": "add_node",
+   "class_type": "RemoveBackground",
+   "as": "bg"
+  },
+  {
+   "op": "connect",
+   "from": "bg_model.bg_model",
+   "to": "bg.bg_removal_model"
+  },
+  {
+   "op": "connect",
+   "from": "image.IMAGE",
+   "to": "bg.image"
+  },
+  {
+   "op": "add_node",
+   "class_type": "ImageCropToMask",
+   "as": "crop"
+  },
+  {
+   "op": "connect",
+   "from": "image.IMAGE",
+   "to": "crop.images"
+  },
+  {
+   "op": "connect",
+   "from": "bg.mask",
+   "to": "crop.masks"
+  },
+  {
+   "op": "set_widget",
+   "node": "crop",
+   "widget": "width",
+   "value": 1024
+  },
+  {
+   "op": "set_widget",
+   "node": "crop",
+   "widget": "height",
+   "value": 1024
+  },
+  {
+   "op": "set_widget",
+   "node": "crop",
+   "widget": "pad_factor",
+   "value": 1.1
+  },
+  {
+   "op": "set_widget",
+   "node": "crop",
+   "widget": "grow_mask",
+   "value": 0
+  },
+  {
+   "op": "set_widget",
+   "node": "crop",
+   "widget": "background",
+   "value": "#000000"
+  },
+  {
+   "op": "add_node",
+   "class_type": "CLIPVisionLoader",
+   "as": "dino"
+  },
+  {
+   "op": "set_widget",
+   "node": "dino",
+   "widget": "clip_name",
+   "value": "dino_v3_L_naf_fp32.safetensors"
+  },
+  {
+   "op": "add_node",
+   "class_type": "Trellis2Conditioning",
+   "as": "trellis_cond"
+  },
+  {
+   "op": "connect",
+   "from": "dino.CLIP_VISION",
+   "to": "trellis_cond.clip_vision_model"
+  },
+  {
+   "op": "connect",
+   "from": "crop.images",
+   "to": "trellis_cond.image"
+  },
+  {
+   "op": "add_node",
+   "class_type": "LoadMoGeModel",
+   "as": "moge_model"
+  },
+  {
+   "op": "set_widget",
+   "node": "moge_model",
+   "widget": "model_name",
+   "value": "moge_2_vitl_normal_fp16.safetensors"
+  },
+  {
+   "op": "add_node",
+   "class_type": "MoGeInference",
+   "as": "moge"
+  },
+  {
+   "op": "connect",
+   "from": "moge_model.MOGE_MODEL",
+   "to": "moge.moge_model"
+  },
+  {
+   "op": "connect",
+   "from": "crop.images",
+   "to": "moge.image"
+  },
+  {
+   "op": "add_node",
+   "class_type": "MoGeGeometryToFOV",
+   "as": "fov"
+  },
+  {
+   "op": "set_widget",
+   "node": "fov",
+   "widget": "axis",
+   "value": "horizontal"
+  },
+  {
+   "op": "set_widget",
+   "node": "fov",
+   "widget": "unit",
+   "value": "degrees"
+  },
+  {
+   "op": "connect",
+   "from": "moge.moge_geometry",
+   "to": "fov.moge_geometry"
+  },
+  {
+   "op": "add_node",
+   "class_type": "Pixal3DConditioning",
+   "as": "pixal_cond"
+  },
+  {
+   "op": "connect",
+   "from": "dino.CLIP_VISION",
+   "to": "pixal_cond.clip_vision_model"
+  },
+  {
+   "op": "connect",
+   "from": "crop.images",
+   "to": "pixal_cond.image"
+  },
+  {
+   "op": "connect",
+   "from": "fov.fov",
+   "to": "pixal_cond.camera_angle_x"
+  },
+  {
+   "op": "add_node",
+   "class_type": "PrimitiveBoolean",
+   "as": "generator"
+  },
+  {
+   "op": "set_widget",
+   "node": "generator",
+   "widget": "value",
+   "value": true
+  },
+  {
+   "op": "add_node",
+   "class_type": "ComfySwitchNode",
+   "as": "positive"
+  },
+  {
+   "op": "connect",
+   "from": "generator.BOOLEAN",
+   "to": "positive.switch"
+  },
+  {
+   "op": "connect",
+   "from": "trellis_cond.positive",
+   "to": "positive.on_true"
+  },
+  {
+   "op": "connect",
+   "from": "pixal_cond.positive",
+   "to": "positive.on_false"
+  },
+  {
+   "op": "add_node",
+   "class_type": "ComfySwitchNode",
+   "as": "negative"
+  },
+  {
+   "op": "connect",
+   "from": "generator.BOOLEAN",
+   "to": "negative.switch"
+  },
+  {
+   "op": "connect",
+   "from": "trellis_cond.negative",
+   "to": "negative.on_true"
+  },
+  {
+   "op": "connect",
+   "from": "pixal_cond.negative",
+   "to": "negative.on_false"
+  },
+  {
+   "op": "add_node",
+   "class_type": "UNETLoader",
+   "as": "trellis_unet"
+  },
+  {
+   "op": "set_widget",
+   "node": "trellis_unet",
+   "widget": "unet_name",
+   "value": "trellis_2_int8_convrot.safetensors"
+  },
+  {
+   "op": "add_node",
+   "class_type": "UNETLoader",
+   "as": "pixal_unet"
+  },
+  {
+   "op": "set_widget",
+   "node": "pixal_unet",
+   "widget": "unet_name",
+   "value": "pixal3d_int8_convrot.safetensors"
+  },
+  {
+   "op": "add_node",
+   "class_type": "ComfySwitchNode",
+   "as": "model"
+  },
+  {
+   "op": "connect",
+   "from": "generator.BOOLEAN",
+   "to": "model.switch"
+  },
+  {
+   "op": "connect",
+   "from": "trellis_unet.MODEL",
+   "to": "model.on_true"
+  },
+  {
+   "op": "connect",
+   "from": "pixal_unet.MODEL",
+   "to": "model.on_false"
+  },
+  {
+   "op": "add_node",
+   "class_type": "VAELoader",
+   "as": "shape_vae"
+  },
+  {
+   "op": "set_widget",
+   "node": "shape_vae",
+   "widget": "vae_name",
+   "value": "trellis_2_shape_vae_bf16.safetensors"
+  },
+  {
+   "op": "add_node",
+   "class_type": "VAELoader",
+   "as": "texture_vae"
+  },
+  {
+   "op": "set_widget",
+   "node": "texture_vae",
+   "widget": "vae_name",
+   "value": "trellis_2_texture_vae_bf16.safetensors"
+  },
+  {
+   "op": "add_node",
+   "class_type": "CFGOverride",
+   "as": "structure_cfg"
+  },
+  {
+   "op": "set_widget",
+   "node": "structure_cfg",
+   "widget": "cfg",
+   "value": 1
+  },
+  {
+   "op": "set_widget",
+   "node": "structure_cfg",
+   "widget": "start_percent",
+   "value": 0.667
+  },
+  {
+   "op": "set_widget",
+   "node": "structure_cfg",
+   "widget": "end_percent",
+   "value": 1
+  },
+  {
+   "op": "connect",
+   "from": "model.output",
+   "to": "structure_cfg.model"
+  },
+  {
+   "op": "add_node",
+   "class_type": "RescaleCFG",
+   "as": "structure_rescale"
+  },
+  {
+   "op": "connect",
+   "from": "structure_cfg.MODEL",
+   "to": "structure_rescale.model"
+  },
+  {
+   "op": "set_widget",
+   "node": "structure_rescale",
+   "widget": "multiplier",
+   "value": 0.7
+  },
+  {
+   "op": "add_node",
+   "class_type": "ModelSamplingSD3",
+   "as": "structure_sampling"
+  },
+  {
+   "op": "connect",
+   "from": "structure_rescale.MODEL",
+   "to": "structure_sampling.model"
+  },
+  {
+   "op": "set_widget",
+   "node": "structure_sampling",
+   "widget": "shift",
+   "value": 5
+  },
+  {
+   "op": "add_node",
+   "class_type": "EmptyTrellis2LatentStructure",
+   "as": "structure_latent"
+  },
+  {
+   "op": "add_node",
+   "class_type": "KSampler",
+   "as": "structure_sampler"
+  },
+  {
+   "op": "connect",
+   "from": "structure_sampling.MODEL",
+   "to": "structure_sampler.model"
+  },
+  {
+   "op": "connect",
+   "from": "positive.output",
+   "to": "structure_sampler.positive"
+  },
+  {
+   "op": "connect",
+   "from": "negative.output",
+   "to": "structure_sampler.negative"
+  },
+  {
+   "op": "connect",
+   "from": "structure_latent.LATENT",
+   "to": "structure_sampler.latent_image"
+  },
+  {
+   "op": "set_widget",
+   "node": "structure_sampler",
+   "widget": "seed",
+   "value": 56
+  },
+  {
+   "op": "set_widget",
+   "node": "structure_sampler",
+   "widget": "steps",
+   "value": 12
+  },
+  {
+   "op": "set_widget",
+   "node": "structure_sampler",
+   "widget": "cfg",
+   "value": 7.5
+  },
+  {
+   "op": "set_widget",
+   "node": "structure_sampler",
+   "widget": "sampler_name",
+   "value": "euler"
+  },
+  {
+   "op": "set_widget",
+   "node": "structure_sampler",
+   "widget": "scheduler",
+   "value": "normal"
+  },
+  {
+   "op": "add_node",
+   "class_type": "VaeDecodeStructureTrellis2",
+   "as": "structure"
+  },
+  {
+   "op": "connect",
+   "from": "structure_sampler.LATENT",
+   "to": "structure.samples"
+  },
+  {
+   "op": "connect",
+   "from": "shape_vae.VAE",
+   "to": "structure.vae"
+  },
+  {
+   "op": "set_widget",
+   "node": "structure",
+   "widget": "resolution",
+   "value": "32"
+  },
+  {
+   "op": "add_node",
+   "class_type": "Trellis2ShapeStage",
+   "as": "shape_stage"
+  },
+  {
+   "op": "connect",
+   "from": "positive.output",
+   "to": "shape_stage.positive"
+  },
+  {
+   "op": "connect",
+   "from": "negative.output",
+   "to": "shape_stage.negative"
+  },
+  {
+   "op": "connect",
+   "from": "structure.voxel",
+   "to": "shape_stage.voxel"
+  },
+  {
+   "op": "add_node",
+   "class_type": "CFGOverride",
+   "as": "shape_cfg"
+  },
+  {
+   "op": "set_widget",
+   "node": "shape_cfg",
+   "widget": "cfg",
+   "value": 1
+  },
+  {
+   "op": "set_widget",
+   "node": "shape_cfg",
+   "widget": "start_percent",
+   "value": 0.769
+  },
+  {
+   "op": "set_widget",
+   "node": "shape_cfg",
+   "widget": "end_percent",
+   "value": 1
+  },
+  {
+   "op": "connect",
+   "from": "model.output",
+   "to": "shape_cfg.model"
+  },
+  {
+   "op": "add_node",
+   "class_type": "RescaleCFG",
+   "as": "shape_rescale"
+  },
+  {
+   "op": "connect",
+   "from": "shape_cfg.MODEL",
+   "to": "shape_rescale.model"
+  },
+  {
+   "op": "set_widget",
+   "node": "shape_rescale",
+   "widget": "multiplier",
+   "value": 0.5
+  },
+  {
+   "op": "add_node",
+   "class_type": "KSampler",
+   "as": "shape_sampler"
+  },
+  {
+   "op": "connect",
+   "from": "shape_rescale.MODEL",
+   "to": "shape_sampler.model"
+  },
+  {
+   "op": "connect",
+   "from": "shape_stage.positive",
+   "to": "shape_sampler.positive"
+  },
+  {
+   "op": "connect",
+   "from": "shape_stage.negative",
+   "to": "shape_sampler.negative"
+  },
+  {
+   "op": "connect",
+   "from": "shape_stage.LATENT",
+   "to": "shape_sampler.latent_image"
+  },
+  {
+   "op": "set_widget",
+   "node": "shape_sampler",
+   "widget": "seed",
+   "value": 42
+  },
+  {
+   "op": "set_widget",
+   "node": "shape_sampler",
+   "widget": "steps",
+   "value": 20
+  },
+  {
+   "op": "set_widget",
+   "node": "shape_sampler",
+   "widget": "cfg",
+   "value": 7.5
+  },
+  {
+   "op": "set_widget",
+   "node": "shape_sampler",
+   "widget": "sampler_name",
+   "value": "euler"
+  },
+  {
+   "op": "set_widget",
+   "node": "shape_sampler",
+   "widget": "scheduler",
+   "value": "normal"
+  },
+  {
+   "op": "add_node",
+   "class_type": "PrimitiveInt",
+   "as": "resolution"
+  },
+  {
+   "op": "set_widget",
+   "node": "resolution",
+   "widget": "value",
+   "value": "${resolution}"
+  },
+  {
+   "op": "add_node",
+   "class_type": "Trellis2UpsampleStage",
+   "as": "upsample"
+  },
+  {
+   "op": "connect",
+   "from": "shape_stage.positive",
+   "to": "upsample.positive"
+  },
+  {
+   "op": "connect",
+   "from": "shape_stage.negative",
+   "to": "upsample.negative"
+  },
+  {
+   "op": "connect",
+   "from": "shape_sampler.LATENT",
+   "to": "upsample.shape_latent"
+  },
+  {
+   "op": "connect",
+   "from": "shape_vae.VAE",
+   "to": "upsample.vae"
+  },
+  {
+   "op": "connect",
+   "from": "resolution.INT",
+   "to": "upsample.target_resolution"
+  },
+  {
+   "op": "add_node",
+   "class_type": "KSampler",
+   "as": "upsample_sampler"
+  },
+  {
+   "op": "connect",
+   "from": "shape_rescale.MODEL",
+   "to": "upsample_sampler.model"
+  },
+  {
+   "op": "connect",
+   "from": "upsample.positive",
+   "to": "upsample_sampler.positive"
+  },
+  {
+   "op": "connect",
+   "from": "upsample.negative",
+   "to": "upsample_sampler.negative"
+  },
+  {
+   "op": "connect",
+   "from": "upsample.LATENT",
+   "to": "upsample_sampler.latent_image"
+  },
+  {
+   "op": "set_widget",
+   "node": "upsample_sampler",
+   "widget": "seed",
+   "value": 42
+  },
+  {
+   "op": "set_widget",
+   "node": "upsample_sampler",
+   "widget": "steps",
+   "value": 12
+  },
+  {
+   "op": "set_widget",
+   "node": "upsample_sampler",
+   "widget": "cfg",
+   "value": 7.5
+  },
+  {
+   "op": "set_widget",
+   "node": "upsample_sampler",
+   "widget": "sampler_name",
+   "value": "euler"
+  },
+  {
+   "op": "set_widget",
+   "node": "upsample_sampler",
+   "widget": "scheduler",
+   "value": "simple"
+  },
+  {
+   "op": "add_node",
+   "class_type": "VaeDecodeShapeTrellis",
+   "as": "shape"
+  },
+  {
+   "op": "connect",
+   "from": "upsample_sampler.LATENT",
+   "to": "shape.samples"
+  },
+  {
+   "op": "connect",
+   "from": "shape_vae.VAE",
+   "to": "shape.vae"
+  },
+  {
+   "op": "add_node",
+   "class_type": "Trellis2TextureStage",
+   "as": "texture_stage"
+  },
+  {
+   "op": "connect",
+   "from": "upsample.positive",
+   "to": "texture_stage.positive"
+  },
+  {
+   "op": "connect",
+   "from": "upsample.negative",
+   "to": "texture_stage.negative"
+  },
+  {
+   "op": "connect",
+   "from": "upsample_sampler.LATENT",
+   "to": "texture_stage.shape_latent"
+  },
+  {
+   "op": "add_node",
+   "class_type": "KSampler",
+   "as": "texture_sampler"
+  },
+  {
+   "op": "connect",
+   "from": "model.output",
+   "to": "texture_sampler.model"
+  },
+  {
+   "op": "connect",
+   "from": "texture_stage.positive",
+   "to": "texture_sampler.positive"
+  },
+  {
+   "op": "connect",
+   "from": "texture_stage.negative",
+   "to": "texture_sampler.negative"
+  },
+  {
+   "op": "connect",
+   "from": "texture_stage.LATENT",
+   "to": "texture_sampler.latent_image"
+  },
+  {
+   "op": "set_widget",
+   "node": "texture_sampler",
+   "widget": "seed",
+   "value": 43
+  },
+  {
+   "op": "set_widget",
+   "node": "texture_sampler",
+   "widget": "steps",
+   "value": 12
+  },
+  {
+   "op": "set_widget",
+   "node": "texture_sampler",
+   "widget": "cfg",
+   "value": 1
+  },
+  {
+   "op": "set_widget",
+   "node": "texture_sampler",
+   "widget": "sampler_name",
+   "value": "euler"
+  },
+  {
+   "op": "set_widget",
+   "node": "texture_sampler",
+   "widget": "scheduler",
+   "value": "normal"
+  },
+  {
+   "op": "add_node",
+   "class_type": "VaeDecodeTextureTrellis",
+   "as": "texture"
+  },
+  {
+   "op": "connect",
+   "from": "texture_sampler.LATENT",
+   "to": "texture.samples"
+  },
+  {
+   "op": "connect",
+   "from": "texture_vae.VAE",
+   "to": "texture.vae"
+  },
+  {
+   "op": "connect",
+   "from": "shape.shape_subdivides",
+   "to": "texture.shape_subdivides"
+  },
+  {
+   "op": "add_node",
+   "class_type": "PrimitiveInt",
+   "as": "faces"
+  },
+  {
+   "op": "set_widget",
+   "node": "faces",
+   "widget": "value",
+   "value": "${faces}"
+  },
+  {
+   "op": "add_node",
+   "class_type": "DecimateMesh",
+   "as": "decimate"
+  },
+  {
+   "op": "connect",
+   "from": "shape.mesh",
+   "to": "decimate.mesh"
+  },
+  {
+   "op": "connect",
+   "from": "faces.INT",
+   "to": "decimate.target_face_count"
+  },
+  {
+   "op": "set_widget",
+   "node": "decimate",
+   "widget": "placement_mode",
+   "value": "midpoint"
+  },
+  {
+   "op": "add_node",
+   "class_type": "PaintMesh",
+   "as": "paint"
+  },
+  {
+   "op": "connect",
+   "from": "decimate.mesh",
+   "to": "paint.mesh"
+  },
+  {
+   "op": "connect",
+   "from": "texture.voxel_colors",
+   "to": "paint.voxel_colors"
+  },
+  {
+   "op": "add_node",
+   "class_type": "SaveGLB",
+   "as": "out_mesh"
+  },
+  {
+   "op": "connect",
+   "from": "paint.mesh",
+   "to": "out_mesh.mesh"
+  },
+  {
+   "op": "set_widget",
+   "node": "out_mesh",
+   "widget": "filename_prefix",
+   "value": "${prefix}"
+  },
+  {
+   "op": "add_node",
+   "class_type": "MaskToImage",
+   "as": "hero_mask_image"
+  },
+  {
+   "op": "connect",
+   "from": "bg.mask",
+   "to": "hero_mask_image.mask"
+  },
+  {
+   "op": "add_node",
+   "class_type": "SaveImage",
+   "as": "out_hero_mask"
+  },
+  {
+   "op": "connect",
+   "from": "hero_mask_image.IMAGE",
+   "to": "out_hero_mask.images"
+  },
+  {
+   "op": "set_widget",
+   "node": "out_hero_mask",
+   "widget": "filename_prefix",
+   "value": "${prefix}_hero_mask"
+  },
+  {
+   "op": "set_node_field",
+   "node": "image",
+   "field": "title",
+   "value": "in:image"
+  },
+  {
+   "op": "set_node_field",
+   "node": "structure_sampler",
+   "field": "title",
+   "value": "in:seed"
+  },
+  {
+   "op": "set_node_field",
+   "node": "generator",
+   "field": "title",
+   "value": "in:trellis2"
+  },
+  {
+   "op": "set_node_field",
+   "node": "resolution",
+   "field": "title",
+   "value": "in:resolution"
+  },
+  {
+   "op": "set_node_field",
+   "node": "faces",
+   "field": "title",
+   "value": "in:faces"
+  },
+  {
+   "op": "set_node_field",
+   "node": "out_mesh",
+   "field": "title",
+   "value": "out:mesh"
+  },
+  {
+   "op": "set_node_field",
+   "node": "out_hero_mask",
+   "field": "title",
+   "value": "out:hero_mask"
+  }
+ ]
+}

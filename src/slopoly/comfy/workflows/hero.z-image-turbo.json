@@ -1,0 +1,141 @@
+{
+ "4226435964234074": {
+  "inputs": {
+   "unet_name": "z_image_turbo_int8_convrot.safetensors",
+   "weight_dtype": "default"
+  },
+  "class_type": "UNETLoader",
+  "_meta": {
+   "title": "Load Diffusion Model"
+  }
+ },
+ "4425573446218440": {
+  "inputs": {
+   "clip_name": "qwen_3_4b_fp8_mixed.safetensors",
+   "type": "lumina2",
+   "device": "default"
+  },
+  "class_type": "CLIPLoader",
+  "_meta": {
+   "title": "Load CLIP"
+  }
+ },
+ "702912211633791": {
+  "inputs": {
+   "vae_name": "ae.safetensors"
+  },
+  "class_type": "VAELoader",
+  "_meta": {
+   "title": "Load VAE"
+  }
+ },
+ "3238124128623893": {
+  "inputs": {
+   "shift": 3,
+   "sampling": "flow",
+   "model": [
+    "4226435964234074",
+    0
+   ]
+  },
+  "class_type": "ModelSamplingAuraFlow",
+  "_meta": {
+   "title": "ModelSamplingAuraFlow"
+  }
+ },
+ "3496197131247407": {
+  "inputs": {
+   "text": "",
+   "clip": [
+    "4425573446218440",
+    0
+   ]
+  },
+  "class_type": "CLIPTextEncode",
+  "_meta": {
+   "title": "in:prompt"
+  }
+ },
+ "1991662733781574": {
+  "inputs": {
+   "conditioning": [
+    "3496197131247407",
+    0
+   ]
+  },
+  "class_type": "ConditioningZeroOut",
+  "_meta": {
+   "title": "Conditioning Zero Out"
+  }
+ },
+ "3583795505011253": {
+  "inputs": {
+   "width": 1024,
+   "height": 1024,
+   "batch_size": 1
+  },
+  "class_type": "EmptySD3LatentImage",
+  "_meta": {
+   "title": "EmptySD3LatentImage"
+  }
+ },
+ "2843302119085584": {
+  "inputs": {
+   "seed": 0,
+   "steps": 8,
+   "cfg": 1,
+   "sampler_name": "res_multistep",
+   "scheduler": "simple",
+   "denoise": 1,
+   "model": [
+    "3238124128623893",
+    0
+   ],
+   "positive": [
+    "3496197131247407",
+    0
+   ],
+   "negative": [
+    "1991662733781574",
+    0
+   ],
+   "latent_image": [
+    "3583795505011253",
+    0
+   ]
+  },
+  "class_type": "KSampler",
+  "_meta": {
+   "title": "in:seed"
+  }
+ },
+ "1549729351128097": {
+  "inputs": {
+   "samples": [
+    "2843302119085584",
+    0
+   ],
+   "vae": [
+    "702912211633791",
+    0
+   ]
+  },
+  "class_type": "VAEDecode",
+  "_meta": {
+   "title": "VAE Decode"
+  }
+ },
+ "1116895403949368": {
+  "inputs": {
+   "filename_prefix": "slopoly/hero",
+   "images": [
+    "1549729351128097",
+    0
+   ]
+  },
+  "class_type": "SaveImage",
+  "_meta": {
+   "title": "out:image"
+  }
+ }
+}

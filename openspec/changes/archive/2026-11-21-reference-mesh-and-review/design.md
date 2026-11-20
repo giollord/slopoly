@@ -58,11 +58,17 @@ under `comfyui/reference/`, and given a recipe like `idol-views.recipe.json`.
 - Alternatives considered:
   - Keeping the Idol splat and fixing only the framing. That leaves no metric scale, no handedness check and no 3D
     regions. Idol stays a benchmark candidate through `SplatToMesh`.
+- **Outcome of the benchmark** (`notes.md`): Idol through `SplatToMesh` won on every hero, so a second workflow,
+  `idol-mesh` (`recipes/idol-mesh.recipe.json`: the Idol splat, `SplatToMesh`, `DecimateMesh`, `SaveGLB`), is the
+  default generator `idol`. `reference-mesh` stays for `--generator trellis2|pixal3d`. The old `views` turntable
+  workflow is removed.
   - Hunyuan3D 2.x. Its licence excludes some territories, so it fails "commercially usable".
 
-### 2. Views rendered in Blender, not in ComfyUI
+### 2. Views rendered on the host, not in ComfyUI
 
-The CLI downloads the GLB and normalises it in a Blender background run. Normalising means: Y up, scaled to metres,
+The CLI downloads the GLB and normalises it with a small pure numpy/Pillow renderer (`meshview.py`, a painter's-order
+rasteriser with flat lighting, plus `reference.py` for the pipeline). Blender isn't launched: the orientation sweep
+needs about a hundred small renders, and a whole views job takes seconds. Normalising means: Y up, scaled to metres,
 standing on y = 0, centred, and front towards +Z.
 
 - **Front and handedness.** Render the mesh from the hero's camera direction (three-quarter front-left), and the same
@@ -74,9 +80,10 @@ standing on y = 0, centred, and front towards +Z.
 - **Metric scoring.** `silhouette.py` uses the views' known metres-per-pixel instead of fitting the model's scale to
   the silhouette, so size errors become real. The old fit stays as a fallback for views without a scale.
 - `comfy/views.py` frame picking and `QUARTER_SIGN` are removed.
-- Rationale: Blender is already a host dependency and already renders builds. Rendering the reference with the same
-  code and camera conventions as the builds removes a whole class of mismatches. ComfyUI's `RenderMesh` would need
-  its own camera conventions.
+- Rationale: the reference views must share the build scorer's camera conventions exactly (front from +Z, side
+  from +X with the front on the left, top with the front at the bottom), and `meshview` uses those projections, so
+  a view's metric fit can go straight to the scorer. ComfyUI's `RenderMesh` would need its own camera conventions,
+  and Blender's Cycles is far too slow for a hundred-render sweep on the CPU.
 
 ### 3. Size of the asset
 
@@ -107,24 +114,29 @@ git-ignored and capped at the newest 50 images.
 Voxelise the build and the normalised reference at a fixed 2 cm cell, or coarser for large objects (target about
 128 cells on the longest axis). Report the volume IoU, mean and 90th-percentile surface distance, and connected
 components of missing and extra voxels larger than a threshold. Each component gets its bounds and the build parts
-within 5 cm. This uses numpy in the build's Blender run. Its components go into the build report next to `detail`,
-and the agent reads them the same way.
+within 5 cm. It runs on the host after the Blender build (`compare3d.py`: area-weighted surface samples, a KD-tree for the
+distances, scipy's voxel fill and labelling for the volumes and regions), so a rough reference mesh with small holes
+is fine. Its result goes into the build report as `compare3d`, next to `detail`, and the agent reads it the same
+way.
 
 ### 7. Review window
 
 - **Page:** `windows/static/review.html` reuses `viewer3d.js` twice (reference GLB, build GLB) plus an image pane.
   Each pane has a transparent paint canvas on top.
   - Lock copies the build camera onto the reference camera on every change.
-  - With the hero image on the left, the build camera is set to yaw -45° and pitch 20°, the hero framing the
-    hero prompt asks for.
-- **Paint:** the brush is a fixed screen-space width. Strokes are stored as polylines, and a stroke mask is rendered
-  from them.
-- **Hits:** done in the page with three.js `Raycaster` against the build. Each stroke pixel's weight falls off with
-  its distance from the polyline (1 at the centre, 0 at the edge); pixels are sampled on a grid, not all of them.
-  - A ray hits only the first surface, which gives the "nearest surface only" rule.
-  - Misses count towards `empty`.
-  - For the reference mesh, the hit points' bounds give the region in metres. For `empty` strokes on the build, the
-    same pixels are cast on the reference instead.
+  - With the hero image on the left, the build camera turns to the hero direction (yaw 45°, pitch 20°: the
+    `hero` camera of the views), keeping its distance.
+- **Paint:** the brush width is a fraction of the pane width. Strokes are sent as polylines in pane fractions with
+  the build camera (position, target, field of view) and the pane's aspect.
+- **Hits:** computed on the host when the notes arrive (`review.py`), not in the page: the build GLB (one node per
+  part) is rendered with face IDs from the page's camera by the same numpy renderer the views use, so the maths is
+  testable without a browser. Each stroke pixel's weight falls off with its distance from the polyline (1 at the
+  centre, 0 at the edge).
+  - A face-ID render keeps only the first surface, which gives the "nearest surface only" rule.
+  - Pixels over nothing count towards `empty`; parts under 10 % of the weight are left out.
+  - Each hit part gets the weighted centre of its hit faces in metres. For the reference mesh, the bounds of the
+    faces under the strokes give the region in metres. For `empty` strokes on the build, the same pixels are looked
+    up on the reference instead.
 - **Result:** pane screenshots with strokes are posted to the server and saved under the variant's `notes/`. The job
   result holds the notes. The server writes `notes.yaml` (number, build, comment, camera, images, hits, status,
   history).

@@ -16,8 +16,8 @@ pack's jobs with their states and progress.
 
 ### Requirement: Cancel and retry
 The user and the agent SHALL be able to cancel a queued or running job with `slopoly cancel <id>` and retry a failed
-or cancelled job with `slopoly retry <id>`. Cancelling SHALL stop the job's process, remove its pending work from
-ComfyUI, and attach no output. Retrying SHALL start a new job with the same inputs.
+or cancelled job of any kind with `slopoly retry <id>`. Cancelling SHALL stop the job's process, remove its pending
+work from ComfyUI, and attach no output. Retrying SHALL start a new job with the same inputs.
 
 #### Scenario: Cancel running generation
 - **WHEN** the user cancels a running image job
@@ -30,6 +30,10 @@ ComfyUI, and attach no output. Retrying SHALL start a new job with the same inpu
 #### Scenario: Retry a failed job
 - **WHEN** the agent retries a views job that failed because a model was missing, after fetching the model
 - **THEN** a new job with the same inputs runs and its id is returned
+
+#### Scenario: Retry a segmentation
+- **WHEN** the agent retries a failed segment job
+- **THEN** a new segment job with the same inputs starts
 
 ### Requirement: Failure reporting
 A failed job SHALL record a human-readable error and a stable error code in its job file, and `wait` and `jobs` SHALL
@@ -79,3 +83,11 @@ A job whose process no longer exists while its state is queued or running SHALL 
 #### Scenario: Machine restarted
 - **WHEN** the machine restarts while a views job is running and the agent then runs `slopoly jobs`
 - **THEN** the job is listed as failed with reason `orphaned`, and it can be retried
+
+### Requirement: Job files survive concurrent readers
+Writing a job file SHALL NOT fail because another process is reading it at that moment. On Windows, a replace that is
+denied SHALL be retried briefly before the job fails.
+
+#### Scenario: Waiting while the job writes
+- **WHEN** `slopoly wait` polls a segment job's file while the job writes its progress
+- **THEN** the job keeps running and finishes normally

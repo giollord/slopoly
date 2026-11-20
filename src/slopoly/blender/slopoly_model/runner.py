@@ -79,13 +79,19 @@ def build(job: dict, out: Path) -> dict:
                                      "message": "palette roles not in the pack palette: add them first"})
     broken = [{"part": p["part"], **{k: p[k] for k in SOLID_DEFECTS if p[k]}} for p in repair["parts"]
               if any(p[k] for k in SOLID_DEFECTS)]
+    for entry in broken:
+        part = model.parts.get(entry["part"])
+        if part is not None and part.shape.jittered and entry.get("selfIntersecting"):
+            entry["likely_cause"] = (f"jitter({part.shape.jittered}): lower it, jitter before booleans and ARRAY "
+                                     "copies, or shape the variation instead")
     if broken:
         validation["issues"].append({"issue": "not_solid", "parts": broken,
                                      "message": "each part's mesh must be a closed manifold solid that doesn't cut through itself: see the shading section"})
     validation["validated"] = validation["validated"] and not untagged and not missing and not broken
     used = sorted({pal.split_tag(t)[0] for p in model.parts.values() for t in p.face_tags() if t})
     masks = load_masks(job.get("masks") or [])
-    silhouette = score(model, masks)
+    fits = {v["view"]: v["fit"] for v in job.get("views") or [] if v.get("fit")}
+    silhouette = score(model, masks, fits)
     objects = {m["view"]: m["mask"] for m in masks if m["part"] == OBJECT}
     views = {v["view"]: Path(v["path"]) for v in job.get("views") or [] if v.get("path")}
     parts_by_view: dict[str, dict] = {}
@@ -97,6 +103,15 @@ def build(job: dict, out: Path) -> dict:
     if not objects:
         silhouette["renders"] = "missing: " + (job.get("noViewsReason") or "the variant's reference hero has no views and masks yet")
     parts = summary(model)
+    # the budget counts the exported meshes (the shading pass merges and removes faces), as the result shows
+    count = sum(p["triangles"] for p in parts)
+    budget = validation["triangles"]["budget"]
+    validation["triangles"] = {"count": count, "budget": budget, "ok": count <= budget}
+    if count > budget:
+        validation["issues"].append({"issue": "over_budget", "triangles": count, "budget": budget,
+                                     "message": f"{count} triangles, {count - budget} over the budget of {budget}: "
+                                                "see parts[].triangles for where they go"})
+    validation["validated"] = validation["validated"] and count <= budget
     corners = np.array([b for p in parts for b in p["bounds"]]).reshape(-1, 3)
     return {
         "validated": validation["validated"],

@@ -46,17 +46,18 @@ def test_all_good_except_libs(comfy):
 
 def test_missing_node_names_workflow(comfy):
     install_all(comfy)
-    cls = next(c for c, w in doctor.required_nodes().items() if "views" in w)
+    cls = next(c for c, w in doctor.required_nodes().items() if "idol-mesh" in w)
     del comfy["nodes"][cls]
     check = by_name(doctor.doctor())["comfyui nodes"]
-    assert not check["ok"] and cls in check["missing"] and "views" in check["detail"] and check["fix"]
+    assert not check["ok"] and cls in check["missing"] and "idol-mesh" in check["detail"] and check["fix"]
 
 
 def test_missing_models_without_folder(comfy):
     result = doctor.doctor()
     check = by_name(result)["comfyui models"]
     assert not check["ok"] and "comfyui.models_dir" in check["fix"]
-    assert {"file": "sam3.1_multiplex_fp16.safetensors", "subfolder": "checkpoints"}.items() <= check["missing"][-1].items()
+    assert any({"file": "sam3.1_multiplex_fp16.safetensors", "subfolder": "checkpoints"}.items() <= missing.items()
+               for missing in check["missing"])
 
 
 def test_fetch_without_folder_downloads_nothing(comfy, monkeypatch):
@@ -96,3 +97,22 @@ def test_fetch_resumes_and_installs(comfy, tmp_path, monkeypatch):
     assert ranges == ["bytes=4000-"]
     assert (models_dir / "checkpoints" / sam["file"]).read_bytes() == content and not part.exists()
     assert result["fetched"]["blender_libraries"] == "installed"
+
+
+def test_window_files_are_checked(monkeypatch, tmp_path):
+    assert doctor.window_check()["ok"]
+    monkeypatch.setattr(doctor, "WINDOW_FILES", doctor.WINDOW_FILES + ("missing.js",))
+    failed = doctor.window_check()
+    assert not failed["ok"] and "missing.js" in failed["detail"] and "reinstall" in failed["fix"]
+
+
+def test_image_model_selects_its_models_and_names_the_licence(comfy):
+    files = {m["file"] for m in doctor.required_models()}
+    assert "krea2_turbo_int8_convrot.safetensors" in files and "z_image_turbo_int8_convrot.safetensors" not in files
+    check = by_name(doctor.doctor())["image model"]
+    assert check["images_model"] == "krea2" and "$1M" in check["detail"] and "z-image-turbo" in check["note"]
+    config.set_("images.model", "z-image-turbo")
+    files = {m["file"] for m in doctor.required_models()}
+    assert "z_image_turbo_int8_convrot.safetensors" in files and "krea2_turbo_int8_convrot.safetensors" not in files
+    assert "TextEncodeQwenImageEditPlus" not in doctor.required_nodes()
+    assert "note" not in by_name(doctor.doctor())["image model"]

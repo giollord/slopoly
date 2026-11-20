@@ -1,0 +1,225 @@
+{
+ "recipe": "z-image-turbo",
+ "description": "Z-Image Turbo (int8, 8 steps) text to image at a set size, no references (the fallback image model); wiring after the image_z_image_turbo_int8 template.",
+ "params": {
+  "width": {
+   "type": "int"
+  },
+  "height": {
+   "type": "int"
+  },
+  "prefix": {
+   "type": "string"
+  }
+ },
+ "ops": [
+  {
+   "op": "add_node",
+   "class_type": "UNETLoader",
+   "as": "unet"
+  },
+  {
+   "op": "set_widget",
+   "node": "unet",
+   "widget": "unet_name",
+   "value": "z_image_turbo_int8_convrot.safetensors"
+  },
+  {
+   "op": "add_node",
+   "class_type": "CLIPLoader",
+   "as": "clip"
+  },
+  {
+   "op": "set_widget",
+   "node": "clip",
+   "widget": "clip_name",
+   "value": "qwen_3_4b_fp8_mixed.safetensors"
+  },
+  {
+   "op": "set_widget",
+   "node": "clip",
+   "widget": "type",
+   "value": "lumina2"
+  },
+  {
+   "op": "add_node",
+   "class_type": "VAELoader",
+   "as": "vae"
+  },
+  {
+   "op": "set_widget",
+   "node": "vae",
+   "widget": "vae_name",
+   "value": "ae.safetensors"
+  },
+  {
+   "op": "add_node",
+   "class_type": "ModelSamplingAuraFlow",
+   "as": "shift"
+  },
+  {
+   "op": "set_widget",
+   "node": "shift",
+   "widget": "shift",
+   "value": 3
+  },
+  {
+   "op": "connect",
+   "from": "unet.MODEL",
+   "to": "shift.model"
+  },
+  {
+   "op": "add_node",
+   "class_type": "CLIPTextEncode",
+   "as": "prompt"
+  },
+  {
+   "op": "set_node_field",
+   "node": "prompt",
+   "field": "title",
+   "value": "in:prompt"
+  },
+  {
+   "op": "set_widget",
+   "node": "prompt",
+   "widget": "text",
+   "value": ""
+  },
+  {
+   "op": "connect",
+   "from": "clip.CLIP",
+   "to": "prompt.clip"
+  },
+  {
+   "op": "add_node",
+   "class_type": "ConditioningZeroOut",
+   "as": "negative"
+  },
+  {
+   "op": "connect",
+   "from": "prompt.CONDITIONING",
+   "to": "negative.conditioning"
+  },
+  {
+   "op": "add_node",
+   "class_type": "EmptySD3LatentImage",
+   "as": "latent"
+  },
+  {
+   "op": "set_widget",
+   "node": "latent",
+   "widget": "width",
+   "value": "${width}"
+  },
+  {
+   "op": "set_widget",
+   "node": "latent",
+   "widget": "height",
+   "value": "${height}"
+  },
+  {
+   "op": "set_widget",
+   "node": "latent",
+   "widget": "batch_size",
+   "value": 1
+  },
+  {
+   "op": "add_node",
+   "class_type": "KSampler",
+   "as": "sampler"
+  },
+  {
+   "op": "set_node_field",
+   "node": "sampler",
+   "field": "title",
+   "value": "in:seed"
+  },
+  {
+   "op": "set_widget",
+   "node": "sampler",
+   "widget": "steps",
+   "value": 8
+  },
+  {
+   "op": "set_widget",
+   "node": "sampler",
+   "widget": "cfg",
+   "value": 1
+  },
+  {
+   "op": "set_widget",
+   "node": "sampler",
+   "widget": "sampler_name",
+   "value": "res_multistep"
+  },
+  {
+   "op": "set_widget",
+   "node": "sampler",
+   "widget": "scheduler",
+   "value": "simple"
+  },
+  {
+   "op": "set_widget",
+   "node": "sampler",
+   "widget": "denoise",
+   "value": 1
+  },
+  {
+   "op": "connect",
+   "from": "shift.MODEL",
+   "to": "sampler.model"
+  },
+  {
+   "op": "connect",
+   "from": "prompt.CONDITIONING",
+   "to": "sampler.positive"
+  },
+  {
+   "op": "connect",
+   "from": "negative.CONDITIONING",
+   "to": "sampler.negative"
+  },
+  {
+   "op": "connect",
+   "from": "latent.LATENT",
+   "to": "sampler.latent_image"
+  },
+  {
+   "op": "add_node",
+   "class_type": "VAEDecode",
+   "as": "decode"
+  },
+  {
+   "op": "connect",
+   "from": "sampler.LATENT",
+   "to": "decode.samples"
+  },
+  {
+   "op": "connect",
+   "from": "vae.VAE",
+   "to": "decode.vae"
+  },
+  {
+   "op": "add_node",
+   "class_type": "SaveImage",
+   "as": "save"
+  },
+  {
+   "op": "set_node_field",
+   "node": "save",
+   "field": "title",
+   "value": "out:image"
+  },
+  {
+   "op": "set_widget",
+   "node": "save",
+   "widget": "filename_prefix",
+   "value": "${prefix}"
+  },
+  {
+   "op": "connect",
+   "from": "decode.IMAGE",
+   "to": "save.images"
+  }
+ ]
+}

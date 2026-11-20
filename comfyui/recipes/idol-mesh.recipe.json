@@ -1,0 +1,352 @@
+{
+ "recipe": "idol-mesh",
+ "description": "Hero image -> Gaussian splat (Idol, a TripoSplat fine-tune) -> SplatToMesh -> DecimateMesh -> GLB (out:mesh, vertex colours), plus the hero's background mask (out:hero_mask). The splat part is the 3d_idol_image_to_gaussian_splat template's (BiRefNet background removal, DINOv3 conditioning, flux2-vae encode, Idol decoder).",
+ "params": {
+  "prefix": {
+   "type": "string",
+   "default": "slopoly/mesh"
+  },
+  "faces": {
+   "type": "int",
+   "default": 80000
+  }
+ },
+ "ops": [
+  {
+   "op": "add_node",
+   "class_type": "LoadImage",
+   "as": "image"
+  },
+  {
+   "op": "add_node",
+   "class_type": "LoadBackgroundRemovalModel",
+   "as": "bg_model"
+  },
+  {
+   "op": "set_widget",
+   "node": "bg_model",
+   "widget": "bg_removal_name",
+   "value": "birefnet.safetensors"
+  },
+  {
+   "op": "add_node",
+   "class_type": "RemoveBackground",
+   "as": "bg"
+  },
+  {
+   "op": "connect",
+   "from": "bg_model.bg_model",
+   "to": "bg.bg_removal_model"
+  },
+  {
+   "op": "connect",
+   "from": "image.IMAGE",
+   "to": "bg.image"
+  },
+  {
+   "op": "add_node",
+   "class_type": "TripoSplatPreprocessImage",
+   "as": "pre"
+  },
+  {
+   "op": "connect",
+   "from": "image.IMAGE",
+   "to": "pre.image"
+  },
+  {
+   "op": "connect",
+   "from": "bg.mask",
+   "to": "pre.mask"
+  },
+  {
+   "op": "add_node",
+   "class_type": "CLIPVisionLoader",
+   "as": "dino"
+  },
+  {
+   "op": "set_widget",
+   "node": "dino",
+   "widget": "clip_name",
+   "value": "dino_v3_vit_h_bf16.safetensors"
+  },
+  {
+   "op": "add_node",
+   "class_type": "VAELoader",
+   "as": "encoder"
+  },
+  {
+   "op": "set_widget",
+   "node": "encoder",
+   "widget": "vae_name",
+   "value": "flux2-vae.safetensors"
+  },
+  {
+   "op": "add_node",
+   "class_type": "VAELoader",
+   "as": "decoder"
+  },
+  {
+   "op": "set_widget",
+   "node": "decoder",
+   "widget": "vae_name",
+   "value": "idol_decoder_fp16.safetensors"
+  },
+  {
+   "op": "add_node",
+   "class_type": "UNETLoader",
+   "as": "unet"
+  },
+  {
+   "op": "set_widget",
+   "node": "unet",
+   "widget": "unet_name",
+   "value": "idol_fp16.safetensors"
+  },
+  {
+   "op": "add_node",
+   "class_type": "TripoSplatConditioning",
+   "as": "cond"
+  },
+  {
+   "op": "connect",
+   "from": "dino.CLIP_VISION",
+   "to": "cond.clip_vision"
+  },
+  {
+   "op": "connect",
+   "from": "encoder.VAE",
+   "to": "cond.vae"
+  },
+  {
+   "op": "connect",
+   "from": "pre.image",
+   "to": "cond.image"
+  },
+  {
+   "op": "add_node",
+   "class_type": "KSampler",
+   "as": "sampler"
+  },
+  {
+   "op": "connect",
+   "from": "unet.MODEL",
+   "to": "sampler.model"
+  },
+  {
+   "op": "connect",
+   "from": "cond.positive",
+   "to": "sampler.positive"
+  },
+  {
+   "op": "connect",
+   "from": "cond.negative",
+   "to": "sampler.negative"
+  },
+  {
+   "op": "connect",
+   "from": "cond.latent",
+   "to": "sampler.latent_image"
+  },
+  {
+   "op": "set_widget",
+   "node": "sampler",
+   "widget": "steps",
+   "value": 20
+  },
+  {
+   "op": "set_widget",
+   "node": "sampler",
+   "widget": "cfg",
+   "value": 3
+  },
+  {
+   "op": "set_widget",
+   "node": "sampler",
+   "widget": "sampler_name",
+   "value": "dpmpp_2m"
+  },
+  {
+   "op": "set_widget",
+   "node": "sampler",
+   "widget": "scheduler",
+   "value": "simple"
+  },
+  {
+   "op": "add_node",
+   "class_type": "VAEDecodeTripoSplat",
+   "as": "decode"
+  },
+  {
+   "op": "connect",
+   "from": "sampler.LATENT",
+   "to": "decode.samples"
+  },
+  {
+   "op": "connect",
+   "from": "decoder.VAE",
+   "to": "decode.vae"
+  },
+  {
+   "op": "set_widget",
+   "node": "decode",
+   "widget": "num_gaussians",
+   "value": 262144
+  },
+  {
+   "op": "add_node",
+   "class_type": "MaskToImage",
+   "as": "hero_mask_image"
+  },
+  {
+   "op": "connect",
+   "from": "bg.mask",
+   "to": "hero_mask_image.mask"
+  },
+  {
+   "op": "add_node",
+   "class_type": "SaveImage",
+   "as": "out_hero_mask"
+  },
+  {
+   "op": "connect",
+   "from": "hero_mask_image.IMAGE",
+   "to": "out_hero_mask.images"
+  },
+  {
+   "op": "set_widget",
+   "node": "out_hero_mask",
+   "widget": "filename_prefix",
+   "value": "${prefix}_hero_mask"
+  },
+  {
+   "op": "add_node",
+   "class_type": "SplatToMesh",
+   "as": "to_mesh"
+  },
+  {
+   "op": "connect",
+   "from": "decode.splat",
+   "to": "to_mesh.splat"
+  },
+  {
+   "op": "set_widget",
+   "node": "to_mesh",
+   "widget": "resolution",
+   "value": 384
+  },
+  {
+   "op": "set_widget",
+   "node": "to_mesh",
+   "widget": "kernel",
+   "value": 5
+  },
+  {
+   "op": "set_widget",
+   "node": "to_mesh",
+   "widget": "smooth",
+   "value": 2
+  },
+  {
+   "op": "set_widget",
+   "node": "to_mesh",
+   "widget": "level",
+   "value": 0.4
+  },
+  {
+   "op": "set_widget",
+   "node": "to_mesh",
+   "widget": "min_component",
+   "value": 500
+  },
+  {
+   "op": "set_widget",
+   "node": "to_mesh",
+   "widget": "min_opacity",
+   "value": 0.02
+  },
+  {
+   "op": "set_widget",
+   "node": "to_mesh",
+   "widget": "color_sharpen",
+   "value": 2.0
+  },
+  {
+   "op": "add_node",
+   "class_type": "PrimitiveInt",
+   "as": "faces"
+  },
+  {
+   "op": "set_widget",
+   "node": "faces",
+   "widget": "value",
+   "value": "${faces}"
+  },
+  {
+   "op": "add_node",
+   "class_type": "DecimateMesh",
+   "as": "decimate"
+  },
+  {
+   "op": "connect",
+   "from": "to_mesh.mesh",
+   "to": "decimate.mesh"
+  },
+  {
+   "op": "connect",
+   "from": "faces.INT",
+   "to": "decimate.target_face_count"
+  },
+  {
+   "op": "set_widget",
+   "node": "decimate",
+   "widget": "placement_mode",
+   "value": "midpoint"
+  },
+  {
+   "op": "add_node",
+   "class_type": "SaveGLB",
+   "as": "out_mesh"
+  },
+  {
+   "op": "connect",
+   "from": "decimate.mesh",
+   "to": "out_mesh.mesh"
+  },
+  {
+   "op": "set_widget",
+   "node": "out_mesh",
+   "widget": "filename_prefix",
+   "value": "${prefix}"
+  },
+  {
+   "op": "set_node_field",
+   "node": "image",
+   "field": "title",
+   "value": "in:image"
+  },
+  {
+   "op": "set_node_field",
+   "node": "sampler",
+   "field": "title",
+   "value": "in:seed"
+  },
+  {
+   "op": "set_node_field",
+   "node": "faces",
+   "field": "title",
+   "value": "in:faces"
+  },
+  {
+   "op": "set_node_field",
+   "node": "out_mesh",
+   "field": "title",
+   "value": "out:mesh"
+  },
+  {
+   "op": "set_node_field",
+   "node": "out_hero_mask",
+   "field": "title",
+   "value": "out:hero_mask"
+  }
+ ]
+}
