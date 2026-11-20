@@ -35,9 +35,11 @@ WHOLE_OBJECT_IOU = 0.9
 # SAM 3 keeps only the best object per text prompt unless the prompt says "name:N"; a view can show several of a part
 # (both wheels, both handles), so every part asks for up to this many and gets their union.
 MAX_INSTANCES = 8
-HERO_IMAGE = ("ONE object only, whole and centred: {0}. Three-quarter front view from the front-left, slightly from "
-              "above, with the whole object in frame. No smoke, steam, fire, sparks, dust or other particles. Plain "
-              "light grey background, nothing else in the image.")
+# The pack's style text goes first, as in the anchors' prompts, so the heroes keep the anchors' rendering; the style
+# text may mention smoke, so the end repeats that the object stands cold.
+HERO_IMAGE = ("A single game asset on its own: {0}. Three-quarter front view from the front-left, slightly from above, "
+              "with the whole object in frame. Plain light background, nothing else in the image. The object stands "
+              "still and cold: no smoke, steam, fire, sparks, dust or other particles anywhere in the image.")
 
 
 def style_text(pack: Pack) -> str:
@@ -79,8 +81,8 @@ def start_hero(asset: Asset, description: str | None = None, count: int = 2, see
         raise SlopolyError("no_picked_anchor", f"pack {pack.name!r} has no picked style anchor",
                            f"pick one: slopoly pick {pack.name} --anchors")
     style = style_text(pack)
-    prompt = HERO_IMAGE.format(description or f"{asset.name}, {asset.meta.description}".strip(", ")) + (
-        f" Style notes for colours and materials only: {style}" if style else "")
+    hero = HERO_IMAGE.format(description or f"{asset.name}, {asset.meta.description}".strip(", "))
+    prompt = f"{style}\n\n{hero}" if style else hero
     asset.heroes_dir.mkdir(parents=True, exist_ok=True)
     inputs = {"workflow": "hero", "kind": "hero", "prompt": prompt, "references": anchors, "count": count_of(count),
               "seed": seed, "folder": rel(pack, asset.heroes_dir), "prefix": "hero"}

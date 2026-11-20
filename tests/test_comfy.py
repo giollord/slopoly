@@ -194,7 +194,7 @@ def test_hero_job_writes_images(run, pack, started):
     assert (kind, target) == ("generate", "gnome-village/cart")
     assert inputs["references"] == ["gnome-village/anchors/anchor_001.png"]
     assert "wooden hand cart" in inputs["prompt"]
-    assert "No smoke, steam, fire" in inputs["prompt"] and "whole object in frame" in inputs["prompt"]
+    assert "no smoke, steam, fire" in inputs["prompt"] and "whole object in frame" in inputs["prompt"]
     fake = FakeComfy(lambda prompt: {"image": [png(np.full((32, 32, 3), 200, np.uint8))]})
     result = generate.generate(context(pack, kind, target, inputs), fake)
     heroes = pack / "assets/cart/heroes"

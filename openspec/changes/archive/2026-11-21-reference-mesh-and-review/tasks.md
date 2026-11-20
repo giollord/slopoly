@@ -147,10 +147,10 @@
 
 ## 10. End-to-end check
 
-- [ ] 10.1 Rerun the locomotive with the new pipeline. Verify that the side and top views aren't cropped, that the
+- [x] 10.1 Rerun the locomotive with the new pipeline. Verify that the side and top views aren't cropped, that the
       front and side agree, that a review round with at least three painted notes reaches the agent with sensible
       hits, and that the agent stops on the new criterion. Record timings and blockers in `notes.md`
-- [ ] 10.2 Rerun the cart end-to-end; verify the `design-agent` "Cart end-to-end" scenario still holds with metric
+- [x] 10.2 Rerun the cart end-to-end; verify the `design-agent` "Cart end-to-end" scenario still holds with metric
       views, and that `uv run pytest` and `uv run slopoly dev test-blender` pass
 
 ## 11. Fixes from the locomotive rerun
@@ -202,6 +202,9 @@
       as first reference when a change is given. Name Krea's licence limits (commercial use only under $1M yearly
       revenue, content filtering) in the README, `comfyui-setup.md` and `doctor`. Record the comparison in
       `notes.md`. Verify an anchor and a hero job on the local ComfyUI with each model, and the host tests
+- [x] 11.15 Heroes in the anchors' style: the hero prompt starts with the pack's style text (as the anchors' prompts
+      do) and ends by saying the object stands cold, with no smoke or particles; Krea's style-reference LoRA at 0.7.
+      Verify a locomotive hero job against the picked anchor and the host tests; record the comparison in `notes.md`
 
 ## Workflow follow-up
 

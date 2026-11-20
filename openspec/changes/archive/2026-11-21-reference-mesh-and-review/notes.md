@@ -113,3 +113,23 @@ took the anchor's darker palette and spikes; the Z-Image heroes are clean but dr
 
 **Found on the way.** `slopoly wait` crashed once with `PermissionError` reading a job file while the job process
 replaced it (Windows); task 11.7 retries only the writer's `os.replace`, not readers.
+
+## Heroes in the anchors' style (task 11.15, 2026-11-21)
+
+Krea heroes made with the picked orcish anchor (`anchor_018`) as reference came out grey and desaturated, like a plain
+3D render, over-spiked, and unlike the anchor's warm, painted, chunky look. The prompt put the shape first and the
+pack's style text last as "style notes", and asked for a light grey background. Tried on the locomotive hero, two
+seeds each:
+
+| Variant | Result |
+|---|---|
+| Old prompt, LoRA 1.0 (shipped in 11.14) | Grey render look, cluttered spikes |
+| Old prompt, LoRA 1.5 | Mushy, noisy surfaces |
+| Shape and view only (no style text), or "in the art style of the reference" | Same grey look as the old prompt |
+| Style text first, as in the anchors' prompts, no reference | Warm, faceted, closer; smoke from the style text's "sooty grey smoke" |
+| Style text first, LoRA 0.5 / 0.7 / 1.0 | 0.7 closest to the anchor; 1.0 adds clutter; 0.5 and 0.7 still drew smoke |
+| Style text first, ending "the object stands still and cold: no smoke ...", LoRA 0.7 | **chosen**: anchor's look, no smoke in both seeds |
+
+Through the CLI (same seed as the old hero, plus the next): both heroes match the anchor's rendering; the second has
+a small wisp of smoke, so the hero prompt still can't fully override a style text that mentions smoke. With a
+reference, Krea takes about 33 s per warm image, against 13 s without.

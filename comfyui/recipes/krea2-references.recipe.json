@@ -1,6 +1,6 @@
 {
  "recipe": "krea2-references",
- "description": "Krea 2 Turbo (int8, 8 steps) at a set size: text to image, or with up to 3 style references (in:use_references) through Krea's style-reference LoRA; wiring after the image_krea2_turbo_t2i_int8 and image_krea2_turbo_int8_image_style_reference templates.",
+ "description": "Krea 2 Turbo (int8, 8 steps) at a set size: text to image, or with up to 3 style references (in:use_references) through Krea's style-reference LoRA at strength 0.7 (1.0 adds clutter); wiring after the image_krea2_turbo_t2i_int8 and image_krea2_turbo_int8_image_style_reference templates.",
  "params": {
   "width": {
    "type": "int"
@@ -84,7 +84,7 @@
    "op": "set_widget",
    "node": "lora",
    "widget": "strength_model",
-   "value": 1
+   "value": 0.7
   },
   {
    "op": "connect",
