@@ -40,7 +40,7 @@ def test_fill_sets_primary_widgets_and_keeps_defaults():
     prompt = workflow.load("style-anchor")
     filled = workflow.fill(prompt, {"prompt": "a well", "seed": 5, "use_reference_1": True, "unknown": 1})
     by_name = {name: filled[node_id] for name, node_id in workflow.inputs(filled).items()}
-    assert by_name["prompt"]["inputs"]["prompt"] == "a well"
+    assert by_name["prompt"]["inputs"]["value"] == "a well"
     assert by_name["seed"]["inputs"]["seed"] == 5
     assert by_name["use_reference_1"]["inputs"]["value"] is True
     assert by_name["use_reference_2"]["inputs"]["value"] is False
@@ -205,9 +205,28 @@ def test_hero_job_writes_images(run, pack, started):
     assert meta["seed"] == 11 and meta["state"] == "undecided" and meta["job"] == "j1"
     assert len(fake.prompts) == 2 and fake.uploads[0].endswith("anchor_001.png")
     sent = {name: fake.prompts[0][node]["inputs"] for name, node in workflow.inputs(fake.prompts[0]).items()}
-    assert sent["use_canvas"]["value"] is True  # drawn on the empty canvas, the anchor only for its style
-    assert sent["prompt"]["prompt"].startswith(generate.CANVAS + generate.CANVAS_REFERENCES)
-    assert "wooden hand cart" in sent["prompt"]["prompt"] and "empty canvas" not in meta["prompt"]
+    assert sent["use_references"]["value"] is True and sent["use_reference_1"]["value"] is True
+    assert sent["use_reference_2"]["value"] is False and sent["prompt"]["value"] == meta["prompt"]
+    assert meta["references"] == ["gnome-village/anchors/anchor_001.png"]
+
+
+def test_fallback_image_model_has_no_references(run, pack, started):
+    from slopoly import config
+    config.set_("images.model", "z-image-turbo")
+    assert "hero.z-image-turbo" in workflow.active_names() and "hero" not in workflow.active_names()
+    make_image(pack / "anchors/anchor_001.png", {"kind": "anchor", "state": "picked"})
+    run("gen", "hero", "gnome-village/cart", "--count", "1")
+    kind, target, inputs = started[0]
+    fake = FakeComfy(lambda prompt: {"image": [png(np.full((32, 32, 3), 200, np.uint8))]})
+    generate.generate(context(pack, kind, target, inputs), fake)
+    assert "ModelSamplingAuraFlow" in workflow.class_types(fake.prompts[0]) and not fake.uploads
+    sent = {name: fake.prompts[0][node]["inputs"] for name, node in workflow.inputs(fake.prompts[0]).items()}
+    assert set(sent) == {"prompt", "seed"} and "wooden hand cart" in sent["prompt"]["text"]
+    meta = yaml.safe_load((pack / "assets/cart/heroes/hero_001.yaml").read_text())
+    assert meta["references"] == []
+    config.set_("images.model", "nope")
+    with pytest.raises(SlopolyError, match="no image model 'nope'"):
+        workflow.image_workflow("hero")
 
 
 def test_cancelled_job_writes_nothing(run, pack, started):
@@ -229,7 +248,7 @@ def test_revise_with_change(run, pack, started):
                       {"kind": "hero", "prompt": "a cart", "references": ["gnome-village/anchors/anchor_001.png"]})
     run("gen", "revise", hero.as_posix(), "--change", "add a red roof", "--count", "3")
     inputs = started[0][2]
-    assert inputs["prompt"].endswith("Change from image 1: add a red roof") and inputs["count"] == 3
+    assert inputs["prompt"].endswith("Change: add a red roof") and inputs["count"] == 3
     assert inputs["references"][0] == "gnome-village/assets/cart/heroes/hero_001.png"
 
 
@@ -434,7 +453,7 @@ def test_look_renders_a_region_close_up_beside_the_build(run, pack, started):
     assert "**/variants/*/looks/" in (pack / ".gitignore").read_text()
 
 
-def test_revision_edits_its_source_without_the_canvas(run, pack, started):
+def test_revision_uses_its_source_as_first_reference(run, pack, started):
     make_image(pack / "anchors/anchor_001.png", {"kind": "anchor", "state": "picked"})
     hero = make_image(pack / "assets/cart/heroes/hero_001.png",
                       {"kind": "hero", "prompt": "a cart", "references": ["gnome-village/anchors/anchor_001.png"]})
@@ -443,4 +462,5 @@ def test_revision_edits_its_source_without_the_canvas(run, pack, started):
     fake = FakeComfy(lambda prompt: {"image": [png(np.full((32, 32, 3), 200, np.uint8))]})
     generate.generate(context(pack, kind, target, inputs), fake)
     sent = {name: fake.prompts[0][node]["inputs"] for name, node in workflow.inputs(fake.prompts[0]).items()}
-    assert sent["use_canvas"]["value"] is False and sent["prompt"]["prompt"].startswith("a cart")
+    assert sent["use_references"]["value"] is True and sent["prompt"]["value"].startswith("a cart")
+    assert fake.uploads[0].endswith("hero_001.png")

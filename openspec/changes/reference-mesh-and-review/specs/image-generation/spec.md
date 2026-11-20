@@ -3,15 +3,20 @@
 ## MODIFIED Requirements
 
 ### Requirement: Image model chosen by comparison
-The default model for style anchors and heroes SHALL be chosen by a recorded comparison of the candidate local models on the same prompts and references. The comparison covers style match, object correctness, element placement and time per image. A candidate SHALL be an open-weights model released in 2026 or later, in common use, whose licence allows commercial use of its outputs without revenue or seat limits.
+The default model for style anchors and heroes SHALL be chosen by a recorded comparison of the candidate local models on the same prompts and references. The comparison covers style match, object correctness, element placement and time per image. A candidate SHALL be an open-weights model released in 2026 or later, in common use, whose licence allows commercial use of its outputs. When the default model's licence limits that use (a revenue limit, required content filtering), the limits SHALL be named in the setup documentation and by `slopoly doctor`, and a fallback model whose licence has no such limits SHALL be selectable with the `images.model` setting.
 
 #### Scenario: Recorded choice
 - **WHEN** the comparison is complete
 - **THEN** the chosen model, the rejected candidates and the reasons are recorded in the change notes, and the workflow files use the chosen model
 
-#### Scenario: Faster than the model it replaces
-- **WHEN** Mage-Flow-Edit Turbo replaces Qwen-Image-Edit-2511 for anchors and heroes
-- **THEN** the notes record both models' time per image on the same machine, and the new one is faster
+#### Scenario: Default with licence limits
+- **WHEN** the user runs `slopoly doctor` with the default image model, Krea 2 Turbo
+- **THEN** the result names Krea 2's licence limits and the setting that selects the fallback
+
+#### Scenario: Fallback model
+- **WHEN** the user sets `images.model` to `z-image-turbo` and runs an anchor or hero job
+- **THEN** the job runs on Z-Image Turbo from the style text and prompt alone, records no references, and `slopoly
+  doctor` checks and fetches only that model's files for anchors and heroes
 
 ### Requirement: Part segmentation
 The system SHALL produce, for the view images of a hero and a list of part names, one mask per found part per view, with the mask's bounding box and area. The whole-object mask of each view SHALL come from the view's render silhouette. Parts that are not found SHALL be reported as missing rather than failing the job.
@@ -25,7 +30,7 @@ The system SHALL produce, for the view images of a hero and a list of part names
 - **THEN** those masks are kept but flagged `implausible` in the result, with the reason
 
 ### Requirement: Style-referenced hero image
-The system SHALL generate hero images of one asset: a single three-quarter front view of the whole object, alone on a plain light background, using up to three of the pack's picked style anchors as style references. The hero prompt SHALL ask for the whole object in frame and for no smoke, steam, fire, sparks, dust or other particles. A job SHALL produce the requested number of images (1 to 4), each with its seed recorded.
+The system SHALL generate hero images of one asset: a single three-quarter front view of the whole object, alone on a plain light background, using up to three of the pack's picked style anchors as style references (none with an image model that takes no references). The hero prompt SHALL ask for the whole object in frame and for no smoke, steam, fire, sparks, dust or other particles. A job SHALL produce the requested number of images (1 to 4), each with its seed recorded.
 
 #### Scenario: Cart heroes
 - **WHEN** a hero job runs for the asset "wooden cart" with count 2

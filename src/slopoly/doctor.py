@@ -15,18 +15,31 @@ from .comfy.client import ComfyClient
 from .core import SlopolyError
 
 MODELS_FILE = Path(__file__).parent / "comfy" / "models.yaml"
-NODES_HINT = ("update ComfyUI to a recent version (tested with 0.38.0): the workflows use its core Mage-Flow-Edit, "
+NODES_HINT = ("update ComfyUI to a recent version (tested with 0.45.4): the workflows use its core Krea 2, Z-Image, "
               "TripoSplat, TRELLIS.2, background removal and SAM 3 nodes; see the skill's comfyui-setup reference")
 
 
+IMAGE_MODEL_NOTES = {
+    "krea2": ("Krea 2 Turbo. Its licence (Krea 2 Community License) allows commercial use of the images only while "
+              "your company's yearly revenue is under $1M, and asks for content filtering",
+              "for an image model without these limits (no style references): "
+              "slopoly config set images.model z-image-turbo"),
+    "z-image-turbo": ("Z-Image Turbo (Apache 2.0): anchors and heroes from the style text only, no style references",
+                      None),
+}
+
+
 def required_models() -> list[dict]:
-    return yaml.safe_load(MODELS_FILE.read_text(encoding="utf-8"))["models"]
+    """The models of the workflows jobs can run with the current settings."""
+    active = set(workflow.active_names())
+    return [m for m in yaml.safe_load(MODELS_FILE.read_text(encoding="utf-8"))["models"]
+            if active & set(m["workflows"])]
 
 
 def required_nodes() -> dict[str, list[str]]:
     """Node class -> the workflows that use it, from the shipped workflow files."""
     nodes: dict[str, list[str]] = {}
-    for name in workflow.names():
+    for name in workflow.active_names():
         for cls in workflow.class_types(workflow.load(name)):
             nodes.setdefault(cls, []).append(name)
     return nodes
@@ -164,6 +177,9 @@ def doctor(fetch_missing: bool = False) -> dict:
     checks, missing = comfy_checks(ComfyClient(config.require("comfyui.url"), timeout=30), models_dir)
     checks += blender_checks()
     checks.append(window_check())
+    model = workflow.image_model()
+    checks.append(check("image model", True, IMAGE_MODEL_NOTES[model][0], images_model=model,
+                        note=IMAGE_MODEL_NOTES[model][1]))
     checks.append(check("settings", True, f"stored in {config.describe()['file']}",
                         models_dir=models_dir or "(not set: doctor --fetch cannot download models)"))
     result = {"ok": all(c["ok"] for c in checks), "checks": checks}

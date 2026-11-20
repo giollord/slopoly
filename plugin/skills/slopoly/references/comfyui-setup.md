@@ -14,12 +14,17 @@ Machine settings are kept outside the workspace (`slopoly config show` lists the
   models into it. Ask the user for this folder.
 - `slopoly config set blender.path <blender executable>` is only needed when Blender is not found automatically
   (Blender 5.0 or newer is required).
+- `slopoly config set images.model <krea2|z-image-turbo>` picks the image model for anchors and heroes. `krea2` (the
+  default, Krea 2 Turbo) takes the style references; `z-image-turbo` (Z-Image Turbo, the fallback) has no licence
+  limits but works from the style text alone and sometimes draws smoke the prompt excludes.
 
 ## Nodes
 
 The workflows need a recent ComfyUI with these core nodes:
 
-- **Anchors and heroes (Mage-Flow-Edit):** `TextEncodeMageFlowEdit`, `EmptyImage` and `ComfySwitchNode`.
+- **Anchors and heroes (Krea 2):** `TextEncodeQwenImageEditPlus`, `FluxKontextMultiReferenceLatentMethod`,
+  `ModelSamplingFlux`, `LoraLoaderModelOnly` and `ComfySwitchNode`; with Z-Image Turbo, `ModelSamplingAuraFlow` and
+  `EmptySD3LatentImage`.
 - **Reference mesh (Idol):** `TripoSplatPreprocessImage`, `TripoSplatConditioning`, `VAEDecodeTripoSplat`,
   `SplatToMesh`, `DecimateMesh` and `SaveGLB`.
 - **Reference mesh (TRELLIS.2 and Pixal3D, optional generators):** the `Trellis2*`, `Pixal3DConditioning`, `MoGe*`
@@ -27,19 +32,25 @@ The workflows need a recent ComfyUI with these core nodes:
 - **Background removal:** `LoadBackgroundRemovalModel` and `RemoveBackground`.
 - **Segmentation:** `SAM3_Detect`.
 
-They were tested with ComfyUI 0.38.0. `slopoly doctor` lists every missing node class with the workflows that use it.
+They were tested with ComfyUI 0.45.4. `slopoly doctor` lists every missing node class with the workflows that use it.
 The usual fix is to update ComfyUI (`git pull` and reinstall its requirements, `comfy update`, or the desktop app's
 updater).
 
 ## Models
 
-All models are free to download without a sign-in, and their licences allow commercial use of the outputs:
+All models are free to download without a sign-in, and their licences allow commercial use of the outputs. Krea 2 Turbo, the default image model, is under the Krea 2 Community License: the images may be used commercially only while your company's (with affiliates) yearly revenue is under $1M, and you must apply reasonable content filtering ([licence](https://krea.ai/krea-2-licensing)).
+`slopoly doctor` names this too. For no such limits, switch to `z-image-turbo` (above). `doctor` checks and fetches
+only the selected image model's files:
 
 | File | Subfolder | Size | Used by | Licence |
 |---|---|---|---|---|
-| mage_flow_edit_turbo_int8_convrot.safetensors | diffusion_models | 4.2 GB | anchors, heroes | MIT |
-| qwen3vl_4b_bf16.safetensors | text_encoders | 8.9 GB | anchors, heroes | Apache 2.0 |
-| mage_flow_vae_bf16.safetensors | vae | 0.3 GB | anchors, heroes | MIT |
+| krea2_turbo_int8_convrot.safetensors | diffusion_models | 13.5 GB | anchors, heroes (`krea2`) | Krea 2 Community License |
+| krea2_style_reference.safetensors | loras | 0.5 GB | anchors, heroes (`krea2`) | Krea 2 Community License |
+| qwen3vl_4b_bf16.safetensors | text_encoders | 8.9 GB | anchors, heroes (`krea2`) | Apache 2.0 |
+| qwen_image_vae.safetensors | vae | 0.3 GB | anchors, heroes (`krea2`) | Apache 2.0 |
+| z_image_turbo_int8_convrot.safetensors | diffusion_models | 6.2 GB | anchors, heroes (`z-image-turbo`) | Apache 2.0 |
+| qwen_3_4b_fp8_mixed.safetensors | text_encoders | 5.6 GB | anchors, heroes (`z-image-turbo`) | Apache 2.0 |
+| ae.safetensors | vae | 0.3 GB | anchors, heroes (`z-image-turbo`) | Apache 2.0 |
 | flux2-vae.safetensors | vae | 0.3 GB | views (Idol) | Apache 2.0 |
 | idol_fp16.safetensors | diffusion_models | 0.7 GB | views (Idol) | Apache 2.0 |
 | idol_decoder_fp16.safetensors | vae | 0.6 GB | views (Idol) | Apache 2.0 |

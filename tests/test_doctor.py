@@ -104,3 +104,15 @@ def test_window_files_are_checked(monkeypatch, tmp_path):
     monkeypatch.setattr(doctor, "WINDOW_FILES", doctor.WINDOW_FILES + ("missing.js",))
     failed = doctor.window_check()
     assert not failed["ok"] and "missing.js" in failed["detail"] and "reinstall" in failed["fix"]
+
+
+def test_image_model_selects_its_models_and_names_the_licence(comfy):
+    files = {m["file"] for m in doctor.required_models()}
+    assert "krea2_turbo_int8_convrot.safetensors" in files and "z_image_turbo_int8_convrot.safetensors" not in files
+    check = by_name(doctor.doctor())["image model"]
+    assert check["images_model"] == "krea2" and "$1M" in check["detail"] and "z-image-turbo" in check["note"]
+    config.set_("images.model", "z-image-turbo")
+    files = {m["file"] for m in doctor.required_models()}
+    assert "z_image_turbo_int8_convrot.safetensors" in files and "krea2_turbo_int8_convrot.safetensors" not in files
+    assert "TextEncodeQwenImageEditPlus" not in doctor.required_nodes()
+    assert "note" not in by_name(doctor.doctor())["image model"]

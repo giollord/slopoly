@@ -190,6 +190,8 @@
    "min_component": 500,
    "min_opacity": 0.02,
    "color_sharpen": 2.0,
+   "solid": true,
+   "fill": 20.0,
    "splat": [
     "1833411664118716",
     0

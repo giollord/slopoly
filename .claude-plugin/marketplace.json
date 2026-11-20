@@ -1,13 +1,13 @@
 {
   "name": "slopoly",
   "owner": { "name": "Slopoly" },
-  "metadata": { "description": "Low-poly 3D game asset packs, driven by your coding agent", "version": "0.2.1" },
+  "metadata": { "description": "Low-poly 3D game asset packs, driven by your coding agent", "version": "0.2.2" },
   "plugins": [
     {
       "name": "slopoly",
       "source": "./plugin",
       "description": "Make low-poly 3D game asset packs with ComfyUI concept images and Blender part programs, through the slopoly CLI",
-      "version": "0.2.1"
+      "version": "0.2.2"
     }
   ]
 }

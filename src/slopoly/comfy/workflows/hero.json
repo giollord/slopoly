@@ -1,7 +1,7 @@
 {
- "958461826835413": {
+ "632437608150653": {
   "inputs": {
-   "unet_name": "mage_flow_edit_turbo_int8_convrot.safetensors",
+   "unet_name": "krea2_turbo_int8_convrot.safetensors",
    "weight_dtype": "default"
   },
   "class_type": "UNETLoader",
@@ -9,10 +9,10 @@
    "title": "Load Diffusion Model"
   }
  },
- "2770116478219839": {
+ "817475247406519": {
   "inputs": {
    "clip_name": "qwen3vl_4b_bf16.safetensors",
-   "type": "mage",
+   "type": "krea2",
    "device": "default"
   },
   "class_type": "CLIPLoader",
@@ -20,81 +20,66 @@
    "title": "Load CLIP"
   }
  },
- "674952881745498": {
+ "553412112733904": {
   "inputs": {
-   "vae_name": "mage_flow_vae_bf16.safetensors"
+   "vae_name": "qwen_image_vae.safetensors"
   },
   "class_type": "VAELoader",
   "_meta": {
    "title": "Load VAE"
   }
  },
- "2093323213355007": {
+ "4448329099959902": {
   "inputs": {
-   "prompt": "",
-   "negative_prompt": "",
-   "width": 1024,
-   "height": 1024,
-   "batch_size": 1,
-   "clip": [
-    "2770116478219839",
-    0
-   ],
-   "vae": [
-    "674952881745498",
-    0
-   ],
-   "images.image_1": [
-    "2207249620029606",
-    0
-   ],
-   "images.image_2": [
-    "3304519982154303",
-    0
-   ],
-   "images.image_3": [
-    "3610785297339817",
-    0
-   ],
-   "images.image_4": [
-    "3469589779174109",
-    0
-   ]
-  },
-  "class_type": "TextEncodeMageFlowEdit",
-  "_meta": {
-   "title": "in:prompt"
-  }
- },
- "408644363837946": {
-  "inputs": {
-   "width": 1024,
-   "height": 1024,
-   "batch_size": 1,
-   "color": 15132390
-  },
-  "class_type": "EmptyImage",
-  "_meta": {
-   "title": "Empty Image"
-  }
- },
- "93757318857777": {
-  "inputs": {
-   "value": true
+   "value": false
   },
   "class_type": "PrimitiveBoolean",
   "_meta": {
-   "title": "in:use_canvas"
+   "title": "in:use_references"
   }
  },
- "2207249620029606": {
+ "778371874936567": {
+  "inputs": {
+   "lora_name": "krea2_style_reference.safetensors",
+   "strength_model": 1,
+   "model": [
+    "632437608150653",
+    0
+   ]
+  },
+  "class_type": "LoraLoaderModelOnly",
+  "_meta": {
+   "title": "Load LoRA"
+  }
+ },
+ "1389216315291275": {
+  "inputs": {
+   "max_shift": 1.15,
+   "base_shift": 0.5,
+   "width": 1024,
+   "height": 1024,
+   "model": [
+    "778371874936567",
+    0
+   ]
+  },
+  "class_type": "ModelSamplingFlux",
+  "_meta": {
+   "title": "ModelSamplingFlux"
+  }
+ },
+ "843544108461822": {
   "inputs": {
    "switch": [
-    "93757318857777",
+    "4448329099959902",
+    0
+   ],
+   "on_false": [
+    "632437608150653",
     0
    ],
    "on_true": [
-    "408644363837946",
+    "1389216315291275",
     0
    ]
   },
@@ -103,7 +88,64 @@
    "title": "If/Else Switch"
   }
  },
- "2585559768999114": {
+ "443237020062012": {
+  "inputs": {
+   "value": ""
+  },
+  "class_type": "PrimitiveStringMultiline",
+  "_meta": {
+   "title": "in:prompt"
+  }
+ },
+ "2497918756207704": {
+  "inputs": {
+   "text": [
+    "443237020062012",
+    0
+   ],
+   "clip": [
+    "817475247406519",
+    0
+   ]
+  },
+  "class_type": "CLIPTextEncode",
+  "_meta": {
+   "title": "CLIP Text Encode (Prompt)"
+  }
+ },
+ "1585273141549847": {
+  "inputs": {
+   "clip": [
+    "817475247406519",
+    0
+   ],
+   "prompt": [
+    "443237020062012",
+    0
+   ],
+   "vae": [
+    "553412112733904",
+    0
+   ],
+   "image1": [
+    "3903093520395583",
+    0
+   ],
+   "image2": [
+    "1303781184482208",
+    0
+   ],
+   "image3": [
+    "2739625244747535",
+    0
+   ]
+  },
+  "class_type": "TextEncodeQwenImageEditPlus",
+  "_meta": {
+   "title": "Text Encode Qwen Image Edit Plus"
+  }
+ },
+ "4036419612043927": {
   "inputs": {
    "image": "ComfyUI_00070_.png"
   },
@@ -112,7 +154,7 @@
    "title": "in:reference_1"
   }
  },
- "1470600048743843": {
+ "1388737775375210": {
   "inputs": {
    "value": false
   },
@@ -121,14 +163,14 @@
    "title": "in:use_reference_1"
   }
  },
- "3304519982154303": {
+ "3903093520395583": {
   "inputs": {
    "switch": [
-    "1470600048743843",
+    "1388737775375210",
     0
    ],
    "on_true": [
-    "2585559768999114",
+    "4036419612043927",
     0
    ]
   },
@@ -137,7 +179,7 @@
    "title": "If/Else Switch"
   }
  },
- "2886916798418056": {
+ "3524733754583304": {
   "inputs": {
    "image": "ComfyUI_00070_.png"
   },
@@ -146,7 +188,7 @@
    "title": "in:reference_2"
   }
  },
- "1339148163456069": {
+ "1367378738065333": {
   "inputs": {
    "value": false
   },
@@ -155,14 +197,14 @@
    "title": "in:use_reference_2"
   }
  },
- "3610785297339817": {
+ "1303781184482208": {
   "inputs": {
    "switch": [
-    "1339148163456069",
+    "1367378738065333",
     0
    ],
    "on_true": [
-    "2886916798418056",
+    "3524733754583304",
     0
    ]
   },
@@ -171,7 +213,7 @@
    "title": "If/Else Switch"
   }
  },
- "2308029178365574": {
+ "824553464485929": {
   "inputs": {
    "image": "ComfyUI_00070_.png"
   },
@@ -180,7 +222,7 @@
    "title": "in:reference_3"
   }
  },
- "1187236765830487": {
+ "2893066154137422": {
   "inputs": {
    "value": false
   },
@@ -189,14 +231,14 @@
    "title": "in:use_reference_3"
   }
  },
- "3469589779174109": {
+ "2739625244747535": {
   "inputs": {
    "switch": [
-    "1187236765830487",
+    "2893066154137422",
     0
    ],
    "on_true": [
-    "2308029178365574",
+    "824553464485929",
     0
    ]
   },
@@ -205,29 +247,85 @@
    "title": "If/Else Switch"
   }
  },
- "2873701222127220": {
+ "4285523297607395": {
+  "inputs": {
+   "reference_latents_method": "index_timestep_zero",
+   "conditioning": [
+    "1585273141549847",
+    0
+   ]
+  },
+  "class_type": "FluxKontextMultiReferenceLatentMethod",
+  "_meta": {
+   "title": "Edit Model Reference Method"
+  }
+ },
+ "267344086620299": {
+  "inputs": {
+   "switch": [
+    "4448329099959902",
+    0
+   ],
+   "on_false": [
+    "2497918756207704",
+    0
+   ],
+   "on_true": [
+    "4285523297607395",
+    0
+   ]
+  },
+  "class_type": "ComfySwitchNode",
+  "_meta": {
+   "title": "If/Else Switch"
+  }
+ },
+ "2417908342813426": {
+  "inputs": {
+   "conditioning": [
+    "267344086620299",
+    0
+   ]
+  },
+  "class_type": "ConditioningZeroOut",
+  "_meta": {
+   "title": "Conditioning Zero Out"
+  }
+ },
+ "267196791703544": {
+  "inputs": {
+   "width": 1024,
+   "height": 1024,
+   "batch_size": 1
+  },
+  "class_type": "EmptyLatentImage",
+  "_meta": {
+   "title": "Empty Latent Image"
+  }
+ },
+ "4494119905052744": {
   "inputs": {
    "seed": 0,
-   "steps": 4,
+   "steps": 8,
    "cfg": 1,
    "sampler_name": "euler",
    "scheduler": "simple",
    "denoise": 1,
    "model": [
-    "958461826835413",
+    "843544108461822",
     0
    ],
    "positive": [
-    "2093323213355007",
+    "267344086620299",
     0
    ],
    "negative": [
-    "2093323213355007",
-    1
+    "2417908342813426",
+    0
    ],
    "latent_image": [
-    "2093323213355007",
-    2
+    "267196791703544",
+    0
    ]
   },
   "class_type": "KSampler",
@@ -235,14 +333,14 @@
    "title": "in:seed"
   }
  },
- "580539037442391": {
+ "4386962783357938": {
   "inputs": {
    "samples": [
-    "2873701222127220",
+    "4494119905052744",
     0
    ],
    "vae": [
-    "674952881745498",
+    "553412112733904",
     0
    ]
   },
@@ -251,11 +349,11 @@
    "title": "VAE Decode"
   }
  },
- "3223181913060810": {
+ "2097379613189737": {
   "inputs": {
    "filename_prefix": "slopoly/hero",
    "images": [
-    "580539037442391",
+    "4386962783357938",
     0
    ]
   },

@@ -8,15 +8,37 @@ import json
 from pathlib import Path
 from typing import Any
 
+from .. import config
 from ..core import SlopolyError
 
 WORKFLOWS = Path(__file__).parent / "workflows"
+# Image models for anchors and heroes (the `images.model` setting) and the suffix of their workflow files.
+IMAGE_MODELS = {"krea2": "", "z-image-turbo": ".z-image-turbo"}
+IMAGE_WORKFLOWS = ("style-anchor", "hero")
 # The widget an ``in:`` node's value goes into, when the node has several scalar inputs.
 PRIMARY = ("value", "image", "text", "prompt", "noise_seed", "seed", "string", "boolean", "int", "float")
 
 
 def names() -> list[str]:
     return sorted(p.stem for p in WORKFLOWS.glob("*.json"))
+
+
+def image_model() -> str:
+    model = config.get("images.model")
+    if model not in IMAGE_MODELS:
+        raise SlopolyError("unknown_image_model", f"no image model {model!r}",
+                           f"slopoly config set images.model <{'|'.join(IMAGE_MODELS)}>")
+    return model
+
+
+def image_workflow(name: str) -> str:
+    """The selected image model's file of an anchor or hero workflow; other names are returned unchanged."""
+    return name + IMAGE_MODELS[image_model()] if name in IMAGE_WORKFLOWS else name
+
+
+def active_names() -> list[str]:
+    """The workflows jobs can run with the current settings (the other image models' files left out)."""
+    return sorted({image_workflow(n.split(".")[0]) for n in names()})
 
 
 def load(name: str, directory: Path = WORKFLOWS) -> dict[str, Any]:

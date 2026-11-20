@@ -1,6 +1,6 @@
 {
- "recipe": "mage-flow-references",
- "description": "Mage-Flow-Edit Turbo (int8, 4 steps) drawing a new image on an empty canvas (image 1, switchable) at a set size with up to 3 style reference images; wiring after the image_mage_flow_edit_turbo_int8 template.",
+ "recipe": "krea2-references",
+ "description": "Krea 2 Turbo (int8, 8 steps) at a set size: text to image, or with up to 3 style references (in:use_references) through Krea's style-reference LoRA; wiring after the image_krea2_turbo_t2i_int8 and image_krea2_turbo_int8_image_style_reference templates.",
  "params": {
   "width": {
    "type": "int"
@@ -22,7 +22,7 @@
    "op": "set_widget",
    "node": "unet",
    "widget": "unet_name",
-   "value": "mage_flow_edit_turbo_int8_convrot.safetensors"
+   "value": "krea2_turbo_int8_convrot.safetensors"
   },
   {
    "op": "add_node",
@@ -39,7 +39,7 @@
    "op": "set_widget",
    "node": "clip",
    "widget": "type",
-   "value": "mage"
+   "value": "krea2"
   },
   {
    "op": "add_node",
@@ -50,124 +50,152 @@
    "op": "set_widget",
    "node": "vae",
    "widget": "vae_name",
-   "value": "mage_flow_vae_bf16.safetensors"
+   "value": "qwen_image_vae.safetensors"
   },
   {
    "op": "add_node",
-   "class_type": "TextEncodeMageFlowEdit",
-   "as": "prompt"
+   "class_type": "PrimitiveBoolean",
+   "as": "use_refs"
   },
   {
    "op": "set_node_field",
-   "node": "prompt",
+   "node": "use_refs",
+   "field": "title",
+   "value": "in:use_references"
+  },
+  {
+   "op": "set_widget",
+   "node": "use_refs",
+   "widget": "value",
+   "value": false
+  },
+  {
+   "op": "add_node",
+   "class_type": "LoraLoaderModelOnly",
+   "as": "lora"
+  },
+  {
+   "op": "set_widget",
+   "node": "lora",
+   "widget": "lora_name",
+   "value": "krea2_style_reference.safetensors"
+  },
+  {
+   "op": "set_widget",
+   "node": "lora",
+   "widget": "strength_model",
+   "value": 1
+  },
+  {
+   "op": "connect",
+   "from": "unet.MODEL",
+   "to": "lora.model"
+  },
+  {
+   "op": "add_node",
+   "class_type": "ModelSamplingFlux",
+   "as": "shift"
+  },
+  {
+   "op": "set_widget",
+   "node": "shift",
+   "widget": "max_shift",
+   "value": 1.15
+  },
+  {
+   "op": "set_widget",
+   "node": "shift",
+   "widget": "base_shift",
+   "value": 0.5
+  },
+  {
+   "op": "set_widget",
+   "node": "shift",
+   "widget": "width",
+   "value": "${width}"
+  },
+  {
+   "op": "set_widget",
+   "node": "shift",
+   "widget": "height",
+   "value": "${height}"
+  },
+  {
+   "op": "connect",
+   "from": "lora.MODEL",
+   "to": "shift.model"
+  },
+  {
+   "op": "add_node",
+   "class_type": "ComfySwitchNode",
+   "as": "model_sw"
+  },
+  {
+   "op": "connect",
+   "from": "use_refs.BOOLEAN",
+   "to": "model_sw.switch"
+  },
+  {
+   "op": "connect",
+   "from": "shift.MODEL",
+   "to": "model_sw.on_true"
+  },
+  {
+   "op": "connect",
+   "from": "unet.MODEL",
+   "to": "model_sw.on_false"
+  },
+  {
+   "op": "add_node",
+   "class_type": "PrimitiveStringMultiline",
+   "as": "text"
+  },
+  {
+   "op": "set_node_field",
+   "node": "text",
    "field": "title",
    "value": "in:prompt"
   },
   {
    "op": "set_widget",
-   "node": "prompt",
-   "widget": "prompt",
+   "node": "text",
+   "widget": "value",
    "value": ""
   },
   {
-   "op": "set_widget",
-   "node": "prompt",
-   "widget": "negative_prompt",
-   "value": ""
-  },
-  {
-   "op": "set_widget",
-   "node": "prompt",
-   "widget": "width",
-   "value": "${width}"
-  },
-  {
-   "op": "set_widget",
-   "node": "prompt",
-   "widget": "height",
-   "value": "${height}"
-  },
-  {
-   "op": "set_widget",
-   "node": "prompt",
-   "widget": "batch_size",
-   "value": 1
+   "op": "add_node",
+   "class_type": "CLIPTextEncode",
+   "as": "plain"
   },
   {
    "op": "connect",
    "from": "clip.CLIP",
-   "to": "prompt.clip"
+   "to": "plain.clip"
+  },
+  {
+   "op": "connect",
+   "from": "text.STRING",
+   "to": "plain.text"
+  },
+  {
+   "op": "add_node",
+   "class_type": "TextEncodeQwenImageEditPlus",
+   "as": "styled"
+  },
+  {
+   "op": "connect",
+   "from": "clip.CLIP",
+   "to": "styled.clip"
   },
   {
    "op": "connect",
    "from": "vae.VAE",
-   "to": "prompt.vae"
-  },
-  {
-   "op": "add_node",
-   "class_type": "EmptyImage",
-   "as": "canvas"
-  },
-  {
-   "op": "set_widget",
-   "node": "canvas",
-   "widget": "width",
-   "value": "${width}"
-  },
-  {
-   "op": "set_widget",
-   "node": "canvas",
-   "widget": "height",
-   "value": "${height}"
-  },
-  {
-   "op": "set_widget",
-   "node": "canvas",
-   "widget": "batch_size",
-   "value": 1
-  },
-  {
-   "op": "set_widget",
-   "node": "canvas",
-   "widget": "color",
-   "value": 15132390
-  },
-  {
-   "op": "add_node",
-   "class_type": "PrimitiveBoolean",
-   "as": "use_canvas"
-  },
-  {
-   "op": "set_widget",
-   "node": "use_canvas",
-   "widget": "value",
-   "value": true
-  },
-  {
-   "op": "set_node_field",
-   "node": "use_canvas",
-   "field": "title",
-   "value": "in:use_canvas"
-  },
-  {
-   "op": "add_node",
-   "class_type": "ComfySwitchNode",
-   "as": "sw0"
+   "to": "styled.vae"
   },
   {
    "op": "connect",
-   "from": "use_canvas.BOOLEAN",
-   "to": "sw0.switch"
-  },
-  {
-   "op": "connect",
-   "from": "canvas.IMAGE",
-   "to": "sw0.on_true"
-  },
-  {
-   "op": "connect",
-   "from": "sw0.output",
-   "to": "prompt.images.image_1"
+   "from": "text.STRING",
+   "to": "styled.prompt"
   },
   {
    "op": "add_node",
@@ -186,16 +214,16 @@
    "as": "use1"
   },
   {
-   "op": "set_widget",
-   "node": "use1",
-   "widget": "value",
-   "value": false
-  },
-  {
    "op": "set_node_field",
    "node": "use1",
    "field": "title",
    "value": "in:use_reference_1"
+  },
+  {
+   "op": "set_widget",
+   "node": "use1",
+   "widget": "value",
+   "value": false
   },
   {
    "op": "add_node",
@@ -215,7 +243,7 @@
   {
    "op": "connect",
    "from": "sw1.output",
-   "to": "prompt.images.image_2"
+   "to": "styled.image1"
   },
   {
    "op": "add_node",
@@ -234,16 +262,16 @@
    "as": "use2"
   },
   {
-   "op": "set_widget",
-   "node": "use2",
-   "widget": "value",
-   "value": false
-  },
-  {
    "op": "set_node_field",
    "node": "use2",
    "field": "title",
    "value": "in:use_reference_2"
+  },
+  {
+   "op": "set_widget",
+   "node": "use2",
+   "widget": "value",
+   "value": false
   },
   {
    "op": "add_node",
@@ -263,7 +291,7 @@
   {
    "op": "connect",
    "from": "sw2.output",
-   "to": "prompt.images.image_3"
+   "to": "styled.image2"
   },
   {
    "op": "add_node",
@@ -282,16 +310,16 @@
    "as": "use3"
   },
   {
-   "op": "set_widget",
-   "node": "use3",
-   "widget": "value",
-   "value": false
-  },
-  {
    "op": "set_node_field",
    "node": "use3",
    "field": "title",
    "value": "in:use_reference_3"
+  },
+  {
+   "op": "set_widget",
+   "node": "use3",
+   "widget": "value",
+   "value": false
   },
   {
    "op": "add_node",
@@ -311,7 +339,76 @@
   {
    "op": "connect",
    "from": "sw3.output",
-   "to": "prompt.images.image_4"
+   "to": "styled.image3"
+  },
+  {
+   "op": "add_node",
+   "class_type": "FluxKontextMultiReferenceLatentMethod",
+   "as": "method"
+  },
+  {
+   "op": "set_widget",
+   "node": "method",
+   "widget": "reference_latents_method",
+   "value": "index_timestep_zero"
+  },
+  {
+   "op": "connect",
+   "from": "styled.CONDITIONING",
+   "to": "method.conditioning"
+  },
+  {
+   "op": "add_node",
+   "class_type": "ComfySwitchNode",
+   "as": "cond_sw"
+  },
+  {
+   "op": "connect",
+   "from": "use_refs.BOOLEAN",
+   "to": "cond_sw.switch"
+  },
+  {
+   "op": "connect",
+   "from": "method.CONDITIONING",
+   "to": "cond_sw.on_true"
+  },
+  {
+   "op": "connect",
+   "from": "plain.CONDITIONING",
+   "to": "cond_sw.on_false"
+  },
+  {
+   "op": "add_node",
+   "class_type": "ConditioningZeroOut",
+   "as": "negative"
+  },
+  {
+   "op": "connect",
+   "from": "cond_sw.output",
+   "to": "negative.conditioning"
+  },
+  {
+   "op": "add_node",
+   "class_type": "EmptyLatentImage",
+   "as": "latent"
+  },
+  {
+   "op": "set_widget",
+   "node": "latent",
+   "widget": "width",
+   "value": "${width}"
+  },
+  {
+   "op": "set_widget",
+   "node": "latent",
+   "widget": "height",
+   "value": "${height}"
+  },
+  {
+   "op": "set_widget",
+   "node": "latent",
+   "widget": "batch_size",
+   "value": 1
   },
   {
    "op": "add_node",
@@ -328,7 +425,7 @@
    "op": "set_widget",
    "node": "sampler",
    "widget": "steps",
-   "value": 4
+   "value": 8
   },
   {
    "op": "set_widget",
@@ -356,22 +453,22 @@
   },
   {
    "op": "connect",
-   "from": "unet.MODEL",
+   "from": "model_sw.output",
    "to": "sampler.model"
   },
   {
    "op": "connect",
-   "from": "prompt.positive",
+   "from": "cond_sw.output",
    "to": "sampler.positive"
   },
   {
    "op": "connect",
-   "from": "prompt.negative",
+   "from": "negative.CONDITIONING",
    "to": "sampler.negative"
   },
   {
    "op": "connect",
-   "from": "prompt.latent",
+   "from": "latent.LATENT",
    "to": "sampler.latent_image"
   },
   {
@@ -395,16 +492,16 @@
    "as": "save"
   },
   {
-   "op": "set_widget",
-   "node": "save",
-   "widget": "filename_prefix",
-   "value": "${prefix}"
-  },
-  {
    "op": "set_node_field",
    "node": "save",
    "field": "title",
    "value": "out:image"
+  },
+  {
+   "op": "set_widget",
+   "node": "save",
+   "widget": "filename_prefix",
+   "value": "${prefix}"
   },
   {
    "op": "connect",

@@ -77,3 +77,39 @@ and the references as images 2-4, and the job tells the model to draw on the can
 the other images. Two of three hero seeds were then a single object in the anchor's style; one still drew the water
 tower and logs, and smoke appears in most (it is in the anchor). Heroes are generated in sets and picked, so this is
 acceptable; the prompt keeps asking for no smoke. `gen revise` turns the canvas off and edits its source image.
+
+## Image model replaced again (task 11.14, 2026-11-21)
+
+Mage-Flow-Edit Turbo's anchors were scattered piles of props in a flat clip-art style, and its heroes kept the
+anchor's rails and smoke. Candidates were compared on ComfyUI 0.45.4 (one 16 GB GPU), with the orcish pack's anchor
+prompts (1344x768) and three locomotive hero prompts (1024x1024, the `HERO_IMAGE` wording with the style text), same
+seeds for every model, text only unless noted. Times are warm, per image.
+
+| Model | Licence | Time | Result | Verdict |
+|---|---|---|---|---|
+| Krea 2 Turbo (int8, 8 steps) | Krea 2 Community License | 13 s; 35 s with the style-reference LoRA, first run | Coherent game scenes; heroes whole, chunky and faceted, no smoke and a plain background in all 3 | **chosen** |
+| Z-Image Turbo (int8, 8 steps) | Apache 2.0 (2025-11) | 7 s | Clean, simple, flat-coloured objects, less orcish; smoke in all 3 heroes (cfg 1, no negative prompt) | **fallback** |
+| Z-Image base (int8, 25 steps, cfg 4) | Apache 2.0 (2026-01) | 31 s | A negative prompt removes most smoke; busier, thinner silhouettes; one hero drifted to flat 2D | rejected: slower, worse shapes for meshing |
+| MOSS-Image (int8, 25 steps) | Apache 2.0 | 22-26 s | Detailed scenes; heroes look like detailed renders, smoke despite the prompt | rejected by the user |
+| HiDream-O1 dev (fp8, 28 steps) | MIT | 9-13 s | Realistic rendering, smoke and a beige backdrop with debris in all 3 | rejected |
+| Chroma1-HD (fp8, 26 steps) | Apache 2.0 (2025-08, FLUX-based) | 55 s | Messy shapes, smoke | rejected |
+
+**Licence.** The Krea 2 Community License (v1, 2026-06-22) allows commercial use of the model and its outputs only
+while the user's company, with its affiliates, has under $1M yearly revenue (above that, an enterprise licence), and
+asks deployers to apply reasonable content filtering (§2.3, §4.2). Krea claims no ownership of the outputs. This
+breaks the spec's old rule of no revenue limits, so the requirement now asks for the limits to be named (README,
+`comfyui-setup.md`, `doctor`) and a fallback without them: Z-Image Turbo, chosen with `images.model z-image-turbo`.
+It takes no references, so the fallback's anchors and heroes come from the style text alone and record no references.
+
+**Wiring.** One Krea graph per size: plain text to image without references, and Krea's style-reference LoRA
+(`TextEncodeQwenImageEditPlus`, `FluxKontextMultiReferenceLatentMethod`, `ModelSamplingFlux`) behind
+`in:use_references` when the job has references. Krea's text encoder is Qwen3-VL 4B; the bf16 file slopoly already
+listed works in place of the template's fp8 one. There's no edit mode any more, so `gen revise` regenerates with a
+fresh seed, with its source as the first style reference when a change is given.
+
+**CLI run** (orcish copy, `anchor_010` picked): Krea hero job with one reference, 2 images in 67 s (cold: the 13.5 GB
+model and the LoRA loaded); Krea anchor 13 s; Z-Image Turbo hero job 2 images in 22 s, anchor 10 s. The Krea heroes
+took the anchor's darker palette and spikes; the Z-Image heroes are clean but drew smoke.
+
+**Found on the way.** `slopoly wait` crashed once with `PermissionError` reading a job file while the job process
+replaced it (Windows); task 11.7 retries only the writer's `os.replace`, not readers.

@@ -1,4 +1,5 @@
-# Models the shipped workflows need. All are free to download (no sign-in) and allow commercial use of their outputs.
+# Models the shipped workflows need. All are free to download (no sign-in) and allow commercial use of their outputs
+# (Krea 2 only under limits, see below).
 # `slopoly doctor` checks them against your ComfyUI; `slopoly doctor --fetch` downloads missing ones into
 # <models-dir>/<subfolder>/<file> when comfyui.models_dir is configured.
 models:
@@ -8,11 +9,19 @@ models:
     size_gb: 0.3
     licence: Apache 2.0
     workflows: [idol-mesh]
-  - file: mage_flow_edit_turbo_int8_convrot.safetensors
+  # Anchors and heroes, default image model (images.model krea2). Krea 2 Community License: commercial use of the
+  # images only for companies under $1M yearly revenue, with content filtering (https://krea.ai/krea-2-licensing).
+  - file: krea2_turbo_int8_convrot.safetensors
     subfolder: diffusion_models
-    url: https://huggingface.co/Comfy-Org/Mage-Flow/resolve/main/diffusion_models/mage_flow_edit_turbo_int8_convrot.safetensors
-    size_gb: 4.2
-    licence: MIT
+    url: https://huggingface.co/Comfy-Org/Krea-2/resolve/main/diffusion_models/krea2_turbo_int8_convrot.safetensors
+    size_gb: 13.5
+    licence: Krea 2 Community License
+    workflows: [style-anchor, hero]
+  - file: krea2_style_reference.safetensors
+    subfolder: loras
+    url: https://huggingface.co/Comfy-Org/Krea-2/resolve/main/loras/krea2_style_reference.safetensors
+    size_gb: 0.5
+    licence: Krea 2 Community License
     workflows: [style-anchor, hero]
   - file: qwen3vl_4b_bf16.safetensors
     subfolder: text_encoders
@@ -20,12 +29,31 @@ models:
     size_gb: 8.9
     licence: Apache 2.0
     workflows: [style-anchor, hero]
-  - file: mage_flow_vae_bf16.safetensors
+  - file: qwen_image_vae.safetensors
     subfolder: vae
-    url: https://huggingface.co/Comfy-Org/Mage-Flow/resolve/main/vae/mage_flow_vae_bf16.safetensors
+    url: https://huggingface.co/Comfy-Org/Krea-2/resolve/main/vae/qwen_image_vae.safetensors
     size_gb: 0.3
-    licence: MIT
+    licence: Apache 2.0
     workflows: [style-anchor, hero]
+  # Anchors and heroes, fallback image model (images.model z-image-turbo): no style references.
+  - file: z_image_turbo_int8_convrot.safetensors
+    subfolder: diffusion_models
+    url: https://huggingface.co/Comfy-Org/z_image_turbo/resolve/main/split_files/diffusion_models/z_image_turbo_int8_convrot.safetensors
+    size_gb: 6.2
+    licence: Apache 2.0
+    workflows: [style-anchor.z-image-turbo, hero.z-image-turbo]
+  - file: qwen_3_4b_fp8_mixed.safetensors
+    subfolder: text_encoders
+    url: https://huggingface.co/Comfy-Org/z_image_turbo/resolve/main/split_files/text_encoders/qwen_3_4b_fp8_mixed.safetensors
+    size_gb: 5.6
+    licence: Apache 2.0
+    workflows: [style-anchor.z-image-turbo, hero.z-image-turbo]
+  - file: ae.safetensors
+    subfolder: vae
+    url: https://huggingface.co/Comfy-Org/z_image_turbo/resolve/main/split_files/vae/ae.safetensors
+    size_gb: 0.3
+    licence: Apache 2.0
+    workflows: [style-anchor.z-image-turbo, hero.z-image-turbo]
   - file: idol_fp16.safetensors
     subfolder: diffusion_models
     url: https://huggingface.co/Comfy-Org/Idol/resolve/main/diffusion_models/idol_fp16.safetensors

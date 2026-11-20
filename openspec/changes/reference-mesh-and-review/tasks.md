@@ -192,6 +192,16 @@
       installation note about closing windows first. Verify the samples build with the notes test
 - [x] 11.13 Bump the version to 0.2.1 in the four version files; verify `tests/test_versions.py` and the whole suite
       pass
+- [x] 11.14 Replace Mage-Flow-Edit Turbo in `style-anchor` and `hero` with Krea 2 Turbo (int8, 8 steps): plain text to
+      image without references, and Krea's style-reference LoRA (`TextEncodeQwenImageEditPlus`, after the gallery
+      template `image_krea2_turbo_int8_image_style_reference`) when a job has references; a new
+      `recipes/krea2-references.recipe.json`. Add the fallback `style-anchor.z-image-turbo` and
+      `hero.z-image-turbo` (Z-Image Turbo, int8, 8 steps, text only, after `image_z_image_turbo_int8`), chosen with
+      the new setting `images.model` (`krea2` default, `z-image-turbo`); `doctor` checks and fetches only the selected
+      model's files. Drop the empty canvas and `use_canvas`; `gen revise` regenerates with a fresh seed, its source
+      as first reference when a change is given. Name Krea's licence limits (commercial use only under $1M yearly
+      revenue, content filtering) in the README, `comfyui-setup.md` and `doctor`. Record the comparison in
+      `notes.md`. Verify an anchor and a hero job on the local ComfyUI with each model, and the host tests
 
 ## Workflow follow-up
 

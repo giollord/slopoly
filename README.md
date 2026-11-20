@@ -56,13 +56,19 @@ Machine settings are stored in your user config folder, never in a workspace or 
 slopoly config set comfyui.url http://127.0.0.1:8188           # default
 slopoly config set comfyui.models_dir <models-dir>              # your ComfyUI's models folder (for --fetch)
 slopoly config set blender.path <path to blender>               # only if it isn't found
+slopoly config set images.model z-image-turbo                   # optional: the image model without Krea's limits
 slopoly config show
 slopoly doctor            # checks ComfyUI (reachable, nodes, models), Blender (version, libraries) and settings
-slopoly doctor --fetch    # downloads missing models (about 37 GB in all) and installs Blender's build libraries
+slopoly doctor --fetch    # downloads missing models (about 43 GB in all) and installs Blender's build libraries
 ```
 
 `doctor --fetch` installs Pillow, scikit-image and manifold3d for Blender's own Python into a Slopoly-managed folder.
 Blender's installation is not changed. The required models and their licences are listed in `comfyui/README.md`.
+
+**Image model licence.** Anchors and heroes are drawn by Krea 2 Turbo by default. Its licence (Krea 2 Community
+License) allows commercial use of the images only while your company's yearly revenue is under $1M, and asks you to
+apply content filtering. If that doesn't fit, set `images.model` to `z-image-turbo` (Apache 2.0): it has no such
+limits, but it draws from the style text alone, without the style references.
 
 ## Use
 

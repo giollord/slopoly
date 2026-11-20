@@ -15,6 +15,9 @@ SETTINGS = {
     "comfyui.url": ("http://127.0.0.1:8188", "URL of your ComfyUI"),
     "comfyui.models_dir": (None, "your ComfyUI's models folder, for slopoly doctor --fetch"),
     "blender.path": (None, "path of the Blender executable (found automatically when unset)"),
+    "images.model": ("krea2", "image model for anchors and heroes: krea2 (Krea 2 Turbo; its licence allows commercial "
+                              "use only under $1M yearly revenue, with content filtering) or z-image-turbo (Apache "
+                              "2.0, no style references)"),
 }
 
 

@@ -38,10 +38,6 @@ MAX_INSTANCES = 8
 HERO_IMAGE = ("ONE object only, whole and centred: {0}. Three-quarter front view from the front-left, slightly from "
               "above, with the whole object in frame. No smoke, steam, fire, sparks, dust or other particles. Plain "
               "light grey background, nothing else in the image.")
-# Put before the prompt when the workflow draws on its empty canvas (image 1) rather than editing a source image.
-CANVAS = "Image 1 is an empty canvas: draw the new image on it."
-CANVAS_REFERENCES = (" Use images 2 and later only for their art style (line work, shading, colours and materials); "
-                     "copy nothing else from them: not their scene, objects, buildings, scenery or smoke.")
 
 
 def style_text(pack: Pack) -> str:
@@ -98,7 +94,7 @@ def start_revise(image: ImageRef, change: str | None, count: int = 2) -> dict:
     prompt, refs = meta.prompt, list(meta.references)
     own = rel(image.pack, image.path)
     if change and change.strip():
-        prompt = f"{prompt}\n\nChange from image 1: {change.strip()}"
+        prompt = f"{prompt}\n\nChange: {change.strip()}"
         refs = [own, *[r for r in refs if r != own]][:MAX_REFERENCES]
     inputs = {"workflow": "style-anchor" if meta.kind == "anchor" else "hero", "kind": meta.kind, "prompt": prompt,
               "references": refs, "count": count_of(count), "seed": None,
@@ -227,12 +223,11 @@ def write_outputs(context: jobs.JobContext, files: dict[Path, bytes | Any]) -> N
 def generate(context: jobs.JobContext, client: ComfyClient | None = None) -> dict:
     inputs, ws = context.inputs, context.ws
     runner = Runner(context, client)
-    refs = list(inputs.get("references") or [])
-    prompt = workflow.load(inputs["workflow"])
-    canvas = "use_canvas" in workflow.inputs(prompt) and not inputs.get("source")  # a revision edits its source
-    text = f"{CANVAS}{CANVAS_REFERENCES if refs else ''}\n\n{inputs['prompt']}" if canvas else inputs["prompt"]
-    values: dict[str, Any] = {"prompt": text, "use_canvas": canvas}
-    for i, slot in enumerate(workflow.reference_slots(prompt)):
+    name = workflow.image_workflow(inputs["workflow"])
+    slots = workflow.reference_slots(workflow.load(name))
+    refs = list(inputs.get("references") or [])[:len(slots)]  # an image model without references uses none
+    values: dict[str, Any] = {"prompt": inputs["prompt"], "use_references": bool(refs)}
+    for i, slot in enumerate(slots):
         if i < len(refs):
             values[f"reference_{slot}"] = runner.upload(ws.root / refs[i])
             values[f"use_reference_{slot}"] = True
@@ -244,10 +239,10 @@ def generate(context: jobs.JobContext, client: ComfyClient | None = None) -> dic
     seed = int(seed) if seed is not None else random.randrange(2**48)
     produced = []
     for i in range(count):
-        out = runner.run(inputs["workflow"], {**values, "seed": seed + i}, (i / count, 1 / count))
+        out = runner.run(name, {**values, "seed": seed + i}, (i / count, 1 / count))
         produced += [(data, seed + i) for data in out.get("image", [])]
     if not produced:
-        raise SlopolyError("bad_workflow", f"the {inputs['workflow']} workflow produced no image (it needs out:image)")
+        raise SlopolyError("bad_workflow", f"the {name} workflow produced no image (it needs out:image)")
     folder = ws.root / inputs["folder"]
     context.check()
     first = int(next_name(folder, inputs["prefix"]).stem.rsplit("_", 1)[1])
